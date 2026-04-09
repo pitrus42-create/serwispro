@@ -37,7 +37,7 @@ export async function GET() {
   );
 
   const byTypeMap: Record<string, number> = {};
-  byType.forEach((r) => {
+  byType.forEach((r: { type: string; _count: { id: number } }) => {
     byTypeMap[r.type] = r._count.id;
   });
 
