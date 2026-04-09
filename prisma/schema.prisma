@@ -1,0 +1,455 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String    @id @default(uuid())
+  firstName    String
+  lastName     String
+  email        String    @unique
+  passwordHash String?
+  googleId     String?   @unique
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+
+  roles               UserRole[]
+  permissions         UserPermission?
+  orderAssignments    OrderAssignment[]
+  ordersCreated       Order[]             @relation("OrderCreatedBy")
+  checklistItemsDone  OrderChecklistItem[]
+  activityLogs        OrderActivityLog[]
+  notifications       Notification[]
+  serviceEntries      VehicleServiceEntry[]
+  materialsAdded      OrderMaterial[]
+  attachmentsUploaded OrderAttachment[]
+  protocolPhotos      ProtocolPhoto[]
+}
+
+model UserRole {
+  userId String
+  role   String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+}
+
+model UserPermission {
+  userId              String  @id
+  canCreateOrders     Boolean @default(false)
+  canEditAllOrders    Boolean @default(false)
+  canCloseOrders      Boolean @default(false)
+  canEditClosedOrders Boolean @default(false)
+  canDeleteOrders     Boolean @default(false)
+  canManageClients    Boolean @default(false)
+  canViewAnalytics    Boolean @default(false)
+  canManageTemplates  Boolean @default(false)
+  canManageVehicles   Boolean @default(false)
+  canGeneratePdf      Boolean @default(true)
+  canViewAllCalendar  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  type      String   @default("company")
+  name      String
+  nip       String?
+  phone     String?
+  phoneAlt  String?
+  email     String?
+  alias     String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  locations   Location[]
+  orders      Order[]
+  protocols   Protocol[]
+  attachments ClientAttachment[]
+}
+
+model Location {
+  id                  String    @id @default(uuid())
+  clientId            String
+  name                String
+  address             String?
+  city                String?
+  postalCode          String?
+  technicalNote       String?
+  systemsNote         String?
+  maintenanceCycle    String    @default("NONE")
+  nextMaintenanceDate DateTime?
+  lastMaintenanceDate DateTime?
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  orders    Order[]
+  protocols Protocol[]
+}
+
+model Order {
+  id             String    @id @default(uuid())
+  orderNumber    String    @unique
+  type           String
+  status         String    @default("OCZEKUJACE")
+  priority       String    @default("NORMALNY")
+  isCritical     Boolean   @default(false)
+  clientId       String?
+  locationId     String?
+  title          String?
+  description    String?
+  internalNotes  String?
+  scheduledAt    DateTime?
+  scheduledEndAt DateTime?
+  dayOrder       Int?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdById    String
+
+  client      Client?            @relation(fields: [clientId], references: [id])
+  location    Location?          @relation(fields: [locationId], references: [id])
+  createdBy   User               @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  assignments OrderAssignment[]
+  checklists  OrderChecklist[]
+  materials   OrderMaterial[]
+  attachments OrderAttachment[]
+  protocols   Protocol[]
+  activityLog OrderActivityLog[]
+}
+
+model OrderAssignment {
+  orderId    String
+  userId     String
+  isLead     Boolean  @default(false)
+  assignedAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([orderId, userId])
+}
+
+model OrderActivityLog {
+  id        String   @id @default(uuid())
+  orderId   String
+  userId    String?
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  order Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model OrderAttachment {
+  id         String   @id @default(uuid())
+  orderId    String
+  fileUrl    String
+  fileName   String?
+  fileSize   Int?
+  mimeType   String?
+  uploadedBy String?
+  uploadedAt DateTime @default(now())
+
+  order Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user  User?  @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+}
+
+model ChecklistTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  orderType String?
+  isActive  Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  items      ChecklistTemplateItem[]
+  checklists OrderChecklist[]
+}
+
+model ChecklistTemplateItem {
+  id         String  @id @default(uuid())
+  templateId String
+  text       String
+  itemOrder  Int
+  isRequired Boolean @default(false)
+
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+model OrderChecklist {
+  id         String   @id @default(uuid())
+  orderId    String
+  templateId String?
+  name       String
+  createdAt  DateTime @default(now())
+
+  order    Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  template ChecklistTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  items    OrderChecklistItem[]
+}
+
+model OrderChecklistItem {
+  id          String    @id @default(uuid())
+  checklistId String
+  text        String
+  itemOrder   Int
+  isChecked   Boolean   @default(false)
+  checkedBy   String?
+  checkedAt   DateTime?
+  note        String?
+
+  checklist OrderChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checker   User?          @relation(fields: [checkedBy], references: [id], onDelete: SetNull)
+}
+
+model ActionTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  content   String
+  category  String?
+  isActive  Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+model OrderMaterial {
+  id          String   @id @default(uuid())
+  orderId     String
+  stockItemId String?
+  manualName  String?
+  quantity    Float?
+  unit        String?
+  notes       String?
+  addedBy     String?
+  addedAt     DateTime @default(now())
+
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  stockItem StockItem? @relation(fields: [stockItemId], references: [id])
+  user      User?      @relation(fields: [addedBy], references: [id])
+}
+
+model Protocol {
+  id             String   @id @default(uuid())
+  protocolNumber String   @unique
+  orderId        String?
+  clientId       String?
+  locationId     String?
+  type           String
+  content        String
+  pdfUrl         String?
+  pdfGenerated   Boolean  @default(false)
+  createdBy      String?
+  createdAt      DateTime @default(now())
+
+  order    Order?    @relation(fields: [orderId], references: [id])
+  client   Client?   @relation(fields: [clientId], references: [id])
+  location Location? @relation(fields: [locationId], references: [id])
+  photos   ProtocolPhoto[]
+}
+
+model Notification {
+  id                String   @id @default(uuid())
+  userId            String
+  type              String
+  priority          Int      @default(3)
+  title             String
+  message           String?
+  link              String?
+  isRead            Boolean  @default(false)
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Vehicle {
+  id               String    @id @default(uuid())
+  brand            String?
+  model            String?
+  year             Int?
+  plate            String    @unique
+  vin              String?
+  insuranceNumber  String?
+  insuranceExpiry  DateTime?
+  inspectionExpiry DateTime?
+  notes            String?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+
+  serviceEntries VehicleServiceEntry[]
+  reminders      VehicleReminder[]
+}
+
+model VehicleServiceEntry {
+  id          String   @id @default(uuid())
+  vehicleId   String
+  date        DateTime
+  description String
+  mileage     Int?
+  addedBy     String?
+  createdAt   DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [addedBy], references: [id])
+}
+
+model VehicleReminder {
+  id        String   @id @default(uuid())
+  vehicleId String
+  type      String
+  date      DateTime
+  note      String?
+  isDone    Boolean  @default(false)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+model StockCategory {
+  id       String      @id @default(uuid())
+  name     String
+  color    String?
+  isActive Boolean     @default(true)
+  items    StockItem[]
+}
+
+model StockItem {
+  id         String  @id @default(uuid())
+  categoryId String?
+  name       String
+  sku        String?
+  unit       String  @default("szt")
+  notes      String?
+  isActive   Boolean @default(true)
+
+  category  StockCategory? @relation(fields: [categoryId], references: [id])
+  materials OrderMaterial[]
+}
+
+model ClientAttachment {
+  id         String   @id @default(uuid())
+  clientId   String
+  locationId String?
+  fileUrl    String
+  fileName   String?
+  fileSize   Int?
+  mimeType   String?
+  uploadedBy String?
+  uploadedAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model CompanySettings {
+  id        Int      @id @default(1)
+  name      String?
+  address   String?
+  phone     String?
+  email     String?
+  nip       String?
+  logoUrl   String?
+  updatedAt DateTime @updatedAt
+}
+
+model QuoteForm {
+  id          String    @id @default(uuid())
+  name        String
+  title       String
+  description String?
+  token       String    @unique
+  isActive    Boolean   @default(true)
+  expiresAt   DateTime?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+
+  fields      QuoteFormField[]
+  submissions QuoteSubmission[]
+}
+
+model QuoteFormField {
+  id          String  @id @default(uuid())
+  formId      String
+  type        String
+  label       String
+  placeholder String?
+  isRequired  Boolean @default(false)
+  options     String  @default("[]")
+  fieldOrder  Int
+
+  form QuoteForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+}
+
+model QuoteSubmission {
+  id                  String   @id @default(uuid())
+  formId              String
+  contactName         String?
+  contactPhone        String?
+  contactEmail        String?
+  address             String?
+  formData            String
+  attachments         String   @default("[]")
+  status              String   @default("NEW")
+  convertedToClientId String?
+  convertedToOrderId  String?
+  submittedAt         DateTime @default(now())
+  ipAddress           String?
+
+  form QuoteForm @relation(fields: [formId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+model OrderCounter {
+  id    Int @id @default(1)
+  year  Int
+  count Int @default(0)
+}
+
+model ProtocolCounter {
+  id    Int @id @default(1)
+  year  Int
+  count Int @default(0)
+}
+
+model ProtocolTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  content   String
+  isActive  Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+model ProtocolPhoto {
+  id         String   @id @default(uuid())
+  protocolId String
+  fileUrl    String
+  fileName   String?
+  fileSize   Int?
+  mimeType   String?
+  uploadedBy String?
+  uploadedAt DateTime @default(now())
+
+  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+}
