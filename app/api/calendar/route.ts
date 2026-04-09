@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/permissions";
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -15,22 +14,21 @@ export async function GET(req: NextRequest) {
 
   const admin = isAdmin(session.user);
 
-  const where: Prisma.OrderWhereInput = {
-    scheduledAt: {
-      ...(from ? { gte: new Date(from) } : {}),
-      ...(to ? { lte: new Date(to) } : {}),
-    },
-    status: { not: "ZAKONCZONE" },
-  };
-
-  if (!admin) {
-    where.assignments = { some: { userId: session.user.id } };
-  } else if (userId) {
-    where.assignments = { some: { userId } };
-  }
+  const assignmentsFilter = !admin
+    ? { assignments: { some: { userId: session.user.id } } }
+    : userId
+    ? { assignments: { some: { userId } } }
+    : {};
 
   const orders = await prisma.order.findMany({
-    where,
+    where: {
+      scheduledAt: {
+        ...(from ? { gte: new Date(from) } : {}),
+        ...(to ? { lte: new Date(to) } : {}),
+      },
+      status: { not: "ZAKONCZONE" },
+      ...assignmentsFilter,
+    },
     include: {
       client: { select: { name: true } },
       location: { select: { address: true, city: true } },
@@ -41,7 +39,6 @@ export async function GET(req: NextRequest) {
     orderBy: { scheduledAt: "asc" },
   });
 
-  // Map to FullCalendar event format
   const events = orders.map((order) => {
     const lead = order.assignments.find((a) => a.isLead);
     const address = order.location

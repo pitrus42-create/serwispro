@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -11,9 +10,11 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get("q");
   const categoryId = searchParams.get("categoryId");
 
-  const where: Prisma.StockItemWhereInput = { isActive: true };
-  if (categoryId) where.categoryId = categoryId;
-  if (q) where.OR = [{ name: { contains: q } }, { sku: { contains: q } }];
+  const where = {
+    isActive: true,
+    ...(categoryId ? { categoryId } : {}),
+    ...(q ? { OR: [{ name: { contains: q } }, { sku: { contains: q } }] } : {}),
+  };
 
   const items = await prisma.stockItem.findMany({
     where,

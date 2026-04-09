@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { generateOrderNumber } from "@/lib/order-number";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
 import { isAdmin } from "@/lib/permissions";
 import { startOfDay } from "date-fns";
 
@@ -27,38 +26,24 @@ export async function GET(req: NextRequest) {
 
   const admin = isAdmin(session.user);
 
-  const where: Prisma.OrderWhereInput = {};
-
-  // Role-based filter
-  if (!admin && !(session.user.permissions as Record<string,boolean>)?.canViewAllOrders) {
-    where.assignments = { some: { userId: session.user.id } };
-  }
-
-  if (status?.length) where.status = { in: status };
-  if (type?.length) where.type = { in: type };
-  if (priority?.length) where.priority = { in: priority };
-  if (clientId) where.clientId = clientId;
-  if (critical === "true") where.isCritical = true;
-  if (overdue === "true") {
-    where.scheduledAt = { lt: startOfDay(new Date()) };
-    where.status = { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] };
-  }
-  if (dateFrom || dateTo) {
-    where.scheduledAt = {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(dateTo) } : {}),
-    };
-  }
-  if (userId) {
-    where.assignments = { some: { userId } };
-  }
-  if (q) {
-    where.OR = [
-      { orderNumber: { contains: q } },
-      { title: { contains: q } },
-      { description: { contains: q } },
-    ];
-  }
+  const where = {
+    ...(!admin && !(session.user.permissions as Record<string, boolean>)?.canViewAllOrders
+      ? { assignments: { some: { userId: session.user.id } } }
+      : userId
+      ? { assignments: { some: { userId } } }
+      : {}),
+    ...(status?.length ? { status: { in: status } } : {}),
+    ...(type?.length ? { type: { in: type } } : {}),
+    ...(priority?.length ? { priority: { in: priority } } : {}),
+    ...(clientId ? { clientId } : {}),
+    ...(critical === "true" ? { isCritical: true } : {}),
+    ...(overdue === "true"
+      ? { scheduledAt: { lt: startOfDay(new Date()) }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } }
+      : dateFrom || dateTo
+      ? { scheduledAt: { ...(dateFrom ? { gte: new Date(dateFrom) } : {}), ...(dateTo ? { lte: new Date(dateTo) } : {}) } }
+      : {}),
+    ...(q ? { OR: [{ orderNumber: { contains: q } }, { title: { contains: q } }, { description: { contains: q } }] } : {}),
+  };
 
   const [total, data] = await Promise.all([
     prisma.order.count({ where }),

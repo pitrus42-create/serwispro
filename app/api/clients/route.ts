@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -12,17 +11,18 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") ?? "1");
   const limit = parseInt(searchParams.get("limit") ?? "20");
 
-  const where: Prisma.ClientWhereInput = { isActive: true };
-
-  if (q) {
-    where.OR = [
-      { name: { contains: q } },
-      { alias: { contains: q } },
-      { phone: { contains: q } },
-      { email: { contains: q } },
-      { nip: { contains: q } },
-    ];
-  }
+  const where = {
+    isActive: true,
+    ...(q ? {
+      OR: [
+        { name: { contains: q } },
+        { alias: { contains: q } },
+        { phone: { contains: q } },
+        { email: { contains: q } },
+        { nip: { contains: q } },
+      ],
+    } : {}),
+  };
 
   const [total, data] = await Promise.all([
     prisma.client.count({ where }),
