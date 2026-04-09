@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -10,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Shield, Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { firebaseAuth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,8 +27,10 @@ export default function LoginPage() {
     setGoogleLoading(true);
     setError("");
     try {
+      const auth = getFirebaseAuth();
+      if (!auth) throw new Error("Firebase not configured");
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(firebaseAuth, provider);
+      const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
       const res = await signIn("google-firebase", { idToken, redirect: false });
       if (res?.error) {

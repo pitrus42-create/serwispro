@@ -5,6 +5,10 @@ import { prisma } from "./prisma";
 import { authConfig } from "../auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  logger: {
+    error: (e) => console.error("[NextAuth Error]", e),
+    warn: (code) => console.warn("[NextAuth Warn]", code),
+  },
   ...authConfig,
   providers: [
     Credentials({
