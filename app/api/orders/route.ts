@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { generateOrderNumber } from "@/lib/order-number";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { isAdmin } from "@/lib/permissions";
 import { startOfDay } from "date-fns";
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   const admin = isAdmin(session.user);
 
-  const where: Record<string, unknown> = {};
+  const where: Prisma.OrderWhereInput = {};
 
   // Role-based filter
   if (!admin && !(session.user.permissions as Record<string,boolean>)?.canViewAllOrders) {

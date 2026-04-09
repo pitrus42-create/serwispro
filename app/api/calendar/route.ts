@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/permissions";
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const admin = isAdmin(session.user);
 
-  const where: Record<string, unknown> = {
+  const where: Prisma.OrderWhereInput = {
     scheduledAt: {
       ...(from ? { gte: new Date(from) } : {}),
       ...(to ? { lte: new Date(to) } : {}),

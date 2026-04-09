@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
   const readOnly = searchParams.get("read") === "false";
   const limit = parseInt(searchParams.get("limit") ?? "30");
 
-  const where: Record<string, unknown> = { userId: session.user.id };
+  const where: Prisma.NotificationWhereInput = { userId: session.user.id };
   if (readOnly) where.isRead = false;
 
   const [data, unreadCount] = await Promise.all([
