@@ -4,7 +4,6 @@ export const dynamic = "force-dynamic";
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +14,6 @@ import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -37,8 +35,7 @@ export default function LoginPage() {
         setError("Nie udało się zalogować przez Google. Spróbuj ponownie.");
       } else {
         toast.success("Zalogowano pomyślnie");
-        router.push("/");
-        router.refresh();
+        window.location.href = "/";
       }
     } catch {
       setError("Wystąpił błąd podczas logowania przez Google.");
@@ -63,8 +60,7 @@ export default function LoginPage() {
         setError("Nieprawidłowy email lub hasło");
       } else {
         toast.success("Zalogowano pomyślnie");
-        router.push("/");
-        router.refresh();
+        window.location.href = "/";
       }
     } catch {
       setError("Wystąpił błąd. Spróbuj ponownie.");
