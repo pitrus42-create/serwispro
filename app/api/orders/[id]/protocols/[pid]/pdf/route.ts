@@ -297,11 +297,21 @@ export async function GET(req: NextRequest, { params }: Params) {
       const puppeteer = await import("puppeteer");
       const browser = await puppeteer.default.launch({
         headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--disable-extensions",
+          "--single-process",
+          "--no-zygote",
+        ],
       });
       try {
         const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: "networkidle0" });
+        await page.setContent(html, { waitUntil: "load" });
+        // Give fonts / images a moment to settle
+        await new Promise((r) => setTimeout(r, 400));
         const pdfBytes = await page.pdf({
           format: "A4",
           margin: { top: "12mm", right: "15mm", bottom: "12mm", left: "15mm" },
@@ -318,10 +328,18 @@ export async function GET(req: NextRequest, { params }: Params) {
       }
     } catch (err) {
       console.error("Puppeteer PDF error:", err);
-      // Fallback to HTML if puppeteer fails
-      return new NextResponse(html, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
+      // Fallback: open HTML in browser (user can use Ctrl+P → Save as PDF)
+      return new NextResponse(
+        JSON.stringify({
+          error: "pdf_unavailable",
+          message: "Generowanie PDF nie powiodło się. Użyj przycisku Podgląd i wydrukuj jako PDF (Ctrl+P → Zapisz jako PDF).",
+          previewUrl: `/api/orders/${orderId}/protocols/${pid}/pdf?variant=${variant}`,
+        }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
     }
   }
 

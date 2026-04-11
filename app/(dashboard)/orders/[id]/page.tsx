@@ -24,6 +24,7 @@ import {
   X,
   CheckCircle2,
   UserPlus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +44,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { canDo } from "@/lib/permissions";
+import { canDo, isAdmin } from "@/lib/permissions";
 
 const STATUS_LABELS: Record<string, string> = {
   OCZEKUJACE: "Oczekujące",
@@ -258,17 +259,34 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       }
 
       queryClient.invalidateQueries({ queryKey: ["order", id] });
-      toast.success(`Protokół ${protocol.protocolNumber} został utworzony`);
+      toast.success(
+        `Protokół ${protocol.protocolNumber} został utworzony — kliknij „Podgląd" aby go otworzyć`,
+        { duration: 5000 }
+      );
       setProtocolDescription("");
       setProtocolNotes("");
       setProtocolHoursFrom("");
       setProtocolHoursTo("");
       setProtocolPhotos([]);
       setSelectedTemplateIds(new Set());
-      // Open preview in new tab (no auto-print)
-      window.open(`/api/orders/${id}/protocols/${protocol.id}/pdf?variant=${variant}`, "_blank");
     },
     onError: () => toast.error("Błąd tworzenia protokołu"),
+  });
+
+  const deleteProtocolMutation = useMutation({
+    mutationFn: async (pid: string) => {
+      const r = await fetch(`/api/orders/${id}/protocols/${pid}`, { method: "DELETE" });
+      if (!r.ok) {
+        const data = await r.json().catch(() => null);
+        throw new Error(data?.message ?? "Błąd usuwania protokołu");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Protokół został usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   if (isLoading) {
@@ -296,6 +314,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const helpers = order.assignments.filter((a) => !a.isLead);
   const nextStatuses = STATUS_TRANSITIONS[order.status] ?? [];
   const canCreate = canDo(session?.user, "orders:create");
+  const canDeleteProtocol = isAdmin(session?.user);
   const isAssignedToMe = order.assignments.some((a) => a.user.id === session?.user?.id);
   const isUnassigned = order.assignments.length === 0;
   // Can close: roles with orders:close permission OR serwisant assigned to this order
@@ -668,6 +687,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       </p>
                     </div>
                     <div className="flex gap-1.5 shrink-0">
+                      {canDeleteProtocol && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50"
+                              title="Usuń protokół"
+                              disabled={deleteProtocolMutation.isPending}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Usunąć protokół?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Protokół <strong>{p.protocolNumber}</strong> oraz wszystkie powiązane
+                                zdjęcia zostaną trwale usunięte. Tej operacji nie można cofnąć.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700"
+                                onClick={() => deleteProtocolMutation.mutate(p.id)}
+                              >
+                                Usuń
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -678,14 +730,32 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         <FileText className="h-3.5 w-3.5" />
                         Podgląd
                       </Button>
-                      <a
-                        href={`/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&download=1`}
-                        download={`${p.protocolNumber}.pdf`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        title="Pobierz PDF"
+                        onClick={async () => {
+                          const url = `/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&download=1`;
+                          const res = await fetch(url);
+                          if (res.ok && res.headers.get("content-type")?.includes("pdf")) {
+                            const blob = await res.blob();
+                            const a = document.createElement("a");
+                            a.href = URL.createObjectURL(blob);
+                            a.download = `${p.protocolNumber}.pdf`;
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                          } else {
+                            const data = await res.json().catch(() => null);
+                            toast.error(
+                              data?.message ?? "Błąd generowania PDF. Użyj Podgląd → Ctrl+P → Zapisz jako PDF."
+                            );
+                          }
+                        }}
                       >
                         <Download className="h-3.5 w-3.5" />
                         Pobierz
-                      </a>
+                      </Button>
                     </div>
                   </div>
                 );
