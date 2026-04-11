@@ -147,7 +147,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!user) {
-          const serwisantRole = await prisma.role.findUnique({
+          const serwisantRole = await prisma.role.findFirst({
             where: { name: "SERWISANT" },
           });
 
