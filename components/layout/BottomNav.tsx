@@ -16,7 +16,7 @@ const navItems = [
   { href: "/orders", icon: ClipboardList, label: "Zlecenia" },
   { href: "/calendar", icon: Calendar, label: "Kalendarz" },
   { href: "/clients", icon: Users, label: "Klienci" },
-  { href: "/settings/company", icon: Menu, label: "Więcej" },
+  { href: "/settings", icon: Menu, label: "Więcej" },
 ];
 
 export function BottomNav() {

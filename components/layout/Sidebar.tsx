@@ -33,7 +33,7 @@ const navItems = [
   { href: "/vehicles", icon: Car, label: "Pojazdy" },
   { href: "/stock", icon: Package, label: "Magazyn" },
   { href: "/analytics", icon: BarChart3, label: "Analizy" },
-  { href: "/settings/company", icon: Settings, label: "Ustawienia" },
+  { href: "/settings", icon: Settings, label: "Ustawienia" },
 ];
 
 export function Sidebar() {
