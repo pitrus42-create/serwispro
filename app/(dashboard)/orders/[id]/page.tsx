@@ -157,6 +157,36 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState("info");
+
+  // Compress image to max 1600px, JPEG 80% — reduces phone photos from ~5MB to ~300KB
+  async function compressImage(file: File): Promise<File> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1600;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => resolve(blob
+            ? new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" })
+            : file
+          ),
+          "image/jpeg", 0.8
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
   const [protocolDescription, setProtocolDescription] = useState("");
   const [protocolNotes, setProtocolNotes] = useState("");
   const [protocolHoursFrom, setProtocolHoursFrom] = useState("");
@@ -936,10 +966,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 multiple
                 className="hidden"
                 id="proto-photos"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files ?? []).slice(0, 6);
-                  setProtocolPhotos(files);
+                onChange={async (e) => {
+                  const raw = Array.from(e.target.files ?? []).slice(0, 6);
                   e.target.value = "";
+                  const compressed = await Promise.all(raw.map(compressImage));
+                  setProtocolPhotos(compressed);
                 }}
               />
               <Button
