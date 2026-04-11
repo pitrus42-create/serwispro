@@ -1,21 +1,20 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   AlertTriangle,
   Clock,
   ClipboardList,
   Wrench,
   Flame,
-  Plus,
+  Zap,
+  ChevronRight,
   Calendar,
+  Users,
   UserPlus,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/utils";
 import { ORDER_TYPE_CONFIG } from "@/constants/colors";
@@ -25,10 +24,24 @@ interface DashboardData {
   criticalAlerts: number;
   openAlerts: number;
   overdueOrders: number;
-  todayOrders: { id: string; orderNumber: string; type: string; title?: string; client?: { name: string } | null; scheduledAt?: string | null; assignments: { user: { firstName: string; lastName: string } }[] }[];
+  todayOrders: {
+    id: string;
+    orderNumber: string;
+    type: string;
+    title?: string;
+    client?: { name: string } | null;
+    scheduledAt?: string | null;
+    assignments: { user: { firstName: string; lastName: string } }[];
+  }[];
   highPriorityOrders: number;
   pendingMaintenance: number;
-  recentActivity: { id: string; action: string; createdAt: string; user?: { firstName: string; lastName: string } | null; order?: { orderNumber: string; type: string } | null }[];
+  recentActivity: {
+    id: string;
+    action: string;
+    createdAt: string;
+    user?: { firstName: string; lastName: string } | null;
+    order?: { orderNumber: string; type: string } | null;
+  }[];
 }
 
 async function fetchDashboard(): Promise<DashboardData> {
@@ -37,53 +50,40 @@ async function fetchDashboard(): Promise<DashboardData> {
   return res.json();
 }
 
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  color,
-  href,
-  pulse,
-  description,
-}: {
-  title: string;
-  value: number;
-  icon: React.ElementType;
-  color: string;
-  href?: string;
-  pulse?: boolean;
-  description?: string;
-}) {
-  const inner = (
-    <Card className={`${color} border-0 cursor-pointer hover:opacity-90 transition-opacity ${pulse && value > 0 ? "animate-pulse-red" : ""}`}>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium opacity-80">{title}</p>
-            <p className="text-3xl font-bold mt-1">{value}</p>
-            {description && <p className="text-xs opacity-70 mt-0.5">{description}</p>}
-          </div>
-          <Icon className="w-8 h-8 opacity-70" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-
-  if (href) return <Link href={href}>{inner}</Link>;
-  return inner;
-}
-
 const ACTION_LABELS: Record<string, string> = {
-  order_created: "Utworzył zlecenie",
-  status_changed: "Zmienił status",
-  assignment_added: "Przypisał pracownika",
-  note_added: "Dodał notatkę",
-  protocol_generated: "Wygenerował protokół",
-  checklist_item_checked: "Odhaczyło punkt checklisty",
+  order_created: "utworzył zlecenie",
+  status_changed: "zmienił status",
+  assignment_added: "przypisał pracownika",
+  note_added: "dodał notatkę",
+  protocol_generated: "wygenerował protokół",
+  checklist_item_checked: "odhaczył punkt checklisty",
 };
 
+const TYPE_COLORS: Record<string, string> = {
+  AWARIA: "bg-red-500",
+  PRZEGLAD: "bg-blue-500",
+  KONSERWACJA: "bg-teal-500",
+  INSTALACJA: "bg-purple-500",
+  INNE: "bg-gray-400",
+};
+
+function getGreeting(firstName?: string | null) {
+  const h = new Date().getHours();
+  const salut = h < 12 ? "Dzień dobry" : h < 18 ? "Cześć" : "Dobry wieczór";
+  const emoji = h < 12 ? "☀️" : h < 18 ? "👋" : "🌙";
+  return `${salut}, ${firstName ?? ""}! ${emoji}`;
+}
+
+function formatShortDate() {
+  return new Date().toLocaleDateString("pl-PL", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export function DashboardContent() {
-  const router = useRouter();
+  const { data: session } = useSession();
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard"],
     queryFn: fetchDashboard,
@@ -92,208 +92,194 @@ export function DashboardContent() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
+      <div className="space-y-4 pt-2">
+        <div className="flex gap-2 overflow-hidden py-2">
+          {[96, 80, 112, 88].map((w, i) => (
+            <Skeleton key={i} className={`h-8 rounded-full shrink-0`} style={{ width: w }} />
           ))}
         </div>
-        <Skeleton className="h-48 rounded-xl" />
+        <div className="flex gap-3">
+          <Skeleton className="h-12 flex-1 rounded-xl" />
+          <Skeleton className="h-12 flex-1 rounded-xl" />
+        </div>
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-14 rounded-lg" />
+        ))}
       </div>
     );
   }
 
   const d = data!;
+  const firstName = session?.user?.firstName ?? null;
+
+  const pills = [
+    { value: d.overdueOrders, label: "Zaległe", color: "bg-amber-100 text-amber-800", href: "/orders?overdue=true" },
+    { value: d.openAlerts, label: "Awarie", color: "bg-orange-100 text-orange-800", href: "/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU" },
+    { value: d.highPriorityOrders, label: "Pilne", color: "bg-purple-100 text-purple-800", href: "/orders?priority=WYSOKI,KRYTYCZNY" },
+    { value: d.pendingMaintenance, label: "Konserwacje", color: "bg-teal-100 text-teal-800", href: "/orders?type=KONSERWACJA" },
+    { value: d.todayOrders.length, label: "Dziś", color: "bg-blue-100 text-blue-800", href: "/calendar" },
+  ].filter((p) => p.value > 0);
+
+  const allClear = pills.length === 0 && d.criticalAlerts === 0;
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Critical alert banner */}
+    <div className="space-y-5 max-w-2xl mx-auto">
+      {/* Greeting bar */}
+      <div className="flex items-center justify-between -mt-1">
+        <p className="text-base font-semibold text-gray-900">{getGreeting(firstName)}</p>
+        <p className="text-xs text-gray-400 capitalize">{formatShortDate()}</p>
+      </div>
+
+      {/* Critical alert banner — full-bleed */}
       {d.criticalAlerts > 0 && (
-        <Link href="/orders?critical=true">
-          <div className="bg-red-600 text-white rounded-xl p-4 flex items-center gap-3 animate-pulse-red shadow-lg">
-            <AlertTriangle className="w-6 h-6 shrink-0" />
-            <div className="flex-1">
-              <p className="font-bold">
-                {d.criticalAlerts} aktywna awaria krytyczna!
-              </p>
-              <p className="text-sm opacity-90">Kliknij aby zobaczyć szczegóły</p>
-            </div>
-            <span className="text-3xl font-black">{d.criticalAlerts}</span>
-          </div>
+        <Link
+          href="/orders?critical=true"
+          className="-mx-4 flex items-center gap-3 bg-red-600 text-white px-4 min-h-14 animate-pulse-red"
+        >
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          <p className="flex-1 font-bold text-sm leading-tight">
+            {d.criticalAlerts}× AWARIA KRYTYCZNA — Dotknij aby zobaczyć
+          </p>
+          <ChevronRight className="w-5 h-5 shrink-0 opacity-70" />
         </Link>
       )}
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <StatCard
-          title="Awarie krytyczne"
-          value={d.criticalAlerts}
-          icon={AlertTriangle}
-          color={d.criticalAlerts > 0 ? "bg-red-100 text-red-900" : "bg-green-100 text-green-900"}
-          href="/orders?critical=true"
-          pulse={d.criticalAlerts > 0}
-          description={d.criticalAlerts === 0 ? "Wszystko OK ✓" : "Wymagają reakcji!"}
-        />
-        <StatCard
-          title="Otwarte awarie"
-          value={d.openAlerts}
-          icon={Flame}
-          color="bg-orange-100 text-orange-900"
-          href="/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU"
-        />
-        <StatCard
-          title="Zadania dziś"
-          value={d.todayOrders.length}
-          icon={ClipboardList}
-          color="bg-blue-100 text-blue-900"
-          href="/calendar"
-        />
-        <StatCard
-          title="Zaległe"
-          value={d.overdueOrders}
-          icon={Clock}
-          color={d.overdueOrders > 0 ? "bg-amber-100 text-amber-900" : "bg-gray-100 text-gray-700"}
-          href="/orders?overdue=true"
-        />
-        <StatCard
-          title="Wysoki priorytet"
-          value={d.highPriorityOrders}
-          icon={Flame}
-          color="bg-purple-100 text-purple-900"
-          href="/orders?priority=WYSOKI,KRYTYCZNY"
-        />
-        <StatCard
-          title="Konserwacje do planu"
-          value={d.pendingMaintenance}
-          icon={Wrench}
-          color="bg-teal-100 text-teal-900"
-        />
+      {/* Smart stat pills */}
+      {allClear ? (
+        <p className="text-sm text-green-600 font-medium py-1">Wszystko w porządku ✓</p>
+      ) : (
+        <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 py-1">
+          {pills.map((p) => (
+            <Link
+              key={p.label}
+              href={p.href}
+              className={`${p.color} rounded-full px-3 py-1 text-sm font-medium shrink-0 whitespace-nowrap`}
+            >
+              {p.label} {p.value}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* Primary CTAs */}
+      <div className="flex gap-3">
+        <Button asChild className="bg-red-600 hover:bg-red-700 h-12 flex-1 rounded-xl font-bold text-sm">
+          <Link href="/orders/new?type=AWARIA">
+            <Zap className="w-4 h-4 mr-1.5" />
+            Nowa Awaria
+          </Link>
+        </Button>
+        <Button asChild variant="outline" className="h-12 flex-1 rounded-xl text-sm">
+          <Link href="/orders/new">
+            <ClipboardList className="w-4 h-4 mr-1.5" />
+            Nowe Zlecenie
+          </Link>
+        </Button>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {/* Today's tasks */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center justify-between">
-              <span>Zadania na dziś</span>
-              <Link href="/calendar" className="text-xs text-blue-600 font-normal">
-                Kalendarz →
-              </Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {d.todayOrders.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">
-                Brak zaplanowanych zadań na dziś
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {d.todayOrders.map((order) => {
-                  const typeConfig = ORDER_TYPE_CONFIG[order.type as keyof typeof ORDER_TYPE_CONFIG];
-                  const lead = order.assignments[0]?.user;
-                  return (
-                    <li key={order.id}>
-                      <Link
-                        href={`/orders/${order.id}`}
-                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="text-lg">{typeConfig?.icon ?? "📋"}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {order.title ?? order.client?.name ?? order.orderNumber}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {formatDateTime(order.scheduledAt)}
-                            {lead && ` · ${lead.firstName} ${lead.lastName}`}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {typeConfig?.label}
-                        </Badge>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+      {/* Today section */}
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Moje dzisiaj
+          </h2>
+          <Link href="/calendar" className="text-xs text-blue-600 font-medium">
+            Kalendarz →
+          </Link>
+        </div>
 
-        {/* Recent activity */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Ostatnia aktywność</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {d.recentActivity.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">Brak aktywności</p>
-            ) : (
-              <ul className="space-y-2">
-                {d.recentActivity.map((log) => (
-                  <li key={log.id} className="flex gap-2 text-sm">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
-                    <div>
-                      <span className="font-medium">
-                        {log.user ? `${log.user.firstName} ${log.user.lastName}` : "System"}
-                      </span>{" "}
-                      <span className="text-gray-600">
-                        {ACTION_LABELS[log.action] ?? log.action}
-                      </span>
-                      {log.order && (
-                        <>
-                          {" "}
-                          <Link href={`/orders`} className="text-blue-600 hover:underline">
-                            {log.order.orderNumber}
-                          </Link>
-                        </>
-                      )}
+        {d.todayOrders.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            Brak zaplanowanych zadań na dziś
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {d.todayOrders.map((order) => {
+              const typeConfig = ORDER_TYPE_CONFIG[order.type as keyof typeof ORDER_TYPE_CONFIG];
+              const barColor = TYPE_COLORS[order.type] ?? "bg-gray-400";
+              return (
+                <li key={order.id}>
+                  <Link
+                    href={`/orders/${order.id}`}
+                    className="flex items-center gap-3 py-3 min-h-14"
+                  >
+                    <span className={`w-1 h-8 rounded-full shrink-0 ${barColor}`} />
+                    <span className="text-xl shrink-0">{typeConfig?.icon ?? "📋"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate text-gray-900">
+                        {order.title ?? order.client?.name ?? order.orderNumber}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {formatDateTime(order.scheduledAt)}
+                        {order.client?.name ? ` · ${order.client.name}` : ""}
+                      </p>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
-      {/* Quick actions */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Szybkie akcje</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => router.push("/orders/new?type=AWARIA")}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              <AlertTriangle className="w-4 h-4 mr-1" />
-              Nowa Awaria
-            </Button>
-            <Button
-              onClick={() => router.push("/orders/new")}
-              variant="outline"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Nowe Zlecenie
-            </Button>
-            <Button
-              onClick={() => router.push("/calendar")}
-              variant="outline"
-            >
-              <Calendar className="w-4 h-4 mr-1" />
-              Kalendarz
-            </Button>
-            <Button
-              onClick={() => router.push("/clients/new")}
-              variant="outline"
-            >
-              <UserPlus className="w-4 h-4 mr-1" />
-              Nowy Klient
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Recent activity */}
+      {d.recentActivity.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+            Ostatnia aktywność
+          </h2>
+          <ul className="space-y-2">
+            {d.recentActivity.slice(0, 3).map((log) => (
+              <li key={log.id} className="flex gap-2 text-sm text-gray-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <span>
+                  <span className="font-medium text-gray-800">
+                    {log.user ? `${log.user.firstName} ${log.user.lastName[0]}.` : "System"}
+                  </span>{" "}
+                  {ACTION_LABELS[log.action] ?? log.action}
+                  {log.order && (
+                    <>
+                      {" · "}
+                      <span className="text-blue-600">{log.order.orderNumber}</span>
+                    </>
+                  )}
+                  {" · "}
+                  <span className="text-gray-400 text-xs">{formatDateTime(log.createdAt)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Secondary ghost actions */}
+      <div className="flex gap-2 flex-wrap pb-2">
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/calendar">
+            <Calendar className="w-4 h-4 mr-1.5" />
+            Kalendarz
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/clients">
+            <Users className="w-4 h-4 mr-1.5" />
+            Klienci
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/clients/new">
+            <UserPlus className="w-4 h-4 mr-1.5" />
+            Nowy klient
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/orders">
+            <Wrench className="w-4 h-4 mr-1.5" />
+            Wszystkie zlecenia
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 }

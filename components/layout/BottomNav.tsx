@@ -7,7 +7,7 @@ import {
   ClipboardList,
   Calendar,
   Users,
-  Menu,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +16,7 @@ const navItems = [
   { href: "/orders", icon: ClipboardList, label: "Zlecenia" },
   { href: "/calendar", icon: Calendar, label: "Kalendarz" },
   { href: "/clients", icon: Users, label: "Klienci" },
-  { href: "/settings", icon: Menu, label: "Więcej" },
+  { href: "/orders/new?type=AWARIA", icon: Zap, label: "Awaria" },
 ];
 
 export function BottomNav() {
@@ -36,7 +36,9 @@ export function BottomNav() {
                 href={item.href}
                 className={cn(
                   "flex flex-col items-center gap-0.5 py-2 px-1 transition-colors",
-                  isActive ? "text-blue-600" : "text-gray-500"
+                  item.href === "/orders/new?type=AWARIA"
+                    ? "text-red-500"
+                    : isActive ? "text-blue-600" : "text-gray-500"
                 )}
               >
                 <item.icon className="w-5 h-5" />
