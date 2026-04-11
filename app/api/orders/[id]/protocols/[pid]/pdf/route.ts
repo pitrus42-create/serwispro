@@ -3,8 +3,41 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
+import { readFile } from "fs/promises";
+import pathModule from "path";
 
 type Params = { params: Promise<{ id: string; pid: string }> };
+
+async function fileUrlToDataUri(fileUrl: string): Promise<string> {
+  try {
+    const relative = fileUrl.startsWith("/") ? fileUrl.slice(1) : fileUrl;
+    const filePath = pathModule.join(process.cwd(), "public", relative);
+    const bytes = await readFile(filePath);
+    const ext = (filePath.split(".").pop() ?? "jpg").toLowerCase();
+    const mimeMap: Record<string, string> = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+    };
+    return `data:${mimeMap[ext] ?? "image/jpeg"};base64,${bytes.toString("base64")}`;
+  } catch {
+    return "";
+  }
+}
+
+function calcDuration(from: string, to: string): string {
+  const [fh, fm] = from.split(":").map(Number);
+  const [th, tm] = to.split(":").map(Number);
+  let total = th * 60 + tm - (fh * 60 + fm);
+  if (total < 0) total += 24 * 60;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
 
 export async function GET(req: NextRequest, { params }: Params) {
   const session = await auth();
@@ -12,7 +45,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const { id: orderId, pid } = await params;
   const variant = (req.nextUrl.searchParams.get("variant") ?? "print") as "print" | "report";
-  const autoPrint = req.nextUrl.searchParams.get("print") === "1";
+  const download = req.nextUrl.searchParams.get("download") === "1";
 
   const [protocol, order, company, photos] = await Promise.all([
     prisma.protocol.findUnique({ where: { id: pid } }),
@@ -42,40 +75,49 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   let content: Record<string, string> = {};
-  try {
-    content = JSON.parse(protocol.content);
-  } catch {
-    content = {};
-  }
+  try { content = JSON.parse(protocol.content); } catch { /* empty */ }
 
   const now = new Date();
   const baseUrl = `${req.headers.get("x-forwarded-proto") ?? "http"}://${req.headers.get("host")}`;
 
   const TYPE_LABELS: Record<string, string> = {
-    AWARIA: "Awaria",
-    KONSERWACJA: "Konserwacja",
-    MONTAZ: "Montaż",
-    MODERNIZACJA: "Modernizacja",
-    PRZEGLAD: "Przegląd",
-    INSTALACJA: "Instalacja",
-    INNE: "Inne",
+    AWARIA: "Awaria", KONSERWACJA: "Konserwacja", MONTAZ: "Montaż",
+    MODERNIZACJA: "Modernizacja", PRZEGLAD: "Przegląd", INSTALACJA: "Instalacja", INNE: "Inne",
   };
 
   const docTitle = variant === "report" ? "Raport Serwisowy" : "Protokół Serwisowy";
 
-  // All assignees
   const assigneesText = order.assignments.length > 0
     ? order.assignments
         .map((a) => `${a.user.firstName} ${a.user.lastName}${a.isLead ? " (odp.)" : ""}`)
         .join(", ")
     : "—";
 
-  // Logo
-  const logoHtml = company?.logoUrl
-    ? `<img src="${baseUrl}${company.logoUrl}" alt="Logo" style="max-height:52px;max-width:110px;object-fit:contain;display:block" />`
+  // Hours box
+  const hFrom = content.hoursFrom ?? "";
+  const hTo = content.hoursTo ?? "";
+  const hoursBox = hFrom || hTo
+    ? `<div class="box">
+        <div class="box-label">Czas pracy</div>
+        <div class="box-value">${hFrom || "—"} – ${hTo || "—"}</div>
+        ${hFrom && hTo ? `<div class="box-sub">Łącznie: ${calcDuration(hFrom, hTo)}</div>` : ""}
+      </div>`
     : "";
 
-  // Materials table
+  // Logo — embed as base64 for download, use URL for preview
+  let logoSrc = "";
+  if (company?.logoUrl) {
+    if (download) {
+      logoSrc = await fileUrlToDataUri(company.logoUrl);
+    } else {
+      logoSrc = `${baseUrl}${company.logoUrl}`;
+    }
+  }
+  const logoHtml = logoSrc
+    ? `<img src="${logoSrc}" alt="Logo" style="max-height:52px;max-width:110px;object-fit:contain;display:block" />`
+    : "";
+
+  // Materials
   const materialsHtml = order.materials.length > 0
     ? `<div class="section">
         <div class="section-title">Użyte materiały</div>
@@ -100,19 +142,28 @@ export async function GET(req: NextRequest, { params }: Params) {
       </div>`
     : "";
 
-  // Photo grid (report only)
-  const photosHtml = variant === "report" && photos.length > 0
-    ? `<div class="section">
-        <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
-        <div class="photo-grid">
-          ${photos.slice(0, 6).map((p) => `
-            <div class="photo-wrap">
-              <img src="${baseUrl}${p.fileUrl}" class="photo-thumb" alt="" />
-            </div>
-          `).join("")}
-        </div>
-      </div>`
-    : "";
+  // Photos (report only) — embed as base64 when downloading
+  let photosHtml = "";
+  if (variant === "report" && photos.length > 0) {
+    const photoSrcs = await Promise.all(
+      photos.slice(0, 6).map(async (p) => {
+        if (download) {
+          const dataUri = await fileUrlToDataUri(p.fileUrl);
+          return dataUri || `${baseUrl}${p.fileUrl}`;
+        }
+        return `${baseUrl}${p.fileUrl}`;
+      })
+    );
+    photosHtml = `<div class="section">
+      <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
+      <div class="photo-grid">
+        ${photoSrcs.map((src) => src
+          ? `<div class="photo-wrap"><img src="${src}" class="photo-thumb" alt="" /></div>`
+          : ""
+        ).join("")}
+      </div>
+    </div>`;
+  }
 
   // Signatures (print only)
   const signaturesHtml = variant === "print"
@@ -132,6 +183,11 @@ export async function GET(req: NextRequest, { params }: Params) {
     ? format(new Date(order.scheduledAt), "d MMMM yyyy", { locale: pl })
     : format(now, "d MMMM yyyy", { locale: pl });
 
+  // Grid layout: 2 cols if no hours, 3 cols if hours present
+  const infoGridStyle = hoursBox
+    ? `display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px`
+    : `display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px`;
+
   const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -140,8 +196,6 @@ export async function GET(req: NextRequest, { params }: Params) {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; background: white; padding: 20px 30px; }
-
-    /* Header */
     .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #1e40af; padding-bottom: 14px; margin-bottom: 14px; }
     .header-left { display: flex; align-items: flex-start; gap: 12px; }
     .company-name { font-size: 16px; font-weight: 700; color: #1e40af; line-height: 1.2; }
@@ -150,32 +204,20 @@ export async function GET(req: NextRequest, { params }: Params) {
     .doc-number { font-size: 17px; font-weight: 700; color: #111; }
     .doc-type { font-size: 10px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
     .doc-date { font-size: 10px; color: #555; margin-top: 4px; }
-
-    /* Info boxes */
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
     .box { border: 1px solid #e5e7eb; border-radius: 5px; padding: 8px 10px; }
     .box-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 3px; font-weight: 600; }
     .box-value { font-size: 12px; font-weight: 600; line-height: 1.3; }
     .box-sub { font-size: 10px; color: #555; margin-top: 2px; line-height: 1.4; }
-
-    /* Sections */
     .section { margin-bottom: 11px; }
     .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: 3px; margin-bottom: 7px; }
     .text-block { border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px 12px; font-size: 11.5px; line-height: 1.6; min-height: 52px; white-space: pre-wrap; color: #333; }
-
-    /* Photos */
     .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
     .photo-wrap { aspect-ratio: 4/3; overflow: hidden; border-radius: 4px; border: 1px solid #e5e7eb; background: #f9fafb; }
     .photo-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-    /* Signatures */
     .signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; page-break-inside: avoid; }
     .sig-line { border-bottom: 1px solid #333; height: 48px; }
     .sig-label { font-size: 10px; color: #555; text-align: center; margin-top: 6px; }
-
-    /* Footer */
     .footer { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 7px; font-size: 9px; color: #9ca3af; text-align: center; }
-
     @media print {
       body { padding: 0; font-size: 11px; }
       @page { margin: 12mm 15mm; size: A4; }
@@ -183,8 +225,6 @@ export async function GET(req: NextRequest, { params }: Params) {
   </style>
 </head>
 <body>
-
-  <!-- Header: logo + company | document info -->
   <div class="header">
     <div class="header-left">
       ${logoHtml}
@@ -204,8 +244,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     </div>
   </div>
 
-  <!-- Info boxes: order, client, location, assignees -->
-  <div class="grid-2">
+  <div style="${infoGridStyle}">
     <div class="box">
       <div class="box-label">Zlecenie</div>
       <div class="box-value">${order.orderNumber}</div>
@@ -223,49 +262,70 @@ export async function GET(req: NextRequest, { params }: Params) {
       <div class="box-label">Lokalizacja</div>
       <div class="box-value">${order.location?.name ?? "—"}</div>
       ${order.location?.address ? `<div class="box-sub">${order.location.address}</div>` : ""}
-      ${order.location?.city && order.location.city !== order.location.address ? `<div class="box-sub">${order.location.city}</div>` : ""}
     </div>
     <div class="box">
       <div class="box-label">Serwisant(ci)</div>
       <div class="box-value" style="font-size:11px;font-weight:500">${assigneesText}</div>
-      ${(content.hoursFrom || content.hoursTo) ? `<div class="box-sub">Czas pracy: ${content.hoursFrom ?? "—"}&nbsp;&ndash;&nbsp;${content.hoursTo ?? "—"}</div>` : ""}
     </div>
+    ${hoursBox}
   </div>
 
-  <!-- Opis wykonanych prac -->
   <div class="section">
     <div class="section-title">Opis wykonanych prac</div>
     <div class="text-block">${content.description ?? order.description ?? ""}</div>
   </div>
 
-  <!-- Uwagi / zalecenia -->
   ${content.notes ? `
   <div class="section">
     <div class="section-title">Uwagi / zalecenia</div>
     <div class="text-block">${content.notes}</div>
   </div>` : ""}
 
-  <!-- Materiały -->
   ${materialsHtml}
-
-  <!-- Dokumentacja fotograficzna (raport only) -->
   ${photosHtml}
-
-  <!-- Podpisy (protokół only) -->
   ${signaturesHtml}
 
   <div class="footer">
     ${docTitle} &nbsp;&middot;&nbsp; Wygenerowany ${format(now, "d.MM.yyyy HH:mm", { locale: pl })} &nbsp;&middot;&nbsp; ${company?.name ?? "SerwisPro"}
   </div>
-
-  <script>
-    window.onload = function() {
-      ${autoPrint ? "setTimeout(() => window.print(), 350);" : ""}
-    };
-  </script>
 </body>
 </html>`;
 
+  // --- PDF download via Puppeteer ---
+  if (download) {
+    try {
+      const puppeteer = await import("puppeteer");
+      const browser = await puppeteer.default.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      try {
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: "networkidle0" });
+        const pdfBytes = await page.pdf({
+          format: "A4",
+          margin: { top: "12mm", right: "15mm", bottom: "12mm", left: "15mm" },
+          printBackground: true,
+        });
+        return new NextResponse(Buffer.from(pdfBytes), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="${protocol.protocolNumber}.pdf"`,
+          },
+        });
+      } finally {
+        await browser.close();
+      }
+    } catch (err) {
+      console.error("Puppeteer PDF error:", err);
+      // Fallback to HTML if puppeteer fails
+      return new NextResponse(html, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    }
+  }
+
+  // --- HTML preview ---
   return new NextResponse(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });

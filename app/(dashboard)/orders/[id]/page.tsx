@@ -265,7 +265,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setProtocolHoursTo("");
       setProtocolPhotos([]);
       setSelectedTemplateIds(new Set());
-      window.open(`/api/orders/${id}/protocols/${protocol.id}/pdf?variant=${variant}&print=1`, "_blank");
+      // Open preview in new tab (no auto-print)
+      window.open(`/api/orders/${id}/protocols/${protocol.id}/pdf?variant=${variant}`, "_blank");
     },
     onError: () => toast.error("Błąd tworzenia protokołu"),
   });
@@ -666,15 +667,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         {parsed.description && ` · ${parsed.description.slice(0, 50)}${parsed.description.length > 50 ? "…" : ""}`}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 shrink-0"
-                      onClick={() => window.open(`/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&print=1`, "_blank")}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      PDF
-                    </Button>
+                    <div className="flex gap-1.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        title="Podgląd w nowej karcie"
+                        onClick={() => window.open(`/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}`, "_blank")}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Podgląd
+                      </Button>
+                      <a
+                        href={`/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&download=1`}
+                        download={`${p.protocolNumber}.pdf`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Pobierz
+                      </a>
+                    </div>
                   </div>
                 );
               })}
