@@ -57,6 +57,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const { id: orderId, pid } = await params;
   const variant = (req.nextUrl.searchParams.get("variant") ?? "print") as "print" | "report";
   const download = req.nextUrl.searchParams.get("download") === "1";
+  const autoPrint = req.nextUrl.searchParams.get("print") === "1";
 
   const [protocol, order, company, photos] = await Promise.all([
     prisma.protocol.findUnique({ where: { id: pid } }),
@@ -234,8 +235,10 @@ export async function GET(req: NextRequest, { params }: Params) {
     @media print {
       body { padding: 0; font-size: 11px; }
       @page { margin: 12mm 15mm; size: A4; }
+      .no-print { display: none !important; }
     }
   </style>
+  ${autoPrint ? `<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 600); });<\/script>` : ""}
 </head>
 <body>
   <div class="header">
@@ -304,59 +307,11 @@ export async function GET(req: NextRequest, { params }: Params) {
 </body>
 </html>`;
 
-  // --- PDF download via Puppeteer ---
-  if (download) {
-    try {
-      const puppeteer = await import("puppeteer");
-      const browser = await puppeteer.default.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-          "--disable-extensions",
-          "--single-process",
-          "--no-zygote",
-        ],
-      });
-      try {
-        const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: "load" });
-        // Give fonts / images a moment to settle
-        await new Promise((r) => setTimeout(r, 400));
-        const pdfBytes = await page.pdf({
-          format: "A4",
-          margin: { top: "12mm", right: "15mm", bottom: "12mm", left: "15mm" },
-          printBackground: true,
-        });
-        return new NextResponse(Buffer.from(pdfBytes), {
-          headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": `attachment; filename="${protocol.protocolNumber}.pdf"`,
-          },
-        });
-      } finally {
-        await browser.close();
-      }
-    } catch (err) {
-      console.error("Puppeteer PDF error:", err);
-      // Fallback: open HTML in browser (user can use Ctrl+P → Save as PDF)
-      return new NextResponse(
-        JSON.stringify({
-          error: "pdf_unavailable",
-          message: "Generowanie PDF nie powiodło się. Użyj przycisku Podgląd i wydrukuj jako PDF (Ctrl+P → Zapisz jako PDF).",
-          previewUrl: `/api/orders/${orderId}/protocols/${pid}/pdf?variant=${variant}`,
-        }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    }
-  }
-
-  // --- HTML preview ---
+  // --- HTML (preview + print-as-PDF) ---
+  // Puppeteer is not available on Firebase App Hosting (no Chromium).
+  // The browser's built-in print dialog produces perfect PDFs.
+  // ?print=1  → auto-opens print dialog (used by "Pobierz PDF" button)
+  // no param  → plain preview (used by "Podgląd" button)
   return new NextResponse(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });

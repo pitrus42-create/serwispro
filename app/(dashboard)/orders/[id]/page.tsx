@@ -772,27 +772,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         size="sm"
                         variant="outline"
                         className="gap-1.5"
-                        title="Pobierz PDF"
-                        onClick={async () => {
-                          const url = `/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&download=1`;
-                          const res = await fetch(url);
-                          if (res.ok && res.headers.get("content-type")?.includes("pdf")) {
-                            const blob = await res.blob();
-                            const a = document.createElement("a");
-                            a.href = URL.createObjectURL(blob);
-                            a.download = `${p.protocolNumber}.pdf`;
-                            a.click();
-                            URL.revokeObjectURL(a.href);
-                          } else {
-                            const data = await res.json().catch(() => null);
-                            toast.error(
-                              data?.message ?? "Błąd generowania PDF. Użyj Podgląd → Ctrl+P → Zapisz jako PDF."
-                            );
-                          }
-                        }}
+                        title="Otwórz i zapisz jako PDF (Ctrl+P → Zapisz jako PDF)"
+                        onClick={() => window.open(
+                          `/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&print=1`,
+                          "_blank"
+                        )}
                       >
                         <Download className="h-3.5 w-3.5" />
-                        Pobierz
+                        PDF
                       </Button>
                     </div>
                   </div>
