@@ -28,9 +28,11 @@ let _bucket: import("@google-cloud/storage").Bucket | null = null;
 
 async function getFirebaseBucket() {
   if (_bucket) return _bucket;
-  const { getApps, initializeApp } = await import("firebase-admin/app");
+  // Ensure firebase-admin is initialized (uses existing app if already initialized)
+  await import("./firebase-admin");
+  const { getApps } = await import("firebase-admin/app");
   const { getStorage } = await import("firebase-admin/storage");
-  const app = getApps().length ? getApps()[0] : initializeApp();
+  const app = getApps()[0];
   _bucket = getStorage(app).bucket(storageBucket());
   return _bucket;
 }
