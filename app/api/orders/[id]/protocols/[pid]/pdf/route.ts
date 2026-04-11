@@ -8,12 +8,8 @@ import pathModule from "path";
 
 type Params = { params: Promise<{ id: string; pid: string }> };
 
-async function fileUrlToDataUri(fileUrl: string): Promise<string> {
+async function fileUrlToDataUri(fileUrl: string, baseUrl: string): Promise<string> {
   try {
-    const relative = fileUrl.startsWith("/") ? fileUrl.slice(1) : fileUrl;
-    const filePath = pathModule.join(process.cwd(), "public", relative);
-    const bytes = await readFile(filePath);
-    const ext = (filePath.split(".").pop() ?? "jpg").toLowerCase();
     const mimeMap: Record<string, string> = {
       png: "image/png",
       jpg: "image/jpeg",
@@ -21,6 +17,21 @@ async function fileUrlToDataUri(fileUrl: string): Promise<string> {
       webp: "image/webp",
       svg: "image/svg+xml",
     };
+
+    // Firebase Storage or any HTTP URL — fetch directly
+    if (fileUrl.startsWith("http")) {
+      const res = await fetch(fileUrl);
+      if (!res.ok) return "";
+      const contentType = res.headers.get("content-type") ?? "image/jpeg";
+      const bytes = Buffer.from(await res.arrayBuffer());
+      return `data:${contentType.split(";")[0]};base64,${bytes.toString("base64")}`;
+    }
+
+    // Local dev — read from public/ directory
+    const relative = fileUrl.startsWith("/") ? fileUrl.slice(1) : fileUrl;
+    const filePath = pathModule.join(process.cwd(), "public", relative);
+    const bytes = await readFile(filePath);
+    const ext = (filePath.split(".").pop() ?? "jpg").toLowerCase();
     return `data:${mimeMap[ext] ?? "image/jpeg"};base64,${bytes.toString("base64")}`;
   } catch {
     return "";
@@ -108,9 +119,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   let logoSrc = "";
   if (company?.logoUrl) {
     if (download) {
-      logoSrc = await fileUrlToDataUri(company.logoUrl);
+      logoSrc = await fileUrlToDataUri(company.logoUrl, baseUrl);
     } else {
-      logoSrc = `${baseUrl}${company.logoUrl}`;
+      // For HTTP preview use the URL directly (Firebase Storage or local)
+      logoSrc = company.logoUrl.startsWith("http") ? company.logoUrl : `${baseUrl}${company.logoUrl}`;
     }
   }
   const logoHtml = logoSrc
@@ -148,10 +160,11 @@ export async function GET(req: NextRequest, { params }: Params) {
     const photoSrcs = await Promise.all(
       photos.slice(0, 6).map(async (p) => {
         if (download) {
-          const dataUri = await fileUrlToDataUri(p.fileUrl);
-          return dataUri || `${baseUrl}${p.fileUrl}`;
+          const dataUri = await fileUrlToDataUri(p.fileUrl, baseUrl);
+          // fallback to direct URL if conversion fails
+          return dataUri || (p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`);
         }
-        return `${baseUrl}${p.fileUrl}`;
+        return p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`;
       })
     );
     photosHtml = `<div class="section">

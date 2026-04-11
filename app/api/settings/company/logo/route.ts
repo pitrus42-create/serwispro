@@ -1,9 +1,8 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/permissions";
+import { uploadFile } from "@/lib/storage";
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -18,20 +17,20 @@ export async function POST(req: NextRequest) {
 
   const allowed = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
   if (!allowed.includes(file.type)) {
-    return NextResponse.json({ error: "Nieprawidłowy format. Dopuszczalne: PNG, JPG, SVG, WebP" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Nieprawidłowy format. Dopuszczalne: PNG, JPG, SVG, WebP" },
+      { status: 400 }
+    );
   }
   if (file.size > 2 * 1024 * 1024) {
     return NextResponse.json({ error: "Plik za duży (max 2 MB)" }, { status: 400 });
   }
 
-  const ext = file.type === "image/svg+xml" ? "svg" : file.name.split(".").pop() ?? "png";
-  const filename = `company-logo.${ext}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "company");
-  await mkdir(uploadDir, { recursive: true });
-  const bytes = await file.arrayBuffer();
-  await writeFile(path.join(uploadDir, filename), Buffer.from(bytes));
+  const ext = file.type === "image/svg+xml" ? "svg" : (file.name.split(".").pop() ?? "png");
+  const storagePath = `uploads/company/company-logo.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
 
-  const logoUrl = `/uploads/company/${filename}`;
+  const logoUrl = await uploadFile(storagePath, buffer, file.type);
 
   await prisma.companySettings.upsert({
     where: { id: 1 },

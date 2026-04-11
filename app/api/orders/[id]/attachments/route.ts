@@ -1,8 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { uploadFile } from "@/lib/storage";
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
 
 type Params = { params: Promise<{ id: string }> };
@@ -17,20 +16,19 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   if (!files.length) return NextResponse.json({ error: "No files" }, { status: 400 });
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "orders", orderId);
-  await mkdir(uploadDir, { recursive: true });
-
   const attachments = [];
   for (const file of files.slice(0, 20)) {
-    const ext = file.name.split(".").pop() ?? "jpg";
+    const ext = file.name.split(".").pop() ?? "bin";
     const filename = `${uuidv4()}.${ext}`;
-    const bytes = await file.arrayBuffer();
-    await writeFile(path.join(uploadDir, filename), Buffer.from(bytes));
+    const storagePath = `uploads/orders/${orderId}/${filename}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    const fileUrl = await uploadFile(storagePath, buffer, file.type || "application/octet-stream");
 
     const att = await prisma.orderAttachment.create({
       data: {
         orderId,
-        fileUrl: `/uploads/orders/${orderId}/${filename}`,
+        fileUrl,
         fileName: file.name,
         fileSize: file.size,
         mimeType: file.type,
