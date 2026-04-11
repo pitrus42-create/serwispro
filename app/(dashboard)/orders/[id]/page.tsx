@@ -158,6 +158,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [activeTab, setActiveTab] = useState("info");
   const [protocolDescription, setProtocolDescription] = useState("");
   const [protocolNotes, setProtocolNotes] = useState("");
+  const [protocolHoursFrom, setProtocolHoursFrom] = useState("");
+  const [protocolHoursTo, setProtocolHoursTo] = useState("");
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
   const [protocolPhotos, setProtocolPhotos] = useState<File[]>([]);
 
@@ -231,19 +233,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   });
 
   const protocolMutation = useMutation({
-    mutationFn: async (content: { description: string; notes: string }) => {
+    mutationFn: async ({ variant, content }: {
+      variant: "print" | "report";
+      content: { description: string; notes: string; hoursFrom?: string; hoursTo?: string };
+    }) => {
+      const type = variant === "report" ? "raport" : "protokol";
       const r = await fetch(`/api/orders/${id}/protocols`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "serwisowy", content }),
+        body: JSON.stringify({ type, content }),
       });
       if (!r.ok) throw new Error("Błąd tworzenia protokołu");
-      return r.json();
+      const res = await r.json();
+      return { protocol: res.data, variant };
     },
-    onSuccess: async (data) => {
-      const protocol = data.data;
-
-      if (protocolPhotos.length > 0) {
+    onSuccess: async ({ protocol, variant }) => {
+      if (variant === "report" && protocolPhotos.length > 0) {
         const fd = new FormData();
         protocolPhotos.forEach((f) => fd.append("photos", f));
         await fetch(`/api/orders/${id}/protocols/${protocol.id}/photos`, {
@@ -256,9 +261,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       toast.success(`Protokół ${protocol.protocolNumber} został utworzony`);
       setProtocolDescription("");
       setProtocolNotes("");
+      setProtocolHoursFrom("");
+      setProtocolHoursTo("");
       setProtocolPhotos([]);
       setSelectedTemplateIds(new Set());
-      window.open(`/api/orders/${id}/protocols/${protocol.id}/pdf?print=1`, "_blank");
+      window.open(`/api/orders/${id}/protocols/${protocol.id}/pdf?variant=${variant}&print=1`, "_blank");
     },
     onError: () => toast.error("Błąd tworzenia protokołu"),
   });
@@ -288,9 +295,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const helpers = order.assignments.filter((a) => !a.isLead);
   const nextStatuses = STATUS_TRANSITIONS[order.status] ?? [];
   const canCreate = canDo(session?.user, "orders:create");
-  const canClose = canDo(session?.user, "orders:close");
   const isAssignedToMe = order.assignments.some((a) => a.user.id === session?.user?.id);
   const isUnassigned = order.assignments.length === 0;
+  // Can close: roles with orders:close permission OR serwisant assigned to this order
+  const canClose = canDo(session?.user, "orders:close") || (isAssignedToMe && !canCreate);
   const canAccept = !canCreate && (isUnassigned || isAssignedToMe) && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isAssignedToMe;
   const hasProtocol = (order.protocols?.length ?? 0) > 0;
 
@@ -638,21 +646,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               {order.protocols.map((p) => {
                 let parsed: Record<string, string> = {};
                 try { parsed = JSON.parse(p.content); } catch { /* empty */ }
+                const isReport = p.type === "raport";
+                const pdfVariant = isReport ? "report" : "print";
                 return (
                   <div key={p.id} className="bg-white rounded-lg border p-4 flex items-center gap-3">
-                    <FileText className="h-5 w-5 text-blue-500 shrink-0" />
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{p.protocolNumber}</p>
-                      <p className="text-xs text-gray-400">
+                    {isReport
+                      ? <ImageIcon className="h-5 w-5 text-purple-500 shrink-0" />
+                      : <FileText className="h-5 w-5 text-blue-500 shrink-0" />
+                    }
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{p.protocolNumber}</p>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${isReport ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                          {isReport ? "Raport" : "Protokół"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 truncate">
                         {format(new Date(p.createdAt), "d MMM yyyy, HH:mm", { locale: pl })}
-                        {parsed.description && ` · ${parsed.description.slice(0, 60)}${parsed.description.length > 60 ? "…" : ""}`}
+                        {parsed.description && ` · ${parsed.description.slice(0, 50)}${parsed.description.length > 50 ? "…" : ""}`}
                       </p>
                     </div>
                     <Button
                       size="sm"
                       variant="outline"
                       className="gap-1.5 shrink-0"
-                      onClick={() => window.open(`/api/orders/${id}/protocols/${p.id}/pdf?print=1`, "_blank")}
+                      onClick={() => window.open(`/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&print=1`, "_blank")}
                     >
                       <Download className="h-3.5 w-3.5" />
                       PDF
@@ -769,6 +787,29 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="proto-hours-from">Godzina rozpoczęcia (opcjonalnie)</Label>
+                <input
+                  id="proto-hours-from"
+                  type="time"
+                  value={protocolHoursFrom}
+                  onChange={(e) => setProtocolHoursFrom(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="proto-hours-to">Godzina zakończenia (opcjonalnie)</Label>
+                <input
+                  id="proto-hours-to"
+                  type="time"
+                  value={protocolHoursTo}
+                  onChange={(e) => setProtocolHoursTo(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
+
             {/* Upload zdjęć */}
             <div className="space-y-2">
               <Label className="text-xs text-gray-500 uppercase tracking-wide">
@@ -825,18 +866,34 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </Button>
             </div>
 
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                onClick={() => protocolMutation.mutate({
+                  variant: "print",
+                  content: { description: protocolDescription, notes: protocolNotes, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
+                })}
+                disabled={!protocolDescription.trim() || protocolMutation.isPending}
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                {protocolMutation.isPending ? "Generowanie..." : "Generuj Protokół"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => protocolMutation.mutate({
+                  variant: "report",
+                  content: { description: protocolDescription, notes: protocolNotes, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
+                })}
+                disabled={!protocolDescription.trim() || protocolMutation.isPending}
+                className="gap-2"
+              >
+                <ImageIcon className="h-4 w-4" />
+                {protocolMutation.isPending ? "Generowanie..." : "Generuj Raport (ze zdjęciami)"}
+              </Button>
+            </div>
             <p className="text-xs text-gray-400">
-              Po kliknięciu "Generuj protokół" zostanie otwarty dokument gotowy do druku/zapisu jako PDF.
+              Protokół — do druku z podpisami. Raport — z dokumentacją zdjęciową, gotowy do wysyłki emailem.
             </p>
-
-            <Button
-              onClick={() => protocolMutation.mutate({ description: protocolDescription, notes: protocolNotes })}
-              disabled={!protocolDescription.trim() || protocolMutation.isPending}
-              className="gap-2"
-            >
-              <FileText className="h-4 w-4" />
-              {protocolMutation.isPending ? "Generowanie..." : "Generuj protokół"}
-            </Button>
           </div>
         </TabsContent>
 

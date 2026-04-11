@@ -2,9 +2,9 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Building2, Users, Save, Shield } from "lucide-react";
+import { Building2, Users, Save, Shield, Upload, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ interface CompanySettings {
   phone: string | null;
   email: string | null;
   nip: string | null;
+  logoUrl: string | null;
 }
 
 interface User {
@@ -32,6 +33,8 @@ interface User {
 
 function CompanyTab() {
   const queryClient = useQueryClient();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   const { data } = useQuery({
     queryKey: ["company-settings"],
     queryFn: async () => {
@@ -65,35 +68,95 @@ function CompanyTab() {
     onError: () => toast.error("Błąd zapisu danych"),
   });
 
+  const logoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("logo", file);
+      const r = await fetch("/api/settings/company/logo", { method: "POST", body: fd });
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.error ?? "Błąd uploadu");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["company-settings"] });
+      toast.success("Logo zostało zaktualizowane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
-    <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4 max-w-lg">
-      <div className="space-y-1.5">
-        <Label htmlFor="name">Nazwa firmy</Label>
-        <Input id="name" {...register("name")} placeholder="SerwisPro Sp. z o.o." />
+    <div className="space-y-6 max-w-lg">
+      {/* Logo section */}
+      <div className="space-y-3">
+        <Label>Logo firmy</Label>
+        <div className="flex items-center gap-4">
+          <div className="w-24 h-16 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden">
+            {settings.logoUrl ? (
+              <img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
+            ) : (
+              <ImageIcon className="w-8 h-8 text-gray-300" />
+            )}
+          </div>
+          <div className="space-y-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={logoMutation.isPending}
+              onClick={() => logoInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {logoMutation.isPending ? "Przesyłanie..." : "Zmień logo"}
+            </Button>
+            <p className="text-xs text-gray-400">PNG, JPG lub SVG, max 2 MB</p>
+            <p className="text-xs text-gray-400">Pojawi się na protokołach serwisowych</p>
+          </div>
+        </div>
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) logoMutation.mutate(file);
+            e.target.value = "";
+          }}
+        />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="address">Adres</Label>
-        <Input id="address" {...register("address")} placeholder="ul. Przykładowa 1, 00-001 Warszawa" />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
+
+      <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="phone">Telefon</Label>
-          <Input id="phone" {...register("phone")} placeholder="+48 22 123 45 67" />
+          <Label htmlFor="name">Nazwa firmy</Label>
+          <Input id="name" {...register("name")} placeholder="SerwisPro Sp. z o.o." />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="nip">NIP</Label>
-          <Input id="nip" {...register("nip")} placeholder="1234567890" />
+          <Label htmlFor="address">Adres</Label>
+          <Input id="address" {...register("address")} placeholder="ul. Przykładowa 1, 00-001 Warszawa" />
         </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" type="email" {...register("email")} placeholder="biuro@firma.pl" />
-      </div>
-      <Button type="submit" disabled={mutation.isPending} className="gap-2">
-        <Save className="h-4 w-4" />
-        {mutation.isPending ? "Zapisywanie..." : "Zapisz"}
-      </Button>
-    </form>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">Telefon</Label>
+            <Input id="phone" {...register("phone")} placeholder="+48 22 123 45 67" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nip">NIP</Label>
+            <Input id="nip" {...register("nip")} placeholder="1234567890" />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" {...register("email")} placeholder="biuro@firma.pl" />
+        </div>
+        <Button type="submit" disabled={mutation.isPending} className="gap-2">
+          <Save className="h-4 w-4" />
+          {mutation.isPending ? "Zapisywanie..." : "Zapisz dane firmy"}
+        </Button>
+      </form>
+    </div>
   );
 }
 
