@@ -90,19 +90,15 @@ export async function GET() {
       : Promise.resolve(0),
     // Recent activity
     prisma.orderActivityLog.findMany({
-      where: userFilter
-        ? {
-            order: {
-              assignments: { some: { userId: session.user.id } },
-            },
-          }
-        : {},
+      where: admin
+        ? {}
+        : { order: { assignments: { some: { userId: session.user.id } } } },
       include: {
         user: { select: { firstName: true, lastName: true } },
         order: { select: { orderNumber: true, type: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 5,
+      take: 10,
     }),
   ]);
 
