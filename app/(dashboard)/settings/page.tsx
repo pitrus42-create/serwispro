@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { Building2, Users, Save } from "lucide-react";
+import { Building2, Users, Save, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,10 +23,11 @@ interface User {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null;
+  login: string | null;
   phone: string | null;
-  isActive: boolean;
-  roles: Array<{ role: string }>;
+  accountStatus: string;
+  roleAssignments: Array<{ role: { name: string; displayName: string } }>;
 }
 
 function CompanyTab() {
@@ -108,10 +109,15 @@ function UsersTab() {
 
   const users: User[] = data?.data ?? [];
 
-  const ROLE_LABELS: Record<string, string> = {
-    ADMIN: "Administrator",
-    SERWISANT: "Serwisant",
-    MAGAZYN: "Magazyn",
+  const STATUS_COLORS: Record<string, string> = {
+    ACTIVE: "bg-green-100 text-green-700",
+    BLOCKED: "bg-red-100 text-red-700",
+    ARCHIVED: "bg-gray-100 text-gray-500",
+  };
+  const STATUS_LABELS: Record<string, string> = {
+    ACTIVE: "Aktywny",
+    BLOCKED: "Zablokowany",
+    ARCHIVED: "Zarchiwizowany",
   };
 
   return (
@@ -131,25 +137,107 @@ function UsersTab() {
       ) : (
         <div className="space-y-2">
           {users.map((user) => (
-            <div key={user.id} className="bg-white rounded-lg border p-4 flex items-center gap-3">
+            <div
+              key={user.id}
+              className="bg-white rounded-lg border p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
+              onClick={() => router.push(`/settings/users/${user.id}`)}
+            >
               <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm shrink-0">
                 {user.firstName[0]}{user.lastName[0]}
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-medium">{user.firstName} {user.lastName}</p>
-                <p className="text-sm text-gray-500">{user.email}</p>
+                <p className="text-sm text-gray-500 truncate">{user.email ?? user.login ?? "—"}</p>
               </div>
-              <div className="flex gap-1 flex-wrap justify-end">
-                {user.roles.map((r) => (
-                  <span key={r.role} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                    {ROLE_LABELS[r.role] ?? r.role}
+              <div className="flex gap-1 flex-wrap justify-end items-center">
+                {user.roleAssignments?.map((ra) => (
+                  <span key={ra.role.name} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                    {ra.role.displayName}
                   </span>
                 ))}
+                <span className={`text-xs px-2 py-0.5 rounded-full ml-1 ${STATUS_COLORS[user.accountStatus] ?? "bg-gray-100 text-gray-500"}`}>
+                  {STATUS_LABELS[user.accountStatus] ?? user.accountStatus}
+                </span>
               </div>
             </div>
           ))}
         </div>
       )}
+      <div className="mt-3 text-right">
+        <Button variant="outline" size="sm" onClick={() => router.push("/settings/users")}>
+          Zarządzaj użytkownikami →
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RolesTab() {
+  const router = useRouter();
+  const { data, isLoading } = useQuery({
+    queryKey: ["roles"],
+    queryFn: async () => {
+      const r = await fetch("/api/roles");
+      return r.json();
+    },
+  });
+
+  const roles: Array<{
+    id: string;
+    name: string;
+    displayName: string;
+    description: string | null;
+    isSystem: boolean;
+    _count: { userRoleAssignments: number; rolePermissions: number };
+  }> = data?.data ?? [];
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-sm text-gray-500">{roles.length} ról w systemie</p>
+        <Button size="sm" onClick={() => router.push("/settings/roles/new")}>
+          Nowa rola
+        </Button>
+      </div>
+      {isLoading ? (
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {roles.map((role) => (
+            <div
+              key={role.id}
+              className="bg-white rounded-lg border p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
+              onClick={() => router.push(`/settings/roles/${role.id}`)}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{role.displayName}</p>
+                  <span className="text-xs text-gray-400 font-mono">{role.name}</span>
+                  {role.isSystem && (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Systemowa</span>
+                  )}
+                </div>
+                {role.description && (
+                  <p className="text-sm text-gray-500 truncate">{role.description}</p>
+                )}
+              </div>
+              <div className="text-xs text-gray-400 shrink-0 text-right">
+                <p>{role._count.userRoleAssignments} użytk.</p>
+                <p>{role._count.rolePermissions} uprawn.</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-3 text-right">
+        <Button variant="outline" size="sm" onClick={() => router.push("/settings/roles")}>
+          Zarządzaj rolami →
+        </Button>
+      </div>
     </div>
   );
 }
@@ -169,6 +257,10 @@ export default function SettingsPage() {
             <Users className="h-4 w-4" />
             Użytkownicy
           </TabsTrigger>
+          <TabsTrigger value="roles" className="gap-2">
+            <Shield className="h-4 w-4" />
+            Role
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="company">
@@ -183,6 +275,10 @@ export default function SettingsPage() {
             <h2 className="font-semibold text-gray-800 mb-4">Zarządzanie użytkownikami</h2>
             <UsersTab />
           </div>
+        </TabsContent>
+
+        <TabsContent value="roles">
+          <RolesTab />
         </TabsContent>
       </Tabs>
     </div>
