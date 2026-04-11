@@ -47,10 +47,11 @@ async function firebaseUpload(
   await file.save(buffer, {
     metadata: { contentType: mimeType },
     resumable: false,
-    public: true,
+    // no public:true — access controlled by Firebase Storage Rules
   });
-  // Public URL format
-  return `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+  // Firebase Storage download URL (works with Rules: allow read: if true)
+  const encodedPath = encodeURIComponent(storagePath);
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedPath}?alt=media`;
 }
 
 async function firebaseDelete(storagePath: string): Promise<void> {
@@ -136,7 +137,11 @@ export async function fetchFileBuffer(
 /**
  * Extract the storage path from a URL.
  *
- * Firebase Storage URL:
+ * Firebase Storage URL (new format):
+ *   https://firebasestorage.googleapis.com/v0/b/{bucket}/o/uploads%2Forders%2F...?alt=media
+ *   → uploads/orders/...
+ *
+ * Firebase Storage URL (old format):
  *   https://storage.googleapis.com/{bucket}/uploads/orders/...
  *   → uploads/orders/...
  *
@@ -145,8 +150,12 @@ export async function fetchFileBuffer(
  *   → uploads/orders/...
  */
 export function storagePathFromUrl(url: string): string {
+  if (url.startsWith("https://firebasestorage.googleapis.com/")) {
+    // extract encoded path after /o/
+    const match = url.match(/\/o\/([^?]+)/);
+    return match ? decodeURIComponent(match[1]) : url;
+  }
   if (url.startsWith("https://storage.googleapis.com/")) {
-    // strip scheme + hostname + bucket segment
     const withoutScheme = url.replace("https://storage.googleapis.com/", "");
     const slashIdx = withoutScheme.indexOf("/");
     return slashIdx >= 0 ? withoutScheme.slice(slashIdx + 1) : withoutScheme;
