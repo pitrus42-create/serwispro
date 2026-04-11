@@ -209,29 +209,31 @@ export async function GET(req: NextRequest, { params }: Params) {
   <title>${docTitle} ${protocol.protocolNumber}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; background: white; padding: 20px 30px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #1e40af; padding-bottom: 14px; margin-bottom: 14px; }
+    /* ── Brand colours (All-Secure logo) ── */
+    :root { --red: #8B1A1A; --red-light: #f5e6e6; --gray: #4a4a4a; --border: #ddd; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #1a1a1a; background: white; padding: 20px 30px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #8B1A1A; padding-bottom: 14px; margin-bottom: 14px; }
     .header-left { display: flex; align-items: flex-start; gap: 12px; }
-    .company-name { font-size: 16px; font-weight: 700; color: #1e40af; line-height: 1.2; }
+    .company-name { font-size: 16px; font-weight: 700; color: #1a1a1a; line-height: 1.2; }
     .company-details { font-size: 10px; color: #555; margin-top: 4px; line-height: 1.55; }
     .doc-info { text-align: right; flex-shrink: 0; }
-    .doc-number { font-size: 17px; font-weight: 700; color: #111; }
-    .doc-type { font-size: 10px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
-    .doc-date { font-size: 10px; color: #555; margin-top: 4px; }
-    .box { border: 1px solid #e5e7eb; border-radius: 5px; padding: 8px 10px; }
-    .box-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 3px; font-weight: 600; }
-    .box-value { font-size: 12px; font-weight: 600; line-height: 1.3; }
+    .doc-number { font-size: 17px; font-weight: 700; color: #8B1A1A; }
+    .doc-type { font-size: 10px; color: #4a4a4a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+    .doc-date { font-size: 10px; color: #666; margin-top: 4px; }
+    .box { border: 1px solid #ddd; border-radius: 4px; padding: 8px 10px; }
+    .box-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #8B1A1A; margin-bottom: 3px; font-weight: 700; }
+    .box-value { font-size: 12px; font-weight: 600; line-height: 1.3; color: #1a1a1a; }
     .box-sub { font-size: 10px; color: #555; margin-top: 2px; line-height: 1.4; }
     .section { margin-bottom: 11px; }
-    .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #6b7280; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: 3px; margin-bottom: 7px; }
-    .text-block { border: 1px solid #e5e7eb; border-radius: 5px; padding: 10px 12px; font-size: 11.5px; line-height: 1.6; min-height: 52px; white-space: pre-wrap; color: #333; }
+    .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #8B1A1A; font-weight: 700; border-bottom: 1.5px solid #8B1A1A; padding-bottom: 3px; margin-bottom: 7px; }
+    .text-block { border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; font-size: 11.5px; line-height: 1.6; min-height: 52px; white-space: pre-wrap; color: #1a1a1a; }
     .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-    .photo-wrap { aspect-ratio: 4/3; overflow: hidden; border-radius: 4px; border: 1px solid #e5e7eb; background: #f9fafb; }
+    .photo-wrap { aspect-ratio: 4/3; overflow: hidden; border-radius: 4px; border: 1px solid #ddd; background: #f5f5f5; }
     .photo-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
     .signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; page-break-inside: avoid; }
-    .sig-line { border-bottom: 1px solid #333; height: 48px; }
+    .sig-line { border-bottom: 1.5px solid #8B1A1A; height: 48px; }
     .sig-label { font-size: 10px; color: #555; text-align: center; margin-top: 6px; }
-    .footer { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 7px; font-size: 9px; color: #9ca3af; text-align: center; }
+    .footer { margin-top: 16px; border-top: 1px solid #ddd; padding-top: 7px; font-size: 9px; color: #999; text-align: center; }
     @media print {
       body { padding: 0; font-size: 11px; }
       @page {
@@ -244,7 +246,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
     .print-hint {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
-      background: #1e40af; color: white; text-align: center;
+      background: #8B1A1A; color: white; text-align: center;
       padding: 10px 16px; font-size: 13px; font-family: Arial, sans-serif;
       display: flex; align-items: center; justify-content: center; gap: 10px;
     }
