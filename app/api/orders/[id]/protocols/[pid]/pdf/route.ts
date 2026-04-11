@@ -234,13 +234,31 @@ export async function GET(req: NextRequest, { params }: Params) {
     .footer { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 7px; font-size: 9px; color: #9ca3af; text-align: center; }
     @media print {
       body { padding: 0; font-size: 11px; }
-      @page { margin: 12mm 15mm; size: A4; }
+      @page {
+        size: A4;
+        margin: 12mm 15mm;
+        /* Remove browser header/footer (date, URL) */
+        margin-top: 12mm;
+      }
       .no-print { display: none !important; }
     }
+    .print-hint {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+      background: #1e40af; color: white; text-align: center;
+      padding: 10px 16px; font-size: 13px; font-family: Arial, sans-serif;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .print-hint strong { font-size: 14px; }
+    body { padding-top: ${autoPrint ? "48px" : "0"}; }
   </style>
-  ${autoPrint ? `<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 600); });<\/script>` : ""}
+  ${autoPrint ? `<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 800); });<\/script>` : ""}
 </head>
 <body>
+  ${autoPrint ? `
+  <div class="no-print print-hint">
+    <span>📄</span>
+    <span>Aby ukryć datę i adres URL: w oknie drukowania kliknij <strong>„Więcej ustawień"</strong> → odznacz <strong>„Nagłówki i stopki"</strong> → kliknij Zapisz</span>
+  </div>` : ""}
   <div class="header">
     <div class="header-left">
       ${logoHtml}
