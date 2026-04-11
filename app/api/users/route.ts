@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
 
   // Check uniqueness
   if (email) {
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prisma.user.findFirst({ where: { email } });
     if (existing) {
       return NextResponse.json(
         {
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     }
   }
   if (login) {
-    const existing = await prisma.user.findUnique({ where: { login } });
+    const existing = await prisma.user.findFirst({ where: { login } });
     if (existing) {
       return NextResponse.json(
         {

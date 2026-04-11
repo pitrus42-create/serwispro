@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existing = await prisma.role.findUnique({ where: { name } });
+  const existing = await prisma.role.findFirst({ where: { name } });
   if (existing) {
     return NextResponse.json(
       { error: "Rola o tej nazwie już istnieje." },
