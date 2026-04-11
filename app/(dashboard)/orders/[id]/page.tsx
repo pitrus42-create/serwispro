@@ -3,6 +3,7 @@
 import { use, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import { toast } from "sonner";
@@ -21,6 +22,8 @@ import {
   FilePlus,
   ImageIcon,
   X,
+  CheckCircle2,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +31,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { canDo } from "@/lib/permissions";
 
 const STATUS_LABELS: Record<string, string> = {
   OCZEKUJACE: "Oczekujące",
@@ -139,6 +154,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState("info");
   const [protocolDescription, setProtocolDescription] = useState("");
   const [protocolNotes, setProtocolNotes] = useState("");
@@ -195,6 +211,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       return r.json();
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["order", id] }),
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!r.ok) throw new Error("Błąd przyjęcia zlecenia");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Zlecenie przyjęte — jesteś teraz przypisanym serwisantem");
+    },
+    onError: () => toast.error("Błąd przyjęcia zlecenia"),
   });
 
   const protocolMutation = useMutation({
@@ -254,6 +287,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const lead = order.assignments.find((a) => a.isLead);
   const helpers = order.assignments.filter((a) => !a.isLead);
   const nextStatuses = STATUS_TRANSITIONS[order.status] ?? [];
+  const canCreate = canDo(session?.user, "orders:create");
+  const canClose = canDo(session?.user, "orders:close");
+  const isAssignedToMe = order.assignments.some((a) => a.user.id === session?.user?.id);
+  const isUnassigned = order.assignments.length === 0;
+  const canAccept = !canCreate && (isUnassigned || isAssignedToMe) && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isAssignedToMe;
+  const hasProtocol = (order.protocols?.length ?? 0) > 0;
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
@@ -289,20 +328,37 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* Status change */}
+      {/* Accept button for serwisant — unassigned orders */}
+      {canAccept && (
+        <div className="mb-4">
+          <Button
+            className="bg-green-600 hover:bg-green-700 gap-2"
+            disabled={acceptMutation.isPending}
+            onClick={() => acceptMutation.mutate()}
+          >
+            <UserPlus className="h-4 w-4" />
+            Przyjmij zlecenie
+          </Button>
+          <p className="text-xs text-gray-400 mt-1">Zostaniesz przypisany jako serwisant odpowiedzialny</p>
+        </div>
+      )}
+
+      {/* Status change — show to all except "Zakończone" which serwisant does via protocol */}
       {nextStatuses.length > 0 && (
         <div className="flex gap-2 mb-4 flex-wrap">
-          {nextStatuses.map((s) => (
-            <Button
-              key={s}
-              size="sm"
-              variant={s === "ZAKONCZONE" ? "default" : s === "ANULOWANE" ? "destructive" : "outline"}
-              disabled={statusMutation.isPending}
-              onClick={() => statusMutation.mutate(s)}
-            >
-              → {STATUS_LABELS[s]}
-            </Button>
-          ))}
+          {nextStatuses
+            .filter((s) => canCreate || s !== "ZAKONCZONE") // serwisant zamyka przez protokół
+            .map((s) => (
+              <Button
+                key={s}
+                size="sm"
+                variant={s === "ZAKONCZONE" ? "default" : s === "ANULOWANE" ? "destructive" : "outline"}
+                disabled={statusMutation.isPending}
+                onClick={() => statusMutation.mutate(s)}
+              >
+                → {STATUS_LABELS[s]}
+              </Button>
+            ))}
         </div>
       )}
 
@@ -609,10 +665,51 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
           {/* New protocol form */}
           <div className="bg-white rounded-xl border p-5 space-y-4">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              <FilePlus className="h-5 w-5 text-blue-500" />
-              Nowy protokół
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                <FilePlus className="h-5 w-5 text-blue-500" />
+                Nowy protokół
+              </h3>
+              {canClose && order.status !== "ZAKONCZONE" && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 gap-1.5"
+                      disabled={!hasProtocol}
+                      title={!hasProtocol ? "Najpierw wygeneruj protokół" : undefined}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Zakończ zlecenie
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Zakończyć zlecenie?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Zlecenie {order.orderNumber} zostanie oznaczone jako{" "}
+                        <strong>Zakończone</strong>. Protokół został wygenerowany.
+                        Tej operacji nie można cofnąć bez pomocy administratora.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => statusMutation.mutate("ZAKONCZONE")}
+                      >
+                        Tak, zakończ
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+            {!hasProtocol && canClose && order.status !== "ZAKONCZONE" && (
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                Aby zakończyć zlecenie, najpierw wygeneruj protokół serwisowy.
+              </p>
+            )}
 
             {/* Selektor szablonów */}
             {protocolTemplates.length > 0 && (

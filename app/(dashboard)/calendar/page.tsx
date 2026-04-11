@@ -3,6 +3,7 @@
 import { useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -26,16 +27,18 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 function EventContent({ eventInfo }: { eventInfo: EventContentArg }) {
-  const { isCritical, clientName, type } = eventInfo.event.extendedProps as {
+  const { isCritical, clientName, type, isMyOrder } = eventInfo.event.extendedProps as {
     isCritical: boolean;
     clientName: string;
     type: string;
+    isMyOrder: boolean;
   };
 
   return (
-    <div className="px-1 py-0.5 text-white text-xs overflow-hidden leading-tight">
+    <div className={cn("px-1 py-0.5 text-xs overflow-hidden leading-tight", isMyOrder ? "text-white" : "text-white/70")}>
       <div className="flex items-center gap-1">
         {isCritical && <span className="text-red-200">●</span>}
+        {!isMyOrder && <span className="opacity-60">👤</span>}
         <span className="font-semibold">{TYPE_LABELS[type] ?? type}</span>
         <span className="truncate opacity-90">{eventInfo.event.title}</span>
       </div>
@@ -62,13 +65,18 @@ export default function CalendarPage() {
     title: string;
     start: string;
     end?: string;
-    extendedProps: { priority: string; isCritical: boolean; clientName: string; type: string };
-  }) => ({
-    ...e,
-    backgroundColor: PRIORITY_BG[e.extendedProps.priority] ?? "#3b82f6",
-    borderColor: e.extendedProps.isCritical ? "#dc2626" : "transparent",
-    borderWidth: e.extendedProps.isCritical ? 2 : 0,
-  }));
+    extendedProps: { priority: string; isCritical: boolean; clientName: string; type: string; isMyOrder: boolean };
+  }) => {
+    const baseColor = PRIORITY_BG[e.extendedProps.priority] ?? "#3b82f6";
+    const isMyOrder = e.extendedProps.isMyOrder;
+    return {
+      ...e,
+      backgroundColor: isMyOrder ? baseColor : baseColor + "60", // 60 = ~37% opacity for others
+      borderColor: e.extendedProps.isCritical ? "#dc2626" : isMyOrder ? "transparent" : baseColor + "80",
+      borderWidth: e.extendedProps.isCritical ? 2 : isMyOrder ? 0 : 1,
+      textColor: isMyOrder ? "#ffffff" : "#ffffff99",
+    };
+  });
 
   const handleEventClick = useCallback(
     (info: EventClickArg) => {
@@ -99,6 +107,14 @@ export default function CalendarPage() {
         <span className="flex items-center gap-1.5 ml-4">
           <span className="h-3 w-3 rounded-sm inline-block bg-red-400 ring-2 ring-red-600" />
           Krytyczna awaria
+        </span>
+        <span className="flex items-center gap-1.5 ml-4 border-l pl-4">
+          <span className="h-3 w-3 rounded-sm inline-block bg-blue-500" />
+          Moje zlecenie
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm inline-block bg-blue-500/40 border border-blue-400/60" />
+          Kolegi 👤
         </span>
       </div>
 

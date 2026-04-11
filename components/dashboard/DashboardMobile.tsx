@@ -15,6 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/utils";
 import { ORDER_TYPE_CONFIG } from "@/constants/colors";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { canDo } from "@/lib/permissions";
 import type { DashboardData } from "./types";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -56,6 +58,8 @@ export function DashboardMobile({
   data: DashboardData;
   firstName?: string;
 }) {
+  const { data: session } = useSession();
+  const canCreateOrders = canDo(session?.user, "orders:create");
   const d = data;
 
   const pills = [
@@ -107,21 +111,23 @@ export function DashboardMobile({
         </div>
       )}
 
-      {/* Primary CTAs */}
-      <div className="flex gap-3">
-        <Button asChild className="bg-red-600 hover:bg-red-700 h-12 flex-1 rounded-xl font-bold text-sm">
-          <Link href="/orders/new?type=AWARIA">
-            <Zap className="w-4 h-4 mr-1.5" />
-            Nowa Awaria
-          </Link>
-        </Button>
-        <Button asChild variant="outline" className="h-12 flex-1 rounded-xl text-sm">
-          <Link href="/orders/new">
-            <ClipboardList className="w-4 h-4 mr-1.5" />
-            Nowe Zlecenie
-          </Link>
-        </Button>
-      </div>
+      {/* Primary CTAs — only for roles with create permission */}
+      {canCreateOrders && (
+        <div className="flex gap-3">
+          <Button asChild className="bg-red-600 hover:bg-red-700 h-12 flex-1 rounded-xl font-bold text-sm">
+            <Link href="/orders/new?type=AWARIA">
+              <Zap className="w-4 h-4 mr-1.5" />
+              Nowa Awaria
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="h-12 flex-1 rounded-xl text-sm">
+            <Link href="/orders/new">
+              <ClipboardList className="w-4 h-4 mr-1.5" />
+              Nowe Zlecenie
+            </Link>
+          </Button>
+        </div>
+      )}
 
       {/* Today section */}
       <section>

@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
-  Plus, Search, Filter, AlertTriangle, Clock, ChevronRight, X, SlidersHorizontal,
+  Plus, Search, Filter, AlertTriangle, Clock, ChevronRight, X, SlidersHorizontal, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { canDo } from "@/lib/permissions";
+import { toast } from "sonner";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -123,6 +126,9 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 
 export default function OrdersPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+  const queryClient = useQueryClient();
+  const canCreateOrders = canDo(session?.user, "orders:create");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [type, setType] = useState("all");
@@ -156,6 +162,19 @@ export default function OrdersPage() {
     refetchInterval: 30_000,
   });
 
+  const acceptMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const r = await fetch(`/api/orders/${orderId}/accept`, { method: "POST" });
+      if (!r.ok) throw new Error("Błąd");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Zlecenie przyjęte");
+    },
+    onError: () => toast.error("Błąd przyjęcia zlecenia"),
+  });
+
   const orders: Order[] = data?.data ?? [];
   const total: number = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
@@ -187,10 +206,12 @@ export default function OrdersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Zlecenia</h1>
           <p className="text-sm text-gray-500 mt-0.5">{total} zleceń</p>
         </div>
-        <Button onClick={() => router.push("/orders/new")} className="gap-2">
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Nowe zlecenie</span>
-        </Button>
+        {canCreateOrders && (
+          <Button onClick={() => router.push("/orders/new")} className="gap-2">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Nowe zlecenie</span>
+          </Button>
+        )}
       </div>
 
       {/* Search + toggle filters */}
@@ -326,20 +347,22 @@ export default function OrdersPage() {
         <div className="space-y-2">
           {orders.map((order) => {
             const lead = order.assignments.find((a) => a.isLead);
+            const isUnassigned = order.assignments.length === 0;
+            const isMyOrder = order.assignments.some((a) => a.user.id === session?.user?.id);
+            const canAccept = !canCreateOrders && (isUnassigned || (!isMyOrder && order.assignments.length > 0 && isUnassigned)) && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isMyOrder;
             return (
               <div
                 key={order.id}
-                onClick={() => router.push(`/orders/${order.id}`)}
                 className={cn(
-                  "bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-shadow",
+                  "bg-white rounded-lg border p-4 hover:shadow-md transition-shadow",
                   order.isCritical && "border-red-300 bg-red-50"
                 )}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3" onClick={() => router.push(`/orders/${order.id}`)}>
                   {order.isCritical && (
                     <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5 animate-pulse" />
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 cursor-pointer">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="text-xs font-mono text-gray-400">{order.orderNumber}</span>
                       <Badge className={cn("text-xs", STATUS_COLORS[order.status])}>
@@ -351,6 +374,16 @@ export default function OrdersPage() {
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                         {TYPE_LABELS[order.type] ?? order.type}
                       </span>
+                      {isUnassigned && (
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                          Nieprzypisane
+                        </span>
+                      )}
+                      {isMyOrder && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                          Moje
+                        </span>
+                      )}
                     </div>
                     <p className="font-medium text-gray-900 truncate">
                       {order.title ?? order.client?.name ?? `Zlecenie ${order.orderNumber}`}
@@ -371,7 +404,20 @@ export default function OrdersPage() {
                       )}
                     </div>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 shrink-0" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    {canAccept && (
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 gap-1 text-xs"
+                        disabled={acceptMutation.isPending}
+                        onClick={(e) => { e.stopPropagation(); acceptMutation.mutate(order.id); }}
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Przyjmij
+                      </Button>
+                    )}
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  </div>
                 </div>
               </div>
             );
