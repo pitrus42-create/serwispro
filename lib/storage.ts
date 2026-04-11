@@ -13,26 +13,50 @@ import path from "path";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function storageBucket(): string | undefined {
-  return process.env.FIREBASE_STORAGE_BUCKET;
+function storageBucket(): string {
+  const b = process.env.FIREBASE_STORAGE_BUCKET;
+  if (!b) throw new Error("FIREBASE_STORAGE_BUCKET env var is not set");
+  return b;
 }
 
 /** Returns true when Firebase Storage is configured. */
 export function useFirebaseStorage(): boolean {
-  return !!storageBucket();
+  return !!process.env.FIREBASE_STORAGE_BUCKET;
 }
 
 // ─── Firebase Storage (production) ──────────────────────────────────────────
 
-let _bucket: import("@google-cloud/storage").Bucket | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _bucket: any = null;
 
 async function getFirebaseBucket() {
   if (_bucket) return _bucket;
-  // Ensure firebase-admin is initialized (uses existing app if already initialized)
-  await import("./firebase-admin");
-  const { getApps } = await import("firebase-admin/app");
+
+  // Use firebase-admin — on Firebase App Hosting ADC is automatic.
+  // Falls back to cert() credentials if env vars are set.
+  const { getApps, initializeApp, cert } = await import("firebase-admin/app");
   const { getStorage } = await import("firebase-admin/storage");
-  const app = getApps()[0];
+
+  let app;
+  if (getApps().length) {
+    app = getApps()[0];
+  } else if (
+    process.env.FIREBASE_PROJECT_ID &&
+    process.env.FIREBASE_CLIENT_EMAIL &&
+    process.env.FIREBASE_PRIVATE_KEY
+  ) {
+    app = initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      }),
+    });
+  } else {
+    // Application Default Credentials (Firebase App Hosting / Cloud Run)
+    app = initializeApp();
+  }
+
   _bucket = getStorage(app).bucket(storageBucket());
   return _bucket;
 }
@@ -47,7 +71,6 @@ async function firebaseUpload(
   await file.save(buffer, {
     metadata: { contentType: mimeType },
     resumable: false,
-    // no public:true — access controlled by Firebase Storage Rules
   });
   // Firebase Storage download URL (works with Rules: allow read: if true)
   const encodedPath = encodeURIComponent(storagePath);
@@ -101,7 +124,7 @@ export async function uploadFile(
 }
 
 /**
- * Delete a file given its stored URL or storage path.
+ * Delete a file given its stored URL.
  */
 export async function deleteFile(fileUrl: string): Promise<void> {
   const storagePath = storagePathFromUrl(fileUrl);
@@ -113,7 +136,6 @@ export async function deleteFile(fileUrl: string): Promise<void> {
 
 /**
  * Fetch a file as a Buffer from its stored URL.
- * Works with both Firebase Storage public URLs and local /uploads/... paths.
  */
 export async function fetchFileBuffer(
   fileUrl: string,
@@ -151,7 +173,6 @@ export async function fetchFileBuffer(
  */
 export function storagePathFromUrl(url: string): string {
   if (url.startsWith("https://firebasestorage.googleapis.com/")) {
-    // extract encoded path after /o/
     const match = url.match(/\/o\/([^?]+)/);
     return match ? decodeURIComponent(match[1]) : url;
   }
@@ -160,6 +181,5 @@ export function storagePathFromUrl(url: string): string {
     const slashIdx = withoutScheme.indexOf("/");
     return slashIdx >= 0 ? withoutScheme.slice(slashIdx + 1) : withoutScheme;
   }
-  // local: /uploads/... → uploads/...
   return url.startsWith("/") ? url.slice(1) : url;
 }
