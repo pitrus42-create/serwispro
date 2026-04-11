@@ -76,7 +76,7 @@ model UserPermission {
 
 model Role {
   id                  String               @id @default(uuid())
-  name                String
+  name                String               @unique
   displayName         String
   description         String?
   isSystem            Boolean              @default(false)
@@ -95,6 +95,10 @@ model UserRoleAssignment {
   assignedBy String?
   role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
 }
 
 model Permission {
@@ -105,6 +109,9 @@ model Permission {
   description             String?
   rolePermissions         RolePermission[]
   userPermissionOverrides UserPermissionOverride[]
+
+  @@unique([module, action])
+  @@index([module])
 }
 
 model RolePermission {
@@ -114,6 +121,9 @@ model RolePermission {
   effect       String     @default("ALLOW")
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
 }
 
 model UserPermissionOverride {
@@ -126,17 +136,23 @@ model UserPermissionOverride {
   grantedAt    DateTime   @default(now())
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@index([userId])
 }
 
 model PasswordReset {
   id        String    @id @default(uuid())
   userId    String
-  token     String
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdBy String?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
 }
 
 model UserSettings {
