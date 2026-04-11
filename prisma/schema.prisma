@@ -7,27 +7,47 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  firstName    String
-  lastName     String
-  email        String    @unique
-  passwordHash String?
-  googleId     String?   @unique
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  lastLoginAt  DateTime?
-
-  roles               UserRole[]
-  permissions         UserPermission?
-  orderAssignments    OrderAssignment[]
-  ordersCreated       Order[]             @relation("OrderCreatedBy")
-  checklistItemsDone  OrderChecklistItem[]
-  activityLogs        OrderActivityLog[]
+  id                  String                   @id @default(uuid())
+  firstName           String
+  lastName            String
+  email               String?                  @unique
+  passwordHash        String?
+  googleId            String?                  @unique
+  login               String?                  @unique
+  phone               String?
+  position            String?
+  adminNote           String?
+  avatarUrl           String?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime?                @updatedAt
+  createdById         String?
+  lastLoginAt         DateTime?
+  passwordChangedAt   DateTime?
+  mustChangePassword  Boolean                  @default(false)
+  failedLoginAttempts Int                      @default(0)
+  lockedUntil         DateTime?
+  accountStatus       String                   @default("ACTIVE")
+  isActive            Boolean                  @default(true)
+  archivedAt          DateTime?
+  archivedBy          String?
+  anonymizedAt        DateTime?
   notifications       Notification[]
-  serviceEntries      VehicleServiceEntry[]
-  materialsAdded      OrderMaterial[]
+  ordersCreated       Order[]                  @relation("OrderCreatedBy")
+  activityLogs        OrderActivityLog[]
+  orderAssignments    OrderAssignment[]
   attachmentsUploaded OrderAttachment[]
+  checklistItemsDone  OrderChecklistItem[]
+  materialsAdded      OrderMaterial[]
+  passwordResets      PasswordReset[]
   protocolPhotos      ProtocolPhoto[]
+  createdBy           User?                    @relation("UserCreatedBy", fields: [createdById], references: [id])
+  createdUsers        User[]                   @relation("UserCreatedBy")
+  permissions         UserPermission?
+  permissionOverrides UserPermissionOverride[]
+  roles               UserRole[]
+  roleAssignments     UserRoleAssignment[]
+  userSettings        UserSettings?
+  serviceEntries      VehicleServiceEntry[]
 }
 
 model UserRole {
@@ -51,32 +71,104 @@ model UserPermission {
   canManageVehicles   Boolean @default(false)
   canGeneratePdf      Boolean @default(true)
   canViewAllCalendar  Boolean @default(true)
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Role {
+  id                  String               @id @default(uuid())
+  name                String
+  displayName         String
+  description         String?
+  isSystem            Boolean              @default(false)
+  isCustom            Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  rolePermissions     RolePermission[]
+  userRoleAssignments UserRoleAssignment[]
+}
+
+model UserRoleAssignment {
+  id         String   @id @default(uuid())
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  assignedBy String?
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Permission {
+  id                      String                   @id @default(uuid())
+  module                  String
+  action                  String
+  displayName             String
+  description             String?
+  rolePermissions         RolePermission[]
+  userPermissionOverrides UserPermissionOverride[]
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  effect       String     @default("ALLOW")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+}
+
+model UserPermissionOverride {
+  id           String     @id @default(uuid())
+  userId       String
+  permissionId String
+  effect       String
+  reason       String?
+  grantedBy    String?
+  grantedAt    DateTime   @default(now())
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  token     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdBy String?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserSettings {
+  userId             String  @id
+  language           String  @default("pl")
+  theme              String  @default("light")
+  notifyOnAssignment Boolean @default(true)
+  notifyOnComment    Boolean @default(true)
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Client {
-  id        String   @id @default(uuid())
-  type      String   @default("company")
-  name      String
-  nip       String?
-  phone     String?
-  phoneAlt  String?
-  email     String?
-  alias     String?
-  notes     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id          String             @id @default(uuid())
+  type        String             @default("company")
+  name        String
+  nip         String?
+  phone       String?
+  phoneAlt    String?
+  email       String?
+  alias       String?
+  notes       String?
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  attachments ClientAttachment[]
   locations   Location[]
   orders      Order[]
   protocols   Protocol[]
-  attachments ClientAttachment[]
 }
 
 model Location {
-  id                  String    @id @default(uuid())
+  id                  String     @id @default(uuid())
   clientId            String
   name                String
   address             String?
@@ -84,25 +176,24 @@ model Location {
   postalCode          String?
   technicalNote       String?
   systemsNote         String?
-  maintenanceCycle    String    @default("NONE")
+  maintenanceCycle    String     @default("NONE")
   nextMaintenanceDate DateTime?
   lastMaintenanceDate DateTime?
-  isActive            Boolean   @default(true)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-
-  client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  orders    Order[]
-  protocols Protocol[]
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  client              Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  orders              Order[]
+  protocols           Protocol[]
 }
 
 model Order {
-  id             String    @id @default(uuid())
-  orderNumber    String    @unique
+  id             String             @id @default(uuid())
+  orderNumber    String             @unique
   type           String
-  status         String    @default("OCZEKUJACE")
-  priority       String    @default("NORMALNY")
-  isCritical     Boolean   @default(false)
+  status         String             @default("OCZEKUJACE")
+  priority       String             @default("NORMALNY")
+  isCritical     Boolean            @default(false)
   clientId       String?
   locationId     String?
   title          String?
@@ -112,19 +203,18 @@ model Order {
   scheduledEndAt DateTime?
   dayOrder       Int?
   completedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   createdById    String
-
-  client      Client?            @relation(fields: [clientId], references: [id])
-  location    Location?          @relation(fields: [locationId], references: [id])
-  createdBy   User               @relation("OrderCreatedBy", fields: [createdById], references: [id])
-  assignments OrderAssignment[]
-  checklists  OrderChecklist[]
-  materials   OrderMaterial[]
-  attachments OrderAttachment[]
-  protocols   Protocol[]
-  activityLog OrderActivityLog[]
+  createdBy      User               @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  location       Location?          @relation(fields: [locationId], references: [id])
+  client         Client?            @relation(fields: [clientId], references: [id])
+  activityLog    OrderActivityLog[]
+  assignments    OrderAssignment[]
+  attachments    OrderAttachment[]
+  checklists     OrderChecklist[]
+  materials      OrderMaterial[]
+  protocols      Protocol[]
 }
 
 model OrderAssignment {
@@ -132,9 +222,8 @@ model OrderAssignment {
   userId     String
   isLead     Boolean  @default(false)
   assignedAt DateTime @default(now())
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@id([orderId, userId])
 }
@@ -146,9 +235,8 @@ model OrderActivityLog {
   action    String
   details   String?
   createdAt DateTime @default(now())
-
-  order Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      User?    @relation(fields: [userId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model OrderAttachment {
@@ -160,57 +248,52 @@ model OrderAttachment {
   mimeType   String?
   uploadedBy String?
   uploadedAt DateTime @default(now())
-
-  order Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user  User?  @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+  user       User?    @relation(fields: [uploadedBy], references: [id])
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model ChecklistTemplate {
-  id        String   @id @default(uuid())
-  name      String
-  orderType String?
-  isActive  Boolean  @default(true)
-  createdBy String?
-  createdAt DateTime @default(now())
-
+  id         String                  @id @default(uuid())
+  name       String
+  orderType  String?
+  isActive   Boolean                 @default(true)
+  createdBy  String?
+  createdAt  DateTime                @default(now())
   items      ChecklistTemplateItem[]
   checklists OrderChecklist[]
 }
 
 model ChecklistTemplateItem {
-  id         String  @id @default(uuid())
+  id         String            @id @default(uuid())
   templateId String
   text       String
   itemOrder  Int
-  isRequired Boolean @default(false)
-
-  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  isRequired Boolean           @default(false)
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
 
 model OrderChecklist {
-  id         String   @id @default(uuid())
+  id         String               @id @default(uuid())
   orderId    String
   templateId String?
   name       String
-  createdAt  DateTime @default(now())
-
-  order    Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  template ChecklistTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  items    OrderChecklistItem[]
+  createdAt  DateTime             @default(now())
+  template   ChecklistTemplate?   @relation(fields: [templateId], references: [id])
+  order      Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items      OrderChecklistItem[]
 }
 
 model OrderChecklistItem {
-  id          String    @id @default(uuid())
+  id          String         @id @default(uuid())
   checklistId String
   text        String
   itemOrder   Int
-  isChecked   Boolean   @default(false)
+  isChecked   Boolean        @default(false)
   checkedBy   String?
   checkedAt   DateTime?
   note        String?
-
-  checklist OrderChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
-  checker   User?          @relation(fields: [checkedBy], references: [id], onDelete: SetNull)
+  checker     User?          @relation(fields: [checkedBy], references: [id])
+  checklist   OrderChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
 }
 
 model ActionTemplate {
@@ -224,7 +307,7 @@ model ActionTemplate {
 }
 
 model OrderMaterial {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   orderId     String
   stockItemId String?
   manualName  String?
@@ -232,30 +315,28 @@ model OrderMaterial {
   unit        String?
   notes       String?
   addedBy     String?
-  addedAt     DateTime @default(now())
-
-  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  stockItem StockItem? @relation(fields: [stockItemId], references: [id])
-  user      User?      @relation(fields: [addedBy], references: [id])
+  addedAt     DateTime   @default(now())
+  user        User?      @relation(fields: [addedBy], references: [id])
+  stockItem   StockItem? @relation(fields: [stockItemId], references: [id])
+  order       Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Protocol {
-  id             String   @id @default(uuid())
-  protocolNumber String   @unique
+  id             String          @id @default(uuid())
+  protocolNumber String          @unique
   orderId        String?
   clientId       String?
   locationId     String?
   type           String
   content        String
   pdfUrl         String?
-  pdfGenerated   Boolean  @default(false)
+  pdfGenerated   Boolean         @default(false)
   createdBy      String?
-  createdAt      DateTime @default(now())
-
-  order    Order?    @relation(fields: [orderId], references: [id])
-  client   Client?   @relation(fields: [clientId], references: [id])
-  location Location? @relation(fields: [locationId], references: [id])
-  photos   ProtocolPhoto[]
+  createdAt      DateTime        @default(now())
+  location       Location?       @relation(fields: [locationId], references: [id])
+  client         Client?         @relation(fields: [clientId], references: [id])
+  order          Order?          @relation(fields: [orderId], references: [id])
+  photos         ProtocolPhoto[]
 }
 
 model Notification {
@@ -270,26 +351,24 @@ model Notification {
   relatedEntityType String?
   relatedEntityId   String?
   createdAt         DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Vehicle {
-  id               String    @id @default(uuid())
+  id               String                @id @default(uuid())
   brand            String?
   model            String?
   year             Int?
-  plate            String    @unique
+  plate            String                @unique
   vin              String?
   insuranceNumber  String?
   insuranceExpiry  DateTime?
   inspectionExpiry DateTime?
   notes            String?
-  isActive         Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-
-  serviceEntries VehicleServiceEntry[]
-  reminders      VehicleReminder[]
+  isActive         Boolean               @default(true)
+  createdAt        DateTime              @default(now())
+  reminders        VehicleReminder[]
+  serviceEntries   VehicleServiceEntry[]
 }
 
 model VehicleServiceEntry {
@@ -300,9 +379,8 @@ model VehicleServiceEntry {
   mileage     Int?
   addedBy     String?
   createdAt   DateTime @default(now())
-
-  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [addedBy], references: [id])
+  user        User?    @relation(fields: [addedBy], references: [id])
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 }
 
 model VehicleReminder {
@@ -312,8 +390,7 @@ model VehicleReminder {
   date      DateTime
   note      String?
   isDone    Boolean  @default(false)
-
-  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 }
 
 model StockCategory {
@@ -325,16 +402,15 @@ model StockCategory {
 }
 
 model StockItem {
-  id         String  @id @default(uuid())
+  id         String          @id @default(uuid())
   categoryId String?
   name       String
   sku        String?
-  unit       String  @default("szt")
+  unit       String          @default("szt")
   notes      String?
-  isActive   Boolean @default(true)
-
-  category  StockCategory? @relation(fields: [categoryId], references: [id])
-  materials OrderMaterial[]
+  isActive   Boolean         @default(true)
+  materials  OrderMaterial[]
+  category   StockCategory?  @relation(fields: [categoryId], references: [id])
 }
 
 model ClientAttachment {
@@ -347,12 +423,11 @@ model ClientAttachment {
   mimeType   String?
   uploadedBy String?
   uploadedAt DateTime @default(now())
-
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
 
 model CompanySettings {
-  id        Int      @id @default(1)
+  id        Int      @id @default(autoincrement())
   name      String?
   address   String?
   phone     String?
@@ -363,49 +438,46 @@ model CompanySettings {
 }
 
 model QuoteForm {
-  id          String    @id @default(uuid())
+  id          String            @id @default(uuid())
   name        String
   title       String
   description String?
-  token       String    @unique
-  isActive    Boolean   @default(true)
+  token       String            @unique
+  isActive    Boolean           @default(true)
   expiresAt   DateTime?
   createdBy   String?
-  createdAt   DateTime  @default(now())
-
+  createdAt   DateTime          @default(now())
   fields      QuoteFormField[]
   submissions QuoteSubmission[]
 }
 
 model QuoteFormField {
-  id          String  @id @default(uuid())
+  id          String    @id @default(uuid())
   formId      String
   type        String
   label       String
   placeholder String?
-  isRequired  Boolean @default(false)
-  options     String  @default("[]")
+  isRequired  Boolean   @default(false)
+  options     String    @default("[]")
   fieldOrder  Int
-
-  form QuoteForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  form        QuoteForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 }
 
 model QuoteSubmission {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   formId              String
   contactName         String?
   contactPhone        String?
   contactEmail        String?
   address             String?
   formData            String
-  attachments         String   @default("[]")
-  status              String   @default("NEW")
+  attachments         String    @default("[]")
+  status              String    @default("NEW")
   convertedToClientId String?
   convertedToOrderId  String?
-  submittedAt         DateTime @default(now())
+  submittedAt         DateTime  @default(now())
   ipAddress           String?
-
-  form QuoteForm @relation(fields: [formId], references: [id])
+  form                QuoteForm @relation(fields: [formId], references: [id])
 }
 
 model AuditLog {
@@ -420,13 +492,13 @@ model AuditLog {
 }
 
 model OrderCounter {
-  id    Int @id @default(1)
+  id    Int @id @default(autoincrement())
   year  Int
   count Int @default(0)
 }
 
 model ProtocolCounter {
-  id    Int @id @default(1)
+  id    Int @id @default(autoincrement())
   year  Int
   count Int @default(0)
 }
@@ -449,7 +521,6 @@ model ProtocolPhoto {
   mimeType   String?
   uploadedBy String?
   uploadedAt DateTime @default(now())
-
-  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
-  user     User?    @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+  user       User?    @relation(fields: [uploadedBy], references: [id])
+  protocol   Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
 }
