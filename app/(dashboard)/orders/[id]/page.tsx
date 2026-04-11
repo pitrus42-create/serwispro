@@ -234,9 +234,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   });
 
   const protocolMutation = useMutation({
-    mutationFn: async ({ variant, content }: {
+    mutationFn: async ({ variant, content, photos }: {
       variant: "print" | "report";
       content: { description: string; notes: string; hoursFrom?: string; hoursTo?: string };
+      photos: File[];
     }) => {
       const type = variant === "report" ? "raport" : "protokol";
       const r = await fetch(`/api/orders/${id}/protocols`, {
@@ -246,21 +247,28 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       });
       if (!r.ok) throw new Error("Błąd tworzenia protokołu");
       const res = await r.json();
-      return { protocol: res.data, variant };
-    },
-    onSuccess: async ({ protocol, variant }) => {
-      if (variant === "report" && protocolPhotos.length > 0) {
+      const protocol = res.data;
+
+      // Upload photos inside mutationFn so they're guaranteed to complete
+      if (variant === "report" && photos.length > 0) {
         const fd = new FormData();
-        protocolPhotos.forEach((f) => fd.append("photos", f));
-        await fetch(`/api/orders/${id}/protocols/${protocol.id}/photos`, {
+        photos.forEach((f) => fd.append("photos", f));
+        const photoRes = await fetch(`/api/orders/${id}/protocols/${protocol.id}/photos`, {
           method: "POST",
           body: fd,
         });
+        if (!photoRes.ok) throw new Error("Błąd przesyłania zdjęć");
       }
 
+      return { protocol, variant, photoCount: photos.length };
+    },
+    onSuccess: ({ protocol, variant, photoCount }) => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
+      const photoInfo = variant === "report" && photoCount > 0
+        ? ` (${photoCount} ${photoCount === 1 ? "zdjęcie" : "zdjęcia"})`
+        : "";
       toast.success(
-        `Protokół ${protocol.protocolNumber} został utworzony — kliknij „Podgląd" aby go otworzyć`,
+        `Protokół ${protocol.protocolNumber} został utworzony${photoInfo} — kliknij „Podgląd" aby go otworzyć`,
         { duration: 5000 }
       );
       setProtocolDescription("");
@@ -270,7 +278,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setProtocolPhotos([]);
       setSelectedTemplateIds(new Set());
     },
-    onError: () => toast.error("Błąd tworzenia protokołu"),
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const deleteProtocolMutation = useMutation({
@@ -952,6 +960,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <Button
                 onClick={() => protocolMutation.mutate({
                   variant: "print",
+                  photos: [],
                   content: { description: protocolDescription, notes: protocolNotes, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
                 })}
                 disabled={!protocolDescription.trim() || protocolMutation.isPending}
@@ -964,6 +973,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 variant="outline"
                 onClick={() => protocolMutation.mutate({
                   variant: "report",
+                  photos: protocolPhotos,
                   content: { description: protocolDescription, notes: protocolNotes, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
                 })}
                 disabled={!protocolDescription.trim() || protocolMutation.isPending}
