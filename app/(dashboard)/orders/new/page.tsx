@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -153,6 +153,14 @@ function ClientSearch({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function NewOrderPage() {
+  return (
+    <Suspense fallback={<div className="p-6 max-w-2xl mx-auto space-y-4">{[...Array(4)].map((_,i)=><div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse"/>)}</div>}>
+      <NewOrderForm />
+    </Suspense>
+  );
+}
+
+function NewOrderForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
