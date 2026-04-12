@@ -19,15 +19,6 @@ import { useSession } from "next-auth/react";
 import { canDo } from "@/lib/permissions";
 import type { DashboardData } from "./types";
 
-const ACTION_LABELS: Record<string, string> = {
-  order_created: "utworzył zlecenie",
-  status_changed: "zmienił status",
-  assignment_added: "przypisał pracownika",
-  note_added: "dodał notatkę",
-  protocol_generated: "wygenerował protokół",
-  checklist_item_checked: "odhaczył punkt checklisty",
-};
-
 const TYPE_COLORS: Record<string, string> = {
   AWARIA: "bg-red-500",
   PRZEGLAD: "bg-red-700",
@@ -174,38 +165,6 @@ export function DashboardMobile({
           </ul>
         )}
       </section>
-
-      {/* Recent activity — max 3 */}
-      {d.recentActivity.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-            Ostatnia aktywność
-          </h2>
-          <ul className="space-y-2">
-            {d.recentActivity.slice(0, 3).map((log) => (
-              <li key={log.id} className="flex gap-2 text-sm text-gray-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-600 mt-1.5 shrink-0" />
-                <span>
-                  <span className="font-medium text-gray-800">
-                    {log.user
-                      ? `${log.user.firstName} ${log.user.lastName[0]}.`
-                      : "System"}
-                  </span>{" "}
-                  {ACTION_LABELS[log.action] ?? log.action}
-                  {log.order && (
-                    <>
-                      {" · "}
-                      <span className="text-red-800">{log.order.orderNumber}</span>
-                    </>
-                  )}
-                  {" · "}
-                  <span className="text-gray-400 text-xs">{formatDateTime(log.createdAt)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       {/* Secondary ghost actions */}
       <div className="flex gap-2 flex-wrap pb-2">
