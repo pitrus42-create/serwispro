@@ -156,7 +156,7 @@ export default function NewUserPage() {
         {/* Hasło tymczasowe */}
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <h2 className="font-semibold text-gray-800">Hasło tymczasowe</h2>
-          <div className="bg-blue-50 text-blue-700 text-sm rounded-lg p-3">
+          <div className="bg-red-50 text-red-900 text-sm rounded-lg p-3">
             Użytkownik będzie musiał zmienić hasło przy pierwszym logowaniu.
           </div>
           <div className="space-y-1.5">

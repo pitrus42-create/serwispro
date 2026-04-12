@@ -89,7 +89,7 @@ function ProfileTab() {
       {/* Readonly info */}
       <div className="bg-gray-50 rounded-lg p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <div className="h-14 w-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-xl">
+          <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center text-red-900 font-semibold text-xl">
             {me?.firstName?.[0]}{me?.lastName?.[0]}
           </div>
           <div>
@@ -101,7 +101,7 @@ function ProfileTab() {
           {(session?.user.roles ?? []).map((role: string) => (
             <span
               key={role}
-              className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+              className="text-xs bg-red-100 text-red-900 px-2 py-0.5 rounded-full"
             >
               {ROLE_LABELS[role] ?? role}
             </span>

@@ -128,7 +128,7 @@ export function DashboardDesktop({
           title="Zadania dziś"
           value={d.todayOrders.length}
           icon={ClipboardList}
-          color="bg-blue-100 text-blue-900"
+          color="bg-red-100 text-red-950"
           href="/calendar"
         />
         <StatCard
@@ -214,7 +214,7 @@ export function DashboardDesktop({
               <span>Zadania na dziś</span>
               <Link
                 href="/calendar"
-                className="text-xs text-blue-600 font-normal"
+                className="text-xs text-red-800 font-normal"
               >
                 Kalendarz →
               </Link>
@@ -281,7 +281,7 @@ export function DashboardDesktop({
               <ul className="space-y-2.5">
                 {d.recentActivity.map((log) => (
                   <li key={log.id} className="flex gap-2 text-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-600 mt-1.5 shrink-0" />
                     <div className="text-gray-600">
                       <span className="font-medium text-gray-800">
                         {log.user
@@ -294,7 +294,7 @@ export function DashboardDesktop({
                           {" · "}
                           <Link
                             href="/orders"
-                            className="text-blue-600 hover:underline"
+                            className="text-red-800 hover:underline"
                           >
                             {log.order.orderNumber}
                           </Link>

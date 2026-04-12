@@ -137,7 +137,7 @@ export default function NewRolePage() {
             <div className="flex gap-2 text-xs">
               <button
                 type="button"
-                className="text-blue-600 hover:underline"
+                className="text-red-800 hover:underline"
                 onClick={() => {
                   const all = Object.values(grouped)
                     .flat()

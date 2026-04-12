@@ -14,8 +14,8 @@ const PRIORITY_COLORS: Record<number, string> = {
   2: "bg-red-400",
   3: "bg-amber-500",
   4: "bg-amber-400",
-  5: "bg-blue-400",
-  6: "bg-blue-300",
+  5: "bg-red-600",
+  6: "bg-red-400",
   7: "bg-gray-300",
 };
 
@@ -70,7 +70,7 @@ export function NotificationPanel({
                   key={n.id}
                   className={cn(
                     "flex gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer",
-                    !n.isRead && "bg-blue-50/50"
+                    !n.isRead && "bg-red-50/50"
                   )}
                   onClick={() => {
                     if (!n.isRead) markRead(n.id);
@@ -90,7 +90,7 @@ export function NotificationPanel({
                     <Link
                       href={n.link}
                       onClick={(e) => e.stopPropagation()}
-                      className="shrink-0 p-1 hover:text-blue-600"
+                      className="shrink-0 p-1 hover:text-red-800"
                     >
                       <ExternalLink className="w-3 h-3" />
                     </Link>

@@ -167,7 +167,7 @@ model UserSettings {
 model Client {
   id          String             @id @default(uuid())
   type        String             @default("company")
-  name        String
+  name        String?
   nip         String?
   phone       String?
   phoneAlt    String?
@@ -219,6 +219,8 @@ model Order {
   scheduledEndAt DateTime?
   dayOrder       Int?
   completedAt    DateTime?
+  isSettled      Boolean            @default(false)
+  settledAt      DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   createdById    String

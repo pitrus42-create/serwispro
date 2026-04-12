@@ -9,7 +9,10 @@ import type { DashboardData } from "./types";
 
 async function fetchDashboard(): Promise<DashboardData> {
   const res = await fetch("/api/dashboard");
-  if (!res.ok) throw new Error("Failed");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
+  }
   return res.json();
 }
 
@@ -51,13 +54,23 @@ function LoadingDesktop() {
 
 export function DashboardContent() {
   const { data: session } = useSession();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["dashboard"],
     queryFn: fetchDashboard,
     refetchInterval: 60_000,
+    retry: 1,
   });
 
   const firstName = session?.user?.firstName ?? undefined;
+
+  if (isError) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <p className="font-medium">Błąd ładowania dashboardu</p>
+        <p className="text-xs mt-1 text-red-500">{String(error)}</p>
+      </div>
+    );
+  }
 
   return (
     <>

@@ -534,7 +534,7 @@ export default function EditUserPage() {
       </button>
 
       <div className="flex items-center gap-3 mb-6">
-        <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold">
+        <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center text-red-900 font-semibold">
           {user.firstName[0]}
           {user.lastName[0]}
         </div>

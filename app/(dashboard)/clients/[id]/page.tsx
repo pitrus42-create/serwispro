@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   OCZEKUJACE: "bg-gray-100 text-gray-700",
-  PRZYJETE: "bg-blue-100 text-blue-700",
+  PRZYJETE: "bg-red-100 text-red-900",
   W_TOKU: "bg-amber-100 text-amber-700",
   ZAPLANOWANE: "bg-purple-100 text-purple-700",
   ZAKONCZONE: "bg-green-100 text-green-700",
@@ -130,9 +130,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             {client.type === "OSOBA_PRYWATNA" ? (
-              <User className="h-5 w-5 text-blue-500" />
+              <User className="h-5 w-5 text-red-700" />
             ) : (
-              <Building2 className="h-5 w-5 text-blue-500" />
+              <Building2 className="h-5 w-5 text-red-700" />
             )}
             <span className="text-sm text-gray-500">{client.type === "OSOBA_PRYWATNA" ? "Osoba prywatna" : client.type === "INSTYTUCJA" ? "Instytucja" : "Firma"}</span>
           </div>
@@ -154,19 +154,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         <div className="bg-white rounded-xl border p-4 space-y-3">
           <h2 className="font-semibold text-gray-700">Dane kontaktowe</h2>
           {client.phone && (
-            <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+            <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-red-800 hover:underline">
               <Phone className="h-4 w-4 text-gray-400" />
               {client.phone}
             </a>
           )}
           {client.phoneAlt && (
-            <a href={`tel:${client.phoneAlt}`} className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+            <a href={`tel:${client.phoneAlt}`} className="flex items-center gap-2 text-sm text-red-800 hover:underline">
               <Phone className="h-4 w-4 text-gray-400" />
               {client.phoneAlt}
             </a>
           )}
           {client.email && (
-            <a href={`mailto:${client.email}`} className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
+            <a href={`mailto:${client.email}`} className="flex items-center gap-2 text-sm text-red-800 hover:underline">
               <Mail className="h-4 w-4 text-gray-400" />
               {client.email}
             </a>

@@ -7,7 +7,8 @@ import { useSession } from "next-auth/react";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
-  Plus, Search, Filter, AlertTriangle, Clock, ChevronRight, X, SlidersHorizontal, UserPlus,
+  Plus, Search, Filter, AlertTriangle, Clock, ChevronRight, X, SlidersHorizontal,
+  UserPlus, CheckCircle, Banknote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { canDo } from "@/lib/permissions";
 import { toast } from "sonner";
 
-// ── Constants ───────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<string, string> = {
   OCZEKUJACE: "Oczekujące",
@@ -32,7 +33,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   OCZEKUJACE: "bg-gray-100 text-gray-700",
-  PRZYJETE: "bg-blue-100 text-blue-700",
+  PRZYJETE: "bg-red-100 text-red-900",
   W_TOKU: "bg-amber-100 text-amber-700",
   ZAPLANOWANE: "bg-purple-100 text-purple-700",
   ZAKONCZONE: "bg-green-100 text-green-700",
@@ -41,7 +42,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const PRIORITY_COLORS: Record<string, string> = {
   NISKI: "bg-gray-100 text-gray-600",
-  NORMALNY: "bg-blue-100 text-blue-600",
+  NORMALNY: "bg-red-100 text-red-800",
   WYSOKI: "bg-orange-100 text-orange-600",
   KRYTYCZNY: "bg-red-100 text-red-700",
 };
@@ -55,6 +56,15 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 type DatePreset = "all" | "today" | "week" | "month";
+type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "all", label: "Wszystkie" },
+  { key: "OCZEKUJACE", label: "Oczekujące" },
+  { key: "PRZYJETE", label: "Przyjęte" },
+  { key: "W_TOKU", label: "W toku" },
+  { key: "ZAKONCZONE", label: "Zakończone" },
+];
 
 function getDateRange(preset: DatePreset): { dateFrom?: string; dateTo?: string } {
   const now = new Date();
@@ -81,9 +91,10 @@ interface Order {
   status: string;
   priority: string;
   isCritical: boolean;
+  isSettled: boolean;
   title: string | null;
   scheduledAt: string | null;
-  client: { name: string } | null;
+  client: { name: string | null } | null;
   location: { name: string; address: string | null } | null;
   assignments: OrderAssignment[];
 }
@@ -113,9 +124,9 @@ async function fetchUsers(): Promise<{ data: UserOption[] }> {
 
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-1 rounded-full">
+    <span className="inline-flex items-center gap-1 bg-red-100 text-red-900 text-xs font-medium px-2.5 py-1 rounded-full">
       {label}
-      <button onClick={onRemove} className="hover:bg-blue-200 rounded-full p-0.5">
+      <button onClick={onRemove} className="hover:bg-red-200 rounded-full p-0.5">
         <X className="w-3 h-3" />
       </button>
     </span>
@@ -129,8 +140,15 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const canCreateOrders = canDo(session?.user, "orders:create");
+
+  const roles = (session?.user?.roles as string[]) ?? [];
+  const canSettle = !!(session?.user) && (
+    roles.includes("ADMIN") || roles.includes("MENEDZER") ||
+    (session.user as { role?: string }).role === "ADMIN"
+  );
+
+  const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
   const [type, setType] = useState("all");
   const [priority, setPriority] = useState("all");
   const [userId, setUserId] = useState("all");
@@ -149,7 +167,11 @@ export default function OrdersPage() {
 
   const params: Record<string, string> = { page: String(page), limit: "20" };
   if (search) params.q = search;
-  if (status !== "all") params.status = status;
+  if (activeTab === "DO_ROZLICZENIA") {
+    params.settled = "false";
+  } else if (activeTab !== "all") {
+    params.status = activeTab;
+  }
   if (type !== "all") params.type = type;
   if (priority !== "all") params.priority = priority;
   if (userId !== "all") params.userId = userId;
@@ -175,13 +197,33 @@ export default function OrdersPage() {
     onError: () => toast.error("Błąd przyjęcia zlecenia"),
   });
 
+  const settleMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const r = await fetch(`/api/orders/${orderId}/settle`, { method: "POST" });
+      if (!r.ok) throw new Error("Błąd");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Zlecenie oznaczone jako rozliczone");
+    },
+    onError: () => toast.error("Błąd rozliczenia zlecenia"),
+  });
+
   const orders: Order[] = data?.data ?? [];
   const total: number = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
-  // Active filter chips (excluding search and page)
+  // Count unsettled completed orders for badge on tab
+  const { data: unsettledData } = useQuery({
+    queryKey: ["orders-unsettled-count"],
+    queryFn: () => fetchOrders({ settled: "false", limit: "1" }),
+    enabled: canSettle,
+    refetchInterval: 30_000,
+  });
+  const unsettledCount: number = unsettledData?.total ?? 0;
+
   const activeFilters: { label: string; clear: () => void }[] = [];
-  if (status !== "all") activeFilters.push({ label: STATUS_LABELS[status] ?? status, clear: () => { setStatus("all"); setPage(1); } });
   if (type !== "all") activeFilters.push({ label: TYPE_LABELS[type] ?? type, clear: () => { setType("all"); setPage(1); } });
   if (priority !== "all") activeFilters.push({ label: priority, clear: () => { setPriority("all"); setPage(1); } });
   if (userId !== "all") {
@@ -194,9 +236,13 @@ export default function OrdersPage() {
   }
 
   function clearAll() {
-    setSearch(""); setStatus("all"); setType("all"); setPriority("all");
+    setSearch(""); setType("all"); setPriority("all");
     setUserId("all"); setDatePreset("all"); setPage(1);
   }
+
+  const tabs = canSettle
+    ? [...TABS, { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" }]
+    : TABS;
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
@@ -212,6 +258,29 @@ export default function OrdersPage() {
             <span className="hidden sm:inline">Nowe zlecenie</span>
           </Button>
         )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto scrollbar-none">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => { setActiveTab(tab.key); setPage(1); }}
+            className={cn(
+              "relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
+              activeTab === tab.key
+                ? "border-red-800 text-red-800"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            )}
+          >
+            {tab.label}
+            {tab.key === "DO_ROZLICZENIA" && unsettledCount > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full">
+                {unsettledCount > 99 ? "99+" : unsettledCount}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Search + toggle filters */}
@@ -241,23 +310,11 @@ export default function OrdersPage() {
         </Button>
       </div>
 
-      {/* Filter dropdowns — always visible on md, collapsible on mobile */}
+      {/* Filter dropdowns */}
       <div className={cn(
         "md:flex flex-col sm:flex-row gap-3 mb-3",
         filtersOpen ? "flex" : "hidden"
       )}>
-        <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Wszystkie statusy</SelectItem>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => (
-              <SelectItem key={k} value={k}>{v}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         <Select value={type} onValueChange={(v) => { setType(v); setPage(1); }}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Typ" />
@@ -349,20 +406,26 @@ export default function OrdersPage() {
             const lead = order.assignments.find((a) => a.isLead);
             const isUnassigned = order.assignments.length === 0;
             const isMyOrder = order.assignments.some((a) => a.user.id === session?.user?.id);
-            const canAccept = !canCreateOrders && (isUnassigned || (!isMyOrder && order.assignments.length > 0 && isUnassigned)) && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isMyOrder;
+            const canAccept = !canCreateOrders && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isMyOrder;
+            const isUnsettled = order.status === "ZAKONCZONE" && !order.isSettled;
+
             return (
               <div
                 key={order.id}
                 className={cn(
                   "bg-white rounded-lg border p-4 hover:shadow-md transition-shadow",
-                  order.isCritical && "border-red-300 bg-red-50"
+                  order.isCritical && "border-red-300 bg-red-50",
+                  isUnsettled && canSettle && "border-amber-300 bg-amber-50"
                 )}
               >
-                <div className="flex items-start gap-3" onClick={() => router.push(`/orders/${order.id}`)}>
+                <div className="flex items-start gap-3">
                   {order.isCritical && (
                     <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5 animate-pulse" />
                   )}
-                  <div className="flex-1 min-w-0 cursor-pointer">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => router.push(`/orders/${order.id}`)}
+                  >
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="text-xs font-mono text-gray-400">{order.orderNumber}</span>
                       <Badge className={cn("text-xs", STATUS_COLORS[order.status])}>
@@ -380,8 +443,20 @@ export default function OrdersPage() {
                         </span>
                       )}
                       {isMyOrder && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                        <span className="text-xs bg-red-100 text-red-900 px-2 py-0.5 rounded-full font-medium">
                           Moje
+                        </span>
+                      )}
+                      {isUnsettled && canSettle && (
+                        <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+                          <Banknote className="h-3 w-3" />
+                          Do rozliczenia
+                        </span>
+                      )}
+                      {order.status === "ZAKONCZONE" && order.isSettled && (
+                        <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                          <CheckCircle className="h-3 w-3" />
+                          Rozliczone
                         </span>
                       )}
                     </div>
@@ -416,7 +491,22 @@ export default function OrdersPage() {
                         Przyjmij
                       </Button>
                     )}
-                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                    {isUnsettled && canSettle && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-400 text-amber-800 hover:bg-amber-100 gap-1 text-xs"
+                        disabled={settleMutation.isPending}
+                        onClick={(e) => { e.stopPropagation(); settleMutation.mutate(order.id); }}
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        Rozlicz
+                      </Button>
+                    )}
+                    <ChevronRight
+                      className="h-5 w-5 text-gray-400 cursor-pointer"
+                      onClick={() => router.push(`/orders/${order.id}`)}
+                    />
                   </div>
                 </div>
               </div>

@@ -13,7 +13,7 @@ import type { EventClickArg, EventContentArg } from "@fullcalendar/core";
 
 const PRIORITY_BG: Record<string, string> = {
   NISKI: "#94a3b8",
-  NORMALNY: "#3b82f6",
+  NORMALNY: "#8B1A1A",
   WYSOKI: "#f97316",
   KRYTYCZNY: "#ef4444",
 };
@@ -67,7 +67,7 @@ export default function CalendarPage() {
     end?: string;
     extendedProps: { priority: string; isCritical: boolean; clientName: string; type: string; isMyOrder: boolean };
   }) => {
-    const baseColor = PRIORITY_BG[e.extendedProps.priority] ?? "#3b82f6";
+    const baseColor = PRIORITY_BG[e.extendedProps.priority] ?? "#8B1A1A";
     const isMyOrder = e.extendedProps.isMyOrder;
     return {
       ...e,
@@ -109,11 +109,11 @@ export default function CalendarPage() {
           Krytyczna awaria
         </span>
         <span className="flex items-center gap-1.5 ml-4 border-l pl-4">
-          <span className="h-3 w-3 rounded-sm inline-block bg-blue-500" />
+          <span className="h-3 w-3 rounded-sm inline-block bg-red-700" />
           Moje zlecenie
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm inline-block bg-blue-500/40 border border-blue-400/60" />
+          <span className="h-3 w-3 rounded-sm inline-block bg-red-700/40 border border-red-600/60" />
           Kolegi 👤
         </span>
       </div>

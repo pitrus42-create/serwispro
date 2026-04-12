@@ -19,7 +19,7 @@ export function Header({ title }: { title?: string }) {
       <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 sticky top-0 z-20">
         {/* Mobile: Logo */}
         <div className="md:hidden flex items-center gap-2">
-          <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
+          <div className="w-7 h-7 bg-red-800 rounded-md flex items-center justify-center">
             <span className="text-white text-xs font-bold">SP</span>
           </div>
         </div>
@@ -46,7 +46,7 @@ export function Header({ title }: { title?: string }) {
 
         {/* Avatar mobile */}
         <Avatar className="w-8 h-8 md:hidden">
-          <AvatarFallback className="bg-blue-100 text-blue-700 text-xs">
+          <AvatarFallback className="bg-red-100 text-red-900 text-xs">
             {session?.user
               ? getInitials(session.user.firstName, session.user.lastName)
               : "?"}

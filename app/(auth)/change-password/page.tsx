@@ -77,8 +77,8 @@ export default function ChangePasswordPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-            <Shield className="h-6 w-6 text-blue-600" />
+          <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
+            <Shield className="h-6 w-6 text-red-800" />
           </div>
           <CardTitle>Zmień hasło</CardTitle>
           <CardDescription>

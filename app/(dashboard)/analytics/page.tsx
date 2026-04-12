@@ -24,7 +24,7 @@ const TYPE_LABELS: Record<string, string> = {
   INNE: "Inne",
 };
 
-const PIE_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#f97316", "#94a3b8"];
+const PIE_COLORS = ["#ef4444", "#8B1A1A", "#22c55e", "#f97316", "#94a3b8"];
 
 interface StatCard {
   label: string;
@@ -86,8 +86,8 @@ export default function AnalyticsPage() {
         <StatCard
           label="Zlecenia ogółem"
           value={stats?.total ?? 0}
-          icon={<TrendingUp className="h-6 w-6 text-blue-600" />}
-          color="bg-blue-100"
+          icon={<TrendingUp className="h-6 w-6 text-red-800" />}
+          color="bg-red-100"
         />
         <StatCard
           label="Zakończone"
@@ -120,7 +120,7 @@ export default function AnalyticsPage() {
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
-                <Bar dataKey="total" fill="#3b82f6" name="Wszystkie" />
+                <Bar dataKey="total" fill="#8B1A1A" name="Wszystkie" />
                 <Bar dataKey="zakonczone" fill="#22c55e" name="Zakończone" />
               </BarChart>
             </ResponsiveContainer>

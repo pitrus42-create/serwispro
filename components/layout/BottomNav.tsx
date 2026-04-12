@@ -45,7 +45,7 @@ export function BottomNav() {
                   "flex flex-col items-center gap-0.5 py-2 px-1 transition-colors",
                   "red" in item && item.red
                     ? "text-red-500"
-                    : isActive ? "text-blue-600" : "text-gray-500"
+                    : isActive ? "text-red-800" : "text-gray-500"
                 )}
               >
                 <item.icon className="w-5 h-5" />

@@ -205,7 +205,7 @@ function UsersTab() {
               className="bg-white rounded-lg border p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
               onClick={() => router.push(`/settings/users/${user.id}`)}
             >
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm shrink-0">
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-900 font-semibold text-sm shrink-0">
                 {user.firstName[0]}{user.lastName[0]}
               </div>
               <div className="flex-1 min-w-0">
@@ -214,7 +214,7 @@ function UsersTab() {
               </div>
               <div className="flex gap-1 flex-wrap justify-end items-center">
                 {user.roleAssignments?.map((ra) => (
-                  <span key={ra.role.name} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                  <span key={ra.role.name} className="text-xs bg-red-100 text-red-900 px-2 py-0.5 rounded-full">
                     {ra.role.displayName}
                   </span>
                 ))}

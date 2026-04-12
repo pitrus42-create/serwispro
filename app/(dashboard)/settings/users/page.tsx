@@ -56,7 +56,7 @@ const ROLE_COLORS: Record<string, string> = {
   SUPERADMIN: "bg-purple-100 text-purple-700",
   ADMIN: "bg-red-100 text-red-700",
   SZEF: "bg-amber-100 text-amber-700",
-  MENEDZER: "bg-blue-100 text-blue-700",
+  MENEDZER: "bg-red-100 text-red-900",
   MAGAZYNIER: "bg-green-100 text-green-700",
   SERWISANT: "bg-gray-100 text-gray-700",
 };
@@ -265,7 +265,7 @@ export default function UsersPage() {
                 key={user.id}
                 className="bg-white rounded-xl border p-4 flex items-center gap-3 hover:border-gray-300 transition-colors"
               >
-                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm shrink-0">
+                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-900 font-semibold text-sm shrink-0">
                   {user.firstName[0]}
                   {user.lastName[0]}
                 </div>

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   const clientId = searchParams.get("clientId");
   const critical = searchParams.get("critical");
   const overdue = searchParams.get("overdue");
+  const settled = searchParams.get("settled");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const q = searchParams.get("q");
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest) {
     ...(priority?.length ? { priority: { in: priority } } : {}),
     ...(clientId ? { clientId } : {}),
     ...(critical === "true" ? { isCritical: true } : {}),
+    ...(settled === "false" ? { status: "ZAKONCZONE", isSettled: false } : {}),
+    ...(settled === "true" ? { isSettled: true } : {}),
     ...(overdue === "true"
       ? { scheduledAt: { lt: startOfDay(new Date()) }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } }
       : dateFrom || dateTo

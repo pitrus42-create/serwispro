@@ -30,7 +30,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 const TYPE_COLORS: Record<string, string> = {
   AWARIA: "bg-red-500",
-  PRZEGLAD: "bg-blue-500",
+  PRZEGLAD: "bg-red-700",
   KONSERWACJA: "bg-teal-500",
   INSTALACJA: "bg-purple-500",
   INNE: "bg-gray-400",
@@ -67,7 +67,7 @@ export function DashboardMobile({
     { value: d.openAlerts,           label: "Awarie",      color: "bg-orange-100 text-orange-800",  href: "/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU" },
     { value: d.highPriorityOrders,   label: "Pilne",       color: "bg-purple-100 text-purple-800",  href: "/orders?priority=WYSOKI,KRYTYCZNY" },
     { value: d.pendingMaintenance,   label: "Konserwacje", color: "bg-teal-100 text-teal-800",      href: "/orders?type=KONSERWACJA" },
-    { value: d.todayOrders.length,   label: "Dziś",        color: "bg-blue-100 text-blue-800",      href: "/calendar" },
+    { value: d.todayOrders.length,   label: "Dziś",        color: "bg-red-100 text-red-900",      href: "/calendar" },
   ].filter((p) => p.value > 0);
 
   const allClear = pills.length === 0 && d.criticalAlerts === 0;
@@ -135,7 +135,7 @@ export function DashboardMobile({
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             Moje dzisiaj
           </h2>
-          <Link href="/calendar" className="text-xs text-blue-600 font-medium">
+          <Link href="/calendar" className="text-xs text-red-800 font-medium">
             Kalendarz →
           </Link>
         </div>
@@ -184,7 +184,7 @@ export function DashboardMobile({
           <ul className="space-y-2">
             {d.recentActivity.slice(0, 3).map((log) => (
               <li key={log.id} className="flex gap-2 text-sm text-gray-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <span className="w-1.5 h-1.5 rounded-full bg-red-600 mt-1.5 shrink-0" />
                 <span>
                   <span className="font-medium text-gray-800">
                     {log.user
@@ -195,7 +195,7 @@ export function DashboardMobile({
                   {log.order && (
                     <>
                       {" · "}
-                      <span className="text-blue-600">{log.order.orderNumber}</span>
+                      <span className="text-red-800">{log.order.orderNumber}</span>
                     </>
                   )}
                   {" · "}

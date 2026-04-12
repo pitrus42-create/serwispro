@@ -57,7 +57,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   OCZEKUJACE: "bg-gray-100 text-gray-700",
-  PRZYJETE: "bg-blue-100 text-blue-700",
+  PRZYJETE: "bg-red-100 text-red-900",
   W_TOKU: "bg-amber-100 text-amber-700",
   ZAPLANOWANE: "bg-purple-100 text-purple-700",
   ZAKONCZONE: "bg-green-100 text-green-700",
@@ -66,7 +66,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const PRIORITY_COLORS: Record<string, string> = {
   NISKI: "bg-gray-100 text-gray-600",
-  NORMALNY: "bg-blue-100 text-blue-600",
+  NORMALNY: "bg-red-100 text-red-800",
   WYSOKI: "bg-orange-100 text-orange-600",
   KRYTYCZNY: "bg-red-100 text-red-700",
 };
@@ -439,7 +439,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <CheckSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Checklista</span>
             {order.checklists.length > 0 && (
-              <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-1.5">
+              <span className="text-xs bg-red-100 text-red-900 rounded-full px-1.5">
                 {order.checklists.reduce((a, c) => a + c.items.filter((i) => i.isChecked).length, 0)}/
                 {order.checklists.reduce((a, c) => a + c.items.length, 0)}
               </span>
@@ -457,7 +457,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Protokoły</span>
             {(order.protocols?.length ?? 0) > 0 && (
-              <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-1.5">
+              <span className="text-xs bg-red-100 text-red-900 rounded-full px-1.5">
                 {order.protocols.length}
               </span>
             )}
@@ -603,7 +603,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           onChange={(e) =>
                             checklistMutation.mutate({ checklistId: checklist.id, itemId: item.id, isChecked: e.target.checked })
                           }
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-blue-600"
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-red-800"
                         />
                         <span
                           className={cn(
@@ -710,12 +710,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   <div key={p.id} className="bg-white rounded-lg border p-4 flex items-center gap-3">
                     {isReport
                       ? <ImageIcon className="h-5 w-5 text-purple-500 shrink-0" />
-                      : <FileText className="h-5 w-5 text-blue-500 shrink-0" />
+                      : <FileText className="h-5 w-5 text-red-700 shrink-0" />
                     }
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-sm">{p.protocolNumber}</p>
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${isReport ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${isReport ? "bg-purple-100 text-purple-700" : "bg-red-100 text-red-900"}`}>
                           {isReport ? "Raport" : "Protokół"}
                         </span>
                       </div>
@@ -792,7 +792,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="bg-white rounded-xl border p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                <FilePlus className="h-5 w-5 text-blue-500" />
+                <FilePlus className="h-5 w-5 text-red-700" />
                 Nowy protokół
               </h3>
               {canClose && order.status !== "ZAKONCZONE" && (
@@ -1019,7 +1019,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               {order.activityLog.map((entry, index) => (
                 <div key={entry.id} className="flex gap-3 pb-4">
                   <div className="flex flex-col items-center">
-                    <div className="h-2.5 w-2.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-red-600 mt-1.5 shrink-0" />
                     {index < order.activityLog.length - 1 && (
                       <div className="flex-1 w-px bg-gray-200 mt-1" />
                     )}

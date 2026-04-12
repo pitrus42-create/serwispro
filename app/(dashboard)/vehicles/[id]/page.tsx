@@ -74,7 +74,7 @@ export default function VehicleDetailPage({ params }: { params: Promise<{ id: st
           <h1 className="text-xl font-bold text-gray-900">
             {vehicle.brand} {vehicle.model}
           </h1>
-          <p className="text-sm font-mono text-blue-600">{vehicle.plate}</p>
+          <p className="text-sm font-mono text-red-800">{vehicle.plate}</p>
         </div>
       </div>
 

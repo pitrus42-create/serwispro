@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/permissions";
 import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET() {
+  try {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -111,4 +112,8 @@ export async function GET() {
     pendingMaintenance,
     recentActivity,
   });
+  } catch (err) {
+    console.error("[dashboard] ERROR:", err);
+    return NextResponse.json({ error: "Dashboard error", message: String(err) }, { status: 500 });
+  }
 }
