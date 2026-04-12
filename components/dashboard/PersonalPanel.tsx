@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Check, StickyNote, ListChecks } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Note { id: string; content: string; createdAt: string; }
 interface Task { id: string; content: string; createdAt: string; }
@@ -42,19 +43,26 @@ export function PersonalPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
       });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${r.status}`);
+      }
       return r.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["me-notes"] });
       setNoteInput("");
     },
+    onError: (e) => toast.error(`Błąd notatki: ${e.message}`),
   });
 
   const deleteNote = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/me/notes/${id}`, { method: "DELETE" });
+      const r = await fetch(`/api/me/notes/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me-notes"] }),
+    onError: (e) => toast.error(`Błąd usunięcia: ${e.message}`),
   });
 
   const createTask = useMutation({
@@ -64,19 +72,26 @@ export function PersonalPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
       });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${r.status}`);
+      }
       return r.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["me-tasks"] });
       setTaskInput("");
     },
+    onError: (e) => toast.error(`Błąd zadania: ${e.message}`),
   });
 
   const deleteTask = useMutation({
     mutationFn: async (id: string) => {
-      await fetch(`/api/me/tasks/${id}`, { method: "DELETE" });
+      const r = await fetch(`/api/me/tasks/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me-tasks"] }),
+    onError: (e) => toast.error(`Błąd usunięcia: ${e.message}`),
   });
 
   function handleCompleteTask(id: string) {
