@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
         include: { user: { select: { id: true, firstName: true, lastName: true } } },
       },
     },
-    orderBy: { scheduledAt: "asc" },
+    orderBy: [{ dayOrder: "asc" }, { scheduledAt: "asc" }],
   });
 
   const events = orders.map((order) => {
@@ -56,10 +56,12 @@ export async function GET(req: NextRequest) {
         status: order.status,
         priority: order.priority,
         isCritical: order.isCritical,
-        clientName: order.client?.name,
+        clientName: order.client?.name ?? null,
         address,
         leadName: lead ? `${lead.user.firstName} ${lead.user.lastName}` : null,
         isMyOrder: order.assignments.some((a) => a.user.id === session.user.id),
+        dayOrder: order.dayOrder,
+        note: order.internalNotes ?? null,
         assignees: order.assignments.map((a) => ({
           id: a.user.id,
           name: `${a.user.firstName} ${a.user.lastName}`,

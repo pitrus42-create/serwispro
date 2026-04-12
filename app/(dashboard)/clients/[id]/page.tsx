@@ -1,24 +1,24 @@
 "use client";
 
-import { use } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { use, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
-  ArrowLeft,
-  Phone,
-  Mail,
-  MapPin,
-  Building2,
-  User,
-  Plus,
-  ChevronRight,
-  Clock,
+  ArrowLeft, Phone, Mail, MapPin, Building2, User,
+  Plus, ChevronRight, Clock, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { isAdmin } from "@/lib/permissions";
+import { toast } from "sonner";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const STATUS_COLORS: Record<string, string> = {
   OCZEKUJACE: "bg-gray-100 text-gray-700",
@@ -84,6 +84,21 @@ interface Client {
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { data: session } = useSession();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const canDelete = isAdmin(session?.user);
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Błąd usunięcia");
+    },
+    onSuccess: () => {
+      toast.success("Klient został usunięty");
+      router.push("/clients");
+    },
+    onError: () => toast.error("Błąd usunięcia klienta"),
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["client", id],
@@ -139,14 +154,27 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
           {client.alias && <p className="text-sm text-gray-400">{client.alias}</p>}
         </div>
-        <Button
-          size="sm"
-          onClick={() => router.push(`/orders/new?clientId=${client.id}`)}
-          className="gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Zlecenie
-        </Button>
+        <div className="flex gap-2">
+          {canDelete && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Usuń</span>
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={() => router.push(`/orders/new?clientId=${client.id}`)}
+            className="gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Zlecenie
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -291,6 +319,30 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usuń klienta</AlertDialogTitle>
+            <AlertDialogDescription>
+              Czy na pewno chcesz trwale usunąć klienta <strong>{client.name ?? client.alias ?? "bez nazwy"}</strong>?
+              <br /><br />
+              Zlecenia powiązane z tym klientem zostaną zachowane, ale stracą przypisanie do klienta.
+              Tej operacji nie można cofnąć.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => deleteMutation.mutate()}
+            >
+              Usuń trwale
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, end
 import { pl } from "date-fns/locale";
 import {
   Plus, Search, Filter, AlertTriangle, Clock, ChevronRight, X, SlidersHorizontal,
-  UserPlus, CheckCircle, Banknote,
+  UserPlus, CheckCircle, Banknote, CircleDollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,11 +59,11 @@ type DatePreset = "all" | "today" | "week" | "month";
 type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "all", label: "Wszystkie" },
   { key: "OCZEKUJACE", label: "Oczekujące" },
   { key: "PRZYJETE", label: "Przyjęte" },
   { key: "W_TOKU", label: "W toku" },
   { key: "ZAKONCZONE", label: "Zakończone" },
+  { key: "all", label: "Wszystkie" },
 ];
 
 function getDateRange(preset: DatePreset): { dateFrom?: string; dateTo?: string } {
@@ -241,7 +241,11 @@ export default function OrdersPage() {
   }
 
   const tabs = canSettle
-    ? [...TABS, { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" }]
+    ? [
+        ...TABS.slice(0, 4),
+        { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
+        TABS[4], // "Wszystkie" stays last
+      ]
     : TABS;
 
   return (
@@ -448,8 +452,8 @@ export default function OrdersPage() {
                         </span>
                       )}
                       {isUnsettled && canSettle && (
-                        <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">
-                          <Banknote className="h-3 w-3" />
+                        <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-medium">
+                          <CircleDollarSign className="h-3 w-3" />
                           Do rozliczenia
                         </span>
                       )}
@@ -494,12 +498,11 @@ export default function OrdersPage() {
                     {isUnsettled && canSettle && (
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="border-amber-400 text-amber-800 hover:bg-amber-100 gap-1 text-xs"
+                        className="bg-green-600 hover:bg-green-700 text-white gap-1 text-xs"
                         disabled={settleMutation.isPending}
                         onClick={(e) => { e.stopPropagation(); settleMutation.mutate(order.id); }}
                       >
-                        <CheckCircle className="h-3.5 w-3.5" />
+                        <CircleDollarSign className="h-3.5 w-3.5" />
                         Rozlicz
                       </Button>
                     )}
