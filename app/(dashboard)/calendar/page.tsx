@@ -474,10 +474,13 @@ export default function CalendarPage() {
           {/* Desktop month grid (md+) */}
           <div className="hidden md:block border border-gray-200 rounded-lg overflow-hidden">
             <div className="grid grid-cols-7 bg-gray-200 gap-px">
-              {MONTH_DAY_NAMES.map((name) => (
+              {MONTH_DAY_NAMES.map((name, i) => (
                 <div
                   key={name}
-                  className="bg-gray-50 text-center text-xs font-medium text-gray-500 py-2"
+                  className={cn(
+                    "text-center text-xs font-medium text-gray-500 py-2",
+                    i >= 5 ? "bg-amber-50" : "bg-gray-50"
+                  )}
                 >
                   {name}
                 </div>
@@ -486,13 +489,16 @@ export default function CalendarPage() {
                 const dayOrders = ordersForDay(day);
                 const inMonth = isSameMonth(day, currentDate);
                 const today = isToday(day);
+                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
 
                 return (
                   <div
                     key={day.toISOString()}
                     className={cn(
-                      "bg-white min-h-[90px] p-1.5",
-                      !inMonth && "bg-gray-50"
+                      "min-h-[90px] p-1.5",
+                      isWeekend
+                        ? inMonth ? "bg-amber-50" : "bg-amber-100/60"
+                        : inMonth ? "bg-white" : "bg-gray-50"
                     )}
                   >
                     <div
@@ -539,10 +545,13 @@ export default function CalendarPage() {
           {/* Mobile month grid (< md) */}
           <div className="md:hidden">
             <div className="grid grid-cols-7">
-              {MONTH_DAY_NAMES.map((name) => (
+              {MONTH_DAY_NAMES.map((name, i) => (
                 <div
                   key={name}
-                  className="text-center text-[10px] text-gray-400 py-1 font-medium"
+                  className={cn(
+                    "text-center text-[10px] py-1 font-medium",
+                    i >= 5 ? "text-amber-700" : "text-gray-400"
+                  )}
                 >
                   {name}
                 </div>
@@ -552,6 +561,7 @@ export default function CalendarPage() {
                 const inMonth = isSameMonth(day, currentDate);
                 const today = isToday(day);
                 const isSelected = selectedDay != null && isSameDay(day, selectedDay);
+                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
 
                 return (
                   <div
@@ -563,6 +573,7 @@ export default function CalendarPage() {
                     className={cn(
                       "flex flex-col items-center py-1 rounded-lg cursor-pointer",
                       !inMonth && "opacity-20 pointer-events-none",
+                      isWeekend && !isSelected && "bg-amber-50",
                       isSelected && "bg-red-50 ring-1 ring-red-200"
                     )}
                   >

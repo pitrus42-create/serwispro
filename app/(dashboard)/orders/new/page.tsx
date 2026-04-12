@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -154,12 +154,22 @@ function ClientSearch({
 
 export default function NewOrderPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
 
+  const initialDate = searchParams.get("scheduledAt"); // yyyy-MM-dd
+  const initialType = searchParams.get("type") ?? undefined;
+
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { priority: "NORMALNY", isCritical: false, helperIds: [] },
+    defaultValues: {
+      priority: "NORMALNY",
+      isCritical: false,
+      helperIds: [],
+      type: initialType,
+      scheduledAt: initialDate ? `${initialDate}T08:00` : undefined,
+    },
   });
 
   const watchType = watch("type");

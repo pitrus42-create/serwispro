@@ -147,7 +147,7 @@ export default function OrdersPage() {
     (session.user as { role?: string }).role === "ADMIN"
   );
 
-  const [activeTab, setActiveTab] = useState<TabKey>("all");
+  const [activeTab, setActiveTab] = useState<TabKey>("OCZEKUJACE");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
   const [priority, setPriority] = useState("all");
