@@ -185,7 +185,7 @@ function NewOrderForm() {
 
   const [users, setUsers] = useState<User[]>([]);
   useEffect(() => {
-    fetch("/api/users").then((r) => r.json()).then((d) => setUsers(d.data ?? []));
+    fetch("/api/users?status=ACTIVE&limit=100").then((r) => r.json()).then((d) => setUsers(d.data ?? []));
   }, []);
 
   useEffect(() => {

@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Save, KeyRound, UserX, UserCheck } from "lucide-react";
+import { ArrowLeft, Save, KeyRound, UserX, UserCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { isSuperAdmin } from "@/lib/permissions";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -343,10 +353,23 @@ function RolesTab({ user }: { user: UserDetail }) {
   );
 }
 
-function SecurityTab({ user }: { user: UserDetail }) {
+function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => void }) {
   const queryClient = useQueryClient();
   const [resetOpen, setResetOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [hardDeleteOpen, setHardDeleteOpen] = useState(false);
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/users/${user.id}/hard-delete`, { method: "POST" });
+      if (!r.ok) throw new Error((await r.json()).error);
+    },
+    onSuccess: () => {
+      toast.success("Użytkownik został trwale usunięty.");
+      onDeleted();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const blockMutation = useMutation({
     mutationFn: async (action: "block" | "unblock") => {
@@ -484,6 +507,49 @@ function SecurityTab({ user }: { user: UserDetail }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Permanent delete */}
+      {!user.roleAssignments.some((ra) => ra.role.name === "SUPERADMIN") && (
+        <div className="border-t pt-5 mt-2">
+          <p className="text-xs text-gray-400 mb-3">
+            Trwałe usunięcie usuwa konto z bazy danych. Możliwe tylko jeśli użytkownik nie jest autorem żadnych zleceń.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 text-red-600 border-red-200 hover:bg-red-50"
+            onClick={() => setHardDeleteOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Usuń trwale
+          </Button>
+        </div>
+      )}
+
+      <AlertDialog open={hardDeleteOpen} onOpenChange={setHardDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Trwałe usunięcie konta</AlertDialogTitle>
+            <AlertDialogDescription>
+              Czy na pewno chcesz trwale usunąć konto{" "}
+              <strong>{user.firstName} {user.lastName}</strong>?
+              <br /><br />
+              Tej operacji nie można cofnąć. Użytkownik nie będzie mógł się zalogować
+              i nie będzie pojawiał się na listach.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => hardDeleteMutation.mutate()}
+              disabled={hardDeleteMutation.isPending}
+            >
+              {hardDeleteMutation.isPending ? "Usuwanie..." : "Usuń trwale"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -569,7 +635,7 @@ export default function EditUserPage() {
 
         <TabsContent value="security">
           <div className="bg-white rounded-xl border p-5">
-            <SecurityTab user={user} />
+            <SecurityTab user={user} onDeleted={() => router.push("/settings/users")} />
           </div>
         </TabsContent>
       </Tabs>
