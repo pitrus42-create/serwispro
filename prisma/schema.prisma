@@ -32,6 +32,8 @@ model User {
   archivedBy          String?
   anonymizedAt        DateTime?
   notifications       Notification[]
+  personalNotes       UserNote[]
+  personalTasks       UserTask[]
   ordersCreated       Order[]                  @relation("OrderCreatedBy")
   activityLogs        OrderActivityLog[]
   orderAssignments    OrderAssignment[]
@@ -496,6 +498,26 @@ model QuoteSubmission {
   submittedAt         DateTime  @default(now())
   ipAddress           String?
   form                QuoteForm @relation(fields: [formId], references: [id])
+}
+
+model UserNote {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserTask {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model AuditLog {

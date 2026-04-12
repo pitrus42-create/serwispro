@@ -17,6 +17,7 @@ import { ORDER_TYPE_CONFIG } from "@/constants/colors";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { canDo } from "@/lib/permissions";
+import { PersonalPanel } from "./PersonalPanel";
 import type { DashboardData } from "./types";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -165,6 +166,9 @@ export function DashboardMobile({
           </ul>
         )}
       </section>
+
+      {/* Personal notes & tasks */}
+      <PersonalPanel />
 
       {/* Secondary ghost actions */}
       <div className="flex gap-2 flex-wrap pb-2">

@@ -22,6 +22,7 @@ import { ORDER_TYPE_CONFIG } from "@/constants/colors";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { isAdmin } from "@/lib/permissions";
+import { PersonalPanel } from "./PersonalPanel";
 import type { DashboardData } from "./types";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -87,7 +88,9 @@ export function DashboardDesktop({
   const [activityFilter, setActivityFilter] = useState<string>("all");
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="flex gap-6 max-w-7xl mx-auto items-start">
+      {/* ── Main content ──────────────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 space-y-6">
       {/* Critical alert banner */}
       {d.criticalAlerts > 0 && (
         <Link href="/orders?critical=true">
@@ -340,6 +343,13 @@ export function DashboardDesktop({
             </CardContent>
           </Card>
         )}
+      </div>
+      </div>
+      {/* ── end main content ── */}
+
+      {/* ── Personal sidebar ──────────────────────────────────────────── */}
+      <div className="w-72 shrink-0">
+        <PersonalPanel />
       </div>
     </div>
   );
