@@ -4,12 +4,60 @@
   --background: #f9fafb;
   --foreground: #111827;
   --sidebar-width: 240px;
+
+  /* Shadcn UI – popover / dropdown */
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+
+  /* Shadcn UI – card */
+  --card: #ffffff;
+  --card-foreground: #111827;
+
+  /* Shadcn UI – borders & inputs */
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #8B1A1A;
+
+  /* Shadcn UI – primary */
+  --primary: #8B1A1A;
+  --primary-foreground: #ffffff;
+
+  /* Shadcn UI – secondary / muted / accent */
+  --secondary: #f3f4f6;
+  --secondary-foreground: #111827;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #f3f4f6;
+  --accent-foreground: #111827;
+
+  /* Shadcn UI – destructive */
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
+
+  /* Shadcn UI color tokens */
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 }
 
 body {
@@ -28,4 +76,12 @@ body {
 /* Mobile safe areas */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

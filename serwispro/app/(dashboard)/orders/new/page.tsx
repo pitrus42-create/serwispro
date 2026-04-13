@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,45 +37,159 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-interface Client { id: string; name: string; }
+interface Client { id: string; name: string | null; alias: string | null; phone: string | null; }
 interface Location { id: string; name: string; address: string | null; }
 interface User { id: string; firstName: string; lastName: string; }
 
+// ── Client autocomplete ────────────────────────────────────────────────────
+
+function ClientSearch({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (clientId: string | undefined, client: Client | undefined) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Client[]>([]);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Client | undefined>();
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const down = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", down);
+    return () => document.removeEventListener("mousedown", down);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); setOpen(false); return; }
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/clients?q=${encodeURIComponent(query)}&limit=8`);
+        const d = await r.json();
+        setResults(d.data ?? []);
+        setOpen(true);
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function select(c: Client) {
+    setSelected(c);
+    setQuery("");
+    setOpen(false);
+    onChange(c.id, c);
+  }
+
+  function clear() {
+    setSelected(undefined);
+    setQuery("");
+    onChange(undefined, undefined);
+  }
+
+  function clientLabel(c: Client) {
+    const parts = [c.name, c.alias].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "Klient bez nazwy";
+  }
+
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-gray-50">
+        <div>
+          <p className="text-sm font-medium text-gray-900">{clientLabel(selected)}</p>
+          {selected.phone && <p className="text-xs text-gray-500">{selected.phone}</p>}
+        </div>
+        <button type="button" onClick={clear} className="text-gray-400 hover:text-gray-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="Szukaj po nazwie, telefonie, pseudonimie..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="pl-9"
+          autoComplete="off"
+        />
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {loading ? (
+            <div className="px-3 py-2 text-sm text-gray-500">Szukam...</div>
+          ) : results.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">Brak wyników</div>
+          ) : (
+            results.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => select(c)}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-sm font-medium text-gray-900">{clientLabel(c)}</p>
+                {c.phone && <p className="text-xs text-gray-500">{c.phone}</p>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function NewOrderPage() {
+  return (
+    <Suspense fallback={<div className="p-6 max-w-2xl mx-auto space-y-4">{[...Array(4)].map((_,i)=><div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse"/>)}</div>}>
+      <NewOrderForm />
+    </Suspense>
+  );
+}
+
+function NewOrderForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
 
+  const initialDate = searchParams.get("scheduledAt"); // yyyy-MM-dd
+  const initialType = searchParams.get("type") ?? undefined;
+
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { priority: "NORMALNY", isCritical: false, helperIds: [] },
+    defaultValues: {
+      priority: "NORMALNY",
+      isCritical: false,
+      helperIds: [],
+      type: initialType,
+      scheduledAt: initialDate ? `${initialDate}T08:00` : undefined,
+    },
   });
 
   const watchType = watch("type");
   const watchClientId = watch("clientId");
-  const watchIsCritical = watch("isCritical");
 
-  const { data: clientsData } = useQuery({
-    queryKey: ["clients-list"],
-    queryFn: async () => {
-      const r = await fetch("/api/clients?limit=100");
-      return r.json();
-    },
-  });
-
-  const { data: usersData } = useQuery({
-    queryKey: ["users-list"],
-    queryFn: async () => {
-      const r = await fetch("/api/users");
-      return r.json();
-    },
-  });
-
-  const clients: Client[] = clientsData?.data ?? [];
-  const users: User[] = usersData?.data ?? [];
+  const [users, setUsers] = useState<User[]>([]);
+  useEffect(() => {
+    fetch("/api/users?status=ACTIVE&limit=100").then((r) => r.json()).then((d) => setUsers(d.data ?? []));
+  }, []);
 
   useEffect(() => {
-    if (!watchClientId || watchClientId === "none") { setLocations([]); return; }
+    if (!watchClientId) { setLocations([]); return; }
     fetch(`/api/clients/${watchClientId}/locations`)
       .then((r) => r.json())
       .then((d) => setLocations(d.data ?? []))
@@ -194,27 +307,17 @@ export default function NewOrderPage() {
           <Textarea id="description" {...register("description")} rows={3} placeholder="Dokładny opis zlecenia..." />
         </div>
 
-        {/* Client */}
+        {/* Client autocomplete */}
         <div className="space-y-1.5">
           <Label>Klient</Label>
           <Controller
             name="clientId"
             control={control}
             render={({ field }) => (
-              <Select
-                onValueChange={(v) => field.onChange(v === "none" ? undefined : v)}
-                value={field.value ?? "none"}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Wybierz klienta..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— brak klienta —</SelectItem>
-                  {clients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ClientSearch
+                value={field.value}
+                onChange={(clientId, _client) => field.onChange(clientId)}
+              />
             )}
           />
         </div>

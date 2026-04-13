@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/permissions";
 import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET() {
+  try {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -90,19 +91,15 @@ export async function GET() {
       : Promise.resolve(0),
     // Recent activity
     prisma.orderActivityLog.findMany({
-      where: userFilter
-        ? {
-            order: {
-              assignments: { some: { userId: session.user.id } },
-            },
-          }
-        : {},
+      where: admin
+        ? {}
+        : { order: { assignments: { some: { userId: session.user.id } } } },
       include: {
         user: { select: { firstName: true, lastName: true } },
         order: { select: { orderNumber: true, type: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 5,
+      take: 10,
     }),
   ]);
 
@@ -115,4 +112,8 @@ export async function GET() {
     pendingMaintenance,
     recentActivity,
   });
+  } catch (err) {
+    console.error("[dashboard] ERROR:", err);
+    return NextResponse.json({ error: "Dashboard error", message: String(err) }, { status: 500 });
+  }
 }

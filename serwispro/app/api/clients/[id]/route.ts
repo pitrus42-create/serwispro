@@ -58,6 +58,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  await prisma.client.update({ where: { id }, data: { isActive: false } });
-  return NextResponse.json({ message: "Deactivated" });
+  // Hard delete — orders keep their data but lose clientId reference (SET NULL via FK)
+  await prisma.client.delete({ where: { id } });
+  return NextResponse.json({ message: "Deleted" });
 }

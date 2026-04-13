@@ -78,8 +78,8 @@ export default function VehiclesPage() {
                 )}
               >
                 <div className="flex items-start gap-4">
-                  <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-                    <Car className="h-6 w-6 text-blue-600" />
+                  <div className="h-12 w-12 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                    <Car className="h-6 w-6 text-red-800" />
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -90,7 +90,7 @@ export default function VehiclesPage() {
                         <AlertTriangle className="h-4 w-4 text-amber-500" />
                       )}
                     </div>
-                    <p className="text-sm font-mono text-blue-600 mt-0.5">{v.plate}</p>
+                    <p className="text-sm font-mono text-red-800 mt-0.5">{v.plate}</p>
                     <div className="flex flex-wrap gap-4 mt-2 text-xs">
                       {v.insuranceExpiry && (
                         <span className={cn(

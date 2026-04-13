@@ -2,9 +2,9 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Building2, Users, Save } from "lucide-react";
+import { Building2, Users, Save, Shield, Upload, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,20 +17,24 @@ interface CompanySettings {
   phone: string | null;
   email: string | null;
   nip: string | null;
+  logoUrl: string | null;
 }
 
 interface User {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null;
+  login: string | null;
   phone: string | null;
-  isActive: boolean;
-  roles: Array<{ role: string }>;
+  accountStatus: string;
+  roleAssignments: Array<{ role: { name: string; displayName: string } }>;
 }
 
 function CompanyTab() {
   const queryClient = useQueryClient();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   const { data } = useQuery({
     queryKey: ["company-settings"],
     queryFn: async () => {
@@ -64,35 +68,95 @@ function CompanyTab() {
     onError: () => toast.error("Błąd zapisu danych"),
   });
 
+  const logoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("logo", file);
+      const r = await fetch("/api/settings/company/logo", { method: "POST", body: fd });
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.error ?? "Błąd uploadu");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["company-settings"] });
+      toast.success("Logo zostało zaktualizowane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
-    <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4 max-w-lg">
-      <div className="space-y-1.5">
-        <Label htmlFor="name">Nazwa firmy</Label>
-        <Input id="name" {...register("name")} placeholder="SerwisPro Sp. z o.o." />
+    <div className="space-y-6 max-w-lg">
+      {/* Logo section */}
+      <div className="space-y-3">
+        <Label>Logo firmy</Label>
+        <div className="flex items-center gap-4">
+          <div className="w-24 h-16 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center bg-gray-50 overflow-hidden">
+            {settings.logoUrl ? (
+              <img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
+            ) : (
+              <ImageIcon className="w-8 h-8 text-gray-300" />
+            )}
+          </div>
+          <div className="space-y-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={logoMutation.isPending}
+              onClick={() => logoInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {logoMutation.isPending ? "Przesyłanie..." : "Zmień logo"}
+            </Button>
+            <p className="text-xs text-gray-400">PNG, JPG lub SVG, max 2 MB</p>
+            <p className="text-xs text-gray-400">Pojawi się na protokołach serwisowych</p>
+          </div>
+        </div>
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) logoMutation.mutate(file);
+            e.target.value = "";
+          }}
+        />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="address">Adres</Label>
-        <Input id="address" {...register("address")} placeholder="ul. Przykładowa 1, 00-001 Warszawa" />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
+
+      <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="phone">Telefon</Label>
-          <Input id="phone" {...register("phone")} placeholder="+48 22 123 45 67" />
+          <Label htmlFor="name">Nazwa firmy</Label>
+          <Input id="name" {...register("name")} placeholder="SerwisPro Sp. z o.o." />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="nip">NIP</Label>
-          <Input id="nip" {...register("nip")} placeholder="1234567890" />
+          <Label htmlFor="address">Adres</Label>
+          <Input id="address" {...register("address")} placeholder="ul. Przykładowa 1, 00-001 Warszawa" />
         </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" type="email" {...register("email")} placeholder="biuro@firma.pl" />
-      </div>
-      <Button type="submit" disabled={mutation.isPending} className="gap-2">
-        <Save className="h-4 w-4" />
-        {mutation.isPending ? "Zapisywanie..." : "Zapisz"}
-      </Button>
-    </form>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">Telefon</Label>
+            <Input id="phone" {...register("phone")} placeholder="+48 22 123 45 67" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nip">NIP</Label>
+            <Input id="nip" {...register("nip")} placeholder="1234567890" />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" {...register("email")} placeholder="biuro@firma.pl" />
+        </div>
+        <Button type="submit" disabled={mutation.isPending} className="gap-2">
+          <Save className="h-4 w-4" />
+          {mutation.isPending ? "Zapisywanie..." : "Zapisz dane firmy"}
+        </Button>
+      </form>
+    </div>
   );
 }
 
@@ -108,10 +172,15 @@ function UsersTab() {
 
   const users: User[] = data?.data ?? [];
 
-  const ROLE_LABELS: Record<string, string> = {
-    ADMIN: "Administrator",
-    SERWISANT: "Serwisant",
-    MAGAZYN: "Magazyn",
+  const STATUS_COLORS: Record<string, string> = {
+    ACTIVE: "bg-green-100 text-green-700",
+    BLOCKED: "bg-red-100 text-red-700",
+    ARCHIVED: "bg-gray-100 text-gray-500",
+  };
+  const STATUS_LABELS: Record<string, string> = {
+    ACTIVE: "Aktywny",
+    BLOCKED: "Zablokowany",
+    ARCHIVED: "Zarchiwizowany",
   };
 
   return (
@@ -131,25 +200,107 @@ function UsersTab() {
       ) : (
         <div className="space-y-2">
           {users.map((user) => (
-            <div key={user.id} className="bg-white rounded-lg border p-4 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm shrink-0">
+            <div
+              key={user.id}
+              className="bg-white rounded-lg border p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
+              onClick={() => router.push(`/settings/users/${user.id}`)}
+            >
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-900 font-semibold text-sm shrink-0">
                 {user.firstName[0]}{user.lastName[0]}
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-medium">{user.firstName} {user.lastName}</p>
-                <p className="text-sm text-gray-500">{user.email}</p>
+                <p className="text-sm text-gray-500 truncate">{user.email ?? user.login ?? "—"}</p>
               </div>
-              <div className="flex gap-1 flex-wrap justify-end">
-                {user.roles.map((r) => (
-                  <span key={r.role} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                    {ROLE_LABELS[r.role] ?? r.role}
+              <div className="flex gap-1 flex-wrap justify-end items-center">
+                {user.roleAssignments?.map((ra) => (
+                  <span key={ra.role.name} className="text-xs bg-red-100 text-red-900 px-2 py-0.5 rounded-full">
+                    {ra.role.displayName}
                   </span>
                 ))}
+                <span className={`text-xs px-2 py-0.5 rounded-full ml-1 ${STATUS_COLORS[user.accountStatus] ?? "bg-gray-100 text-gray-500"}`}>
+                  {STATUS_LABELS[user.accountStatus] ?? user.accountStatus}
+                </span>
               </div>
             </div>
           ))}
         </div>
       )}
+      <div className="mt-3 text-right">
+        <Button variant="outline" size="sm" onClick={() => router.push("/settings/users")}>
+          Zarządzaj użytkownikami →
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RolesTab() {
+  const router = useRouter();
+  const { data, isLoading } = useQuery({
+    queryKey: ["roles"],
+    queryFn: async () => {
+      const r = await fetch("/api/roles");
+      return r.json();
+    },
+  });
+
+  const roles: Array<{
+    id: string;
+    name: string;
+    displayName: string;
+    description: string | null;
+    isSystem: boolean;
+    _count: { userRoleAssignments: number; rolePermissions: number };
+  }> = data?.data ?? [];
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-sm text-gray-500">{roles.length} ról w systemie</p>
+        <Button size="sm" onClick={() => router.push("/settings/roles/new")}>
+          Nowa rola
+        </Button>
+      </div>
+      {isLoading ? (
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {roles.map((role) => (
+            <div
+              key={role.id}
+              className="bg-white rounded-lg border p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-50"
+              onClick={() => router.push(`/settings/roles/${role.id}`)}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{role.displayName}</p>
+                  <span className="text-xs text-gray-400 font-mono">{role.name}</span>
+                  {role.isSystem && (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Systemowa</span>
+                  )}
+                </div>
+                {role.description && (
+                  <p className="text-sm text-gray-500 truncate">{role.description}</p>
+                )}
+              </div>
+              <div className="text-xs text-gray-400 shrink-0 text-right">
+                <p>{role._count.userRoleAssignments} użytk.</p>
+                <p>{role._count.rolePermissions} uprawn.</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mt-3 text-right">
+        <Button variant="outline" size="sm" onClick={() => router.push("/settings/roles")}>
+          Zarządzaj rolami →
+        </Button>
+      </div>
     </div>
   );
 }
@@ -169,6 +320,10 @@ export default function SettingsPage() {
             <Users className="h-4 w-4" />
             Użytkownicy
           </TabsTrigger>
+          <TabsTrigger value="roles" className="gap-2">
+            <Shield className="h-4 w-4" />
+            Role
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="company">
@@ -183,6 +338,10 @@ export default function SettingsPage() {
             <h2 className="font-semibold text-gray-800 mb-4">Zarządzanie użytkownikami</h2>
             <UsersTab />
           </div>
+        </TabsContent>
+
+        <TabsContent value="roles">
+          <RolesTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       include: {
         _count: { select: { orders: true, locations: true } },
       },
-      orderBy: { name: "asc" },
+      orderBy: [{ name: "asc" }, { createdAt: "desc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
@@ -47,12 +47,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { type, name, nip, phone, phoneAlt, email, alias, notes } = body;
 
-  if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
-
   const client = await prisma.client.create({
     data: {
       type: type ?? "company",
-      name,
+      name: name ?? null,
       nip: nip ?? null,
       phone: phone ?? null,
       phoneAlt: phoneAlt ?? null,

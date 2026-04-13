@@ -22,7 +22,7 @@ import {
 
 const schema = z.object({
   type: z.string().min(1),
-  name: z.string().min(1, "Nazwa jest wymagana"),
+  name: z.string().optional(),
   alias: z.string().optional(),
   nip: z.string().optional(),
   phone: z.string().optional(),
@@ -96,19 +96,18 @@ export default function NewClientPage() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="name">Nazwa *</Label>
+          <Label htmlFor="name">Nazwa</Label>
           <Input
             id="name"
             {...register("name")}
             placeholder="Nazwa firmy lub imię i nazwisko"
-            className={errors.name ? "border-red-500" : ""}
           />
-          {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="alias">Skrócona nazwa / alias</Label>
-          <Input id="alias" {...register("alias")} placeholder="Np. ABC Corp" />
+          <Label htmlFor="alias">Wewnętrzna nazwa / pseudonim</Label>
+          <Input id="alias" {...register("alias")} placeholder="Np. skrócona nazwa do wyszukiwania..." />
+          <p className="text-xs text-gray-400">Widoczna tylko wewnętrznie — nie pojawia się w protokołach</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

@@ -15,6 +15,7 @@ export const authConfig: NextAuthConfig = {
 
       const isPublicRoute =
         pathname === "/login" ||
+        pathname === "/change-password" ||
         pathname.startsWith("/quote/") ||
         pathname.startsWith("/api/public/") ||
         pathname.startsWith("/api/auth/") ||
@@ -24,7 +25,21 @@ export const authConfig: NextAuthConfig = {
         pathname.startsWith("/manifest");
 
       if (isPublicRoute) return true;
-      return isLoggedIn;
+      if (!isLoggedIn) return false;
+
+      // Force password change — redirect to /change-password
+      // mustChangePassword is stored in JWT so no DB call needed here
+      const mustChangePassword =
+        (auth?.user as { mustChangePassword?: boolean })?.mustChangePassword ??
+        false;
+
+      if (mustChangePassword && pathname !== "/change-password") {
+        return Response.redirect(
+          new URL("/change-password", request.url)
+        );
+      }
+
+      return true;
     },
   },
 };

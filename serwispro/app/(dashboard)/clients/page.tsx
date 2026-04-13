@@ -82,11 +82,11 @@ export default function ClientsPage() {
               onClick={() => router.push(`/clients/${client.id}`)}
               className="bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-shadow flex items-center gap-3"
             >
-              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                 {client.type === "OSOBA_PRYWATNA" ? (
-                  <User className="h-5 w-5 text-blue-600" />
+                  <User className="h-5 w-5 text-red-800" />
                 ) : (
-                  <Building2 className="h-5 w-5 text-blue-600" />
+                  <Building2 className="h-5 w-5 text-red-800" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
