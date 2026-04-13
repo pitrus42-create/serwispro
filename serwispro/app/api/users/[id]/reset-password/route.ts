@@ -51,15 +51,18 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const hash = await bcrypt.hash(newPassword, 12);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const userUpdateData: any = {
+    passwordHash: hash,
+    mustChangePassword: true,
+    passwordChangedAt: new Date(),
+    tempPasswordPlain: newPassword,
+  };
+
   await prisma.$transaction([
     prisma.user.update({
       where: { id },
-      data: {
-        passwordHash: hash,
-        mustChangePassword: true,
-        passwordChangedAt: new Date(),
-        tempPasswordPlain: newPassword,
-      },
+      data: userUpdateData,
     }),
     prisma.passwordReset.create({
       data: {
