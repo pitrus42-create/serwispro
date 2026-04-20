@@ -51,28 +51,40 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const hash = await bcrypt.hash(newPassword, 12);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userUpdateData: any = {
-    passwordHash: hash,
-    mustChangePassword: false,
-    passwordChangedAt: new Date(),
-    tempPasswordPlain: newPassword,
-  };
+  // Critical: update the password hash
+  await prisma.user.update({
+    where: { id },
+    data: {
+      passwordHash: hash,
+      mustChangePassword: false,
+      passwordChangedAt: new Date(),
+    },
+  });
 
-  await prisma.$transaction([
-    prisma.user.update({
+  // Non-critical: store plain temp password for superadmin view
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma.user.update as any)({
       where: { id },
-      data: userUpdateData,
-    }),
-    prisma.passwordReset.create({
+      data: { tempPasswordPlain: newPassword },
+    });
+  } catch {
+    // Column may not exist in remote DB — not a blocking error
+  }
+
+  // Non-critical: log the reset token
+  try {
+    await prisma.passwordReset.create({
       data: {
         userId: id,
         token: crypto.randomUUID(),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         createdBy: session.user.id,
       },
-    }),
-  ]);
+    });
+  } catch {
+    // Table may not exist in remote DB — not a blocking error
+  }
 
   await logAudit({
     userId: session.user.id,
