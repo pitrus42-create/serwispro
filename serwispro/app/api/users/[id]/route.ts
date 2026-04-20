@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin, isSuperAdmin } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";
 import { checkCanManageTarget, checkNotSuperAdmin } from "@/lib/user-guards";
-import { USER_INCLUDE, sanitizeUser } from "@/app/api/users/route";
+import { USER_INCLUDE, sanitizeUser, sanitizeUserSuperAdmin } from "@/app/api/users/route";
 import { NextRequest, NextResponse } from "next/server";
 
 type Params = { params: Promise<{ id: string }> };
@@ -40,7 +40,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   }
 
   return NextResponse.json({
-    data: sanitizeUser(user as unknown as Record<string, unknown>, isSuperAdmin(session.user)),
+    data: isSuperAdmin(session.user)
+      ? sanitizeUserSuperAdmin(user as unknown as Record<string, unknown>)
+      : sanitizeUser(user as unknown as Record<string, unknown>),
   });
 }
 

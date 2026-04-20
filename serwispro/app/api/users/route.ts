@@ -17,12 +17,16 @@ export const USER_INCLUDE = {
   userSettings: true,
 } as const;
 
-export function sanitizeUser(user: Record<string, unknown>, includeTempPassword = false) {
+export function sanitizeUser(user: Record<string, unknown>) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash, tempPasswordPlain, ...safe } = user;
-  if (includeTempPassword) {
-    return { ...safe, tempPasswordPlain: tempPasswordPlain ?? null };
-  }
+  void tempPasswordPlain; // stripped by default — use sanitizeUserSuperAdmin for super admin
+  return safe;
+}
+
+export function sanitizeUserSuperAdmin(user: Record<string, unknown>) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { passwordHash, ...safe } = user;
   return safe;
 }
 
