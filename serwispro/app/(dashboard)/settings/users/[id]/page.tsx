@@ -399,7 +399,8 @@ function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => v
       if (!r.ok) throw new Error((await r.json()).error);
     },
     onSuccess: () => {
-      toast.success("Hasło zresetowane. Użytkownik musi je zmienić przy logowaniu.");
+      toast.success("Hasło zresetowane. Użytkownik może się zalogować nowym hasłem.");
+      queryClient.invalidateQueries({ queryKey: ["user", user.id] });
       setResetOpen(false);
       setNewPassword("");
     },
@@ -513,7 +514,7 @@ function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => v
             <DialogTitle>Resetuj hasło</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5 py-2">
-            <Label>Nowe hasło tymczasowe</Label>
+            <Label>Nowe hasło</Label>
             <Input
               type="text"
               value={newPassword}
@@ -521,7 +522,7 @@ function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => v
               placeholder="min. 8 znaków, wielka litera, cyfra, znak specjalny"
             />
             <p className="text-xs text-gray-500">
-              Przekaż hasło użytkownikowi — będzie musiał je zmienić przy logowaniu.
+              Przekaż hasło użytkownikowi — może się zalogować podanym hasłem.
             </p>
           </div>
           <DialogFooter>

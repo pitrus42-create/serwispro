@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const userUpdateData: any = {
     passwordHash: hash,
-    mustChangePassword: true,
+    mustChangePassword: false,
     passwordChangedAt: new Date(),
     tempPasswordPlain: newPassword,
   };
