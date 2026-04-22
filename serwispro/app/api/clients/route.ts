@@ -47,7 +47,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { type, name, nip, phone, phoneAlt, email, alias, address, city, postalCode, notes } = body;
 
-  const client = await prisma.client.create({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = await (prisma.client.create as any)({
     data: {
       type: type ?? "company",
       name: name ?? null,

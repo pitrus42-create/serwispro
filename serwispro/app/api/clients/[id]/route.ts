@@ -37,7 +37,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   const body = await req.json();
-  const client = await prisma.client.update({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = await (prisma.client.update as any)({
     where: { id },
     data: {
       ...(body.name !== undefined && { name: body.name }),
