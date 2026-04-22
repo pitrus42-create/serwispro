@@ -1,24 +1,33 @@
 "use client";
 
 import { use, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
   ArrowLeft, Phone, Mail, MapPin, Building2, User,
-  Plus, ChevronRight, Clock, Trash2,
+  Plus, ChevronRight, Clock, Trash2, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, hasRole } from "@/lib/permissions";
 import { toast } from "sonner";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 const STATUS_COLORS: Record<string, string> = {
   OCZEKUJACE: "bg-gray-100 text-gray-700",
@@ -50,6 +59,8 @@ interface Location {
   id: string;
   name: string;
   address: string | null;
+  city: string | null;
+  postalCode: string | null;
   systemType: string | null;
   nextMaintenanceDate: string | null;
   isActive: boolean;
@@ -76,17 +87,276 @@ interface Client {
   email: string | null;
   nip: string | null;
   address: string | null;
+  city: string | null;
+  postalCode: string | null;
   notes: string | null;
   locations: Location[];
   orders: Order[];
 }
 
+// ── Edit Client Dialog ──────────────────────────────────────────────────────
+
+function EditClientDialog({
+  client,
+  open,
+  onClose,
+  onSaved,
+}: {
+  client: Client;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    type: client.type,
+    name: client.name ?? "",
+    alias: client.alias ?? "",
+    nip: client.nip ?? "",
+    phone: client.phone ?? "",
+    phoneAlt: client.phoneAlt ?? "",
+    email: client.email ?? "",
+    address: client.address ?? "",
+    city: client.city ?? "",
+    postalCode: client.postalCode ?? "",
+    notes: client.notes ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body: Record<string, string | null> = {};
+      for (const [k, v] of Object.entries(form)) {
+        body[k] = v.trim() === "" ? null : v.trim();
+      }
+      const r = await fetch(`/api/clients/${client.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu");
+      toast.success("Dane klienta zostały zaktualizowane");
+      onSaved();
+      onClose();
+    } catch {
+      toast.error("Nie udało się zapisać zmian");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edytuj klienta</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Typ klienta</Label>
+            <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="FIRMA">Firma</SelectItem>
+                <SelectItem value="OSOBA_PRYWATNA">Osoba prywatna</SelectItem>
+                <SelectItem value="INSTYTUCJA">Instytucja</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Nazwa</Label>
+            <Input value={form.name} onChange={set("name")} placeholder="Nazwa firmy lub imię i nazwisko" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Wewnętrzna nazwa / pseudonim</Label>
+            <Input value={form.alias} onChange={set("alias")} placeholder="Skrócona nazwa do wyszukiwania..." />
+            <p className="text-xs text-gray-400">Widoczna tylko wewnętrznie — nie pojawia się w protokołach</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Telefon</Label>
+              <Input value={form.phone} onChange={set("phone")} placeholder="+48 600 100 200" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Telefon alternatywny</Label>
+              <Input value={form.phoneAlt} onChange={set("phoneAlt")} placeholder="+48 22 100 200" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input type="email" value={form.email} onChange={set("email")} placeholder="kontakt@firma.pl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>NIP</Label>
+              <Input value={form.nip} onChange={set("nip")} placeholder="1234567890" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Ulica / adres</Label>
+            <Input value={form.address} onChange={set("address")} placeholder="ul. Przykładowa 1" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Kod pocztowy</Label>
+              <Input value={form.postalCode} onChange={set("postalCode")} placeholder="00-001" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Miasto</Label>
+              <Input value={form.city} onChange={set("city")} placeholder="Warszawa" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notatki</Label>
+            <Textarea value={form.notes} onChange={set("notes")} rows={3} placeholder="Dodatkowe informacje..." />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Anuluj</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Zapisywanie..." : "Zapisz zmiany"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Add Location Dialog ─────────────────────────────────────────────────────
+
+function AddLocationDialog({
+  clientId,
+  open,
+  onClose,
+  onSaved,
+}: {
+  clientId: string;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: "",
+    address: "",
+    city: "",
+    postalCode: "",
+    technicalNote: "",
+    systemsNote: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      toast.error("Nazwa lokalizacji jest wymagana");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/clients/${clientId}/locations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          address: form.address.trim() || null,
+          city: form.city.trim() || null,
+          postalCode: form.postalCode.trim() || null,
+          technicalNote: form.technicalNote.trim() || null,
+          systemsNote: form.systemsNote.trim() || null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu");
+      toast.success("Lokalizacja została dodana");
+      setForm({ name: "", address: "", city: "", postalCode: "", technicalNote: "", systemsNote: "" });
+      onSaved();
+      onClose();
+    } catch {
+      toast.error("Nie udało się dodać lokalizacji");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Dodaj lokalizację</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Nazwa lokalizacji *</Label>
+            <Input value={form.name} onChange={set("name")} placeholder="np. Budynek A, Hala produkcyjna..." />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Ulica / adres</Label>
+            <Input value={form.address} onChange={set("address")} placeholder="ul. Przykładowa 1" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Kod pocztowy</Label>
+              <Input value={form.postalCode} onChange={set("postalCode")} placeholder="00-001" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Miasto</Label>
+              <Input value={form.city} onChange={set("city")} placeholder="Warszawa" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notatka techniczna</Label>
+            <Textarea value={form.technicalNote} onChange={set("technicalNote")} rows={2} placeholder="Informacje techniczne o obiekcie..." />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Zainstalowane systemy</Label>
+            <Textarea value={form.systemsNote} onChange={set("systemsNote")} rows={2} placeholder="np. CCTV, SSWiN, SKD..." />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Anuluj</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Dodawanie..." : "Dodaj lokalizację"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main Page ───────────────────────────────────────────────────────────────
+
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { data: session } = useSession();
+  const queryClient = useQueryClient();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [addLocationOpen, setAddLocationOpen] = useState(false);
+
   const canDelete = isAdmin(session?.user);
+  const canEdit = isAdmin(session?.user) || hasRole(session?.user, "SZEF") || hasRole(session?.user, "MENEDZER");
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -110,6 +380,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   });
 
   const client: Client | undefined = data?.data;
+
+  const refetch = () => queryClient.invalidateQueries({ queryKey: ["client", id] });
 
   if (isLoading) {
     return (
@@ -135,6 +407,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const activeLocations = client.locations.filter((l) => l.isActive);
   const activeOrders = client.orders.filter((o) => !["ZAKONCZONE", "ANULOWANE"].includes(o.status));
 
+  const addressLine = [client.address, client.postalCode, client.city].filter(Boolean).join(", ");
+
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -153,8 +427,25 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </div>
           <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
           {client.alias && <p className="text-sm text-gray-400">{client.alias}</p>}
+          {addressLine && (
+            <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+              <MapPin className="h-3.5 w-3.5 text-gray-400" />
+              {addressLine}
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
+          {canEdit && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="hidden sm:inline">Edytuj</span>
+            </Button>
+          )}
           {canDelete && (
             <Button
               size="sm"
@@ -199,16 +490,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               {client.email}
             </a>
           )}
-          {client.address && (
+          {addressLine && (
             <div className="flex items-start gap-2 text-sm text-gray-600">
               <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-              {client.address}
+              {addressLine}
             </div>
           )}
           {client.nip && (
             <p className="text-sm text-gray-500">NIP: {client.nip}</p>
           )}
-          {!client.phone && !client.email && !client.address && (
+          {!client.phone && !client.email && !addressLine && (
             <p className="text-sm text-gray-400">Brak danych kontaktowych</p>
           )}
         </div>
@@ -226,7 +517,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-gray-800">Lokalizacje ({activeLocations.length})</h2>
-          <Button size="sm" variant="outline" className="gap-1">
+          <Button size="sm" variant="outline" className="gap-1" onClick={() => setAddLocationOpen(true)}>
             <Plus className="h-3.5 w-3.5" />
             Dodaj
           </Button>
@@ -240,12 +531,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           <div className="space-y-2">
             {activeLocations.map((loc) => {
               const isOverdue = loc.nextMaintenanceDate && new Date(loc.nextMaintenanceDate) < new Date();
+              const locAddress = [loc.address, loc.postalCode, loc.city].filter(Boolean).join(", ");
               return (
                 <div key={loc.id} className="bg-white rounded-lg border p-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{loc.name}</p>
-                      {loc.address && <p className="text-sm text-gray-500 mt-0.5">{loc.address}</p>}
+                      {locAddress && <p className="text-sm text-gray-500 mt-0.5">{locAddress}</p>}
                       {loc.systemType && (
                         <p className="text-xs text-gray-400 mt-1">{loc.systemType}</p>
                       )}
@@ -319,6 +611,24 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           </div>
         )}
       </div>
+
+      {/* Edit dialog */}
+      {editOpen && (
+        <EditClientDialog
+          client={client}
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          onSaved={refetch}
+        />
+      )}
+
+      {/* Add location dialog */}
+      <AddLocationDialog
+        clientId={id}
+        open={addLocationOpen}
+        onClose={() => setAddLocationOpen(false)}
+        onSaved={refetch}
+      />
 
       {/* Delete confirmation */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

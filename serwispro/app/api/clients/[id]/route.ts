@@ -47,6 +47,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
       ...(body.phoneAlt !== undefined && { phoneAlt: body.phoneAlt }),
       ...(body.email !== undefined && { email: body.email }),
       ...(body.alias !== undefined && { alias: body.alias }),
+      ...(body.address !== undefined && { address: body.address }),
+      ...(body.city !== undefined && { city: body.city }),
+      ...(body.postalCode !== undefined && { postalCode: body.postalCode }),
       ...(body.notes !== undefined && { notes: body.notes }),
     },
   });

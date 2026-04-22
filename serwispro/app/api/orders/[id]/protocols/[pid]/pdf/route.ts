@@ -155,27 +155,34 @@ export async function GET(req: NextRequest, { params }: Params) {
       </div>`
     : "";
 
-  // Photos (report only) — embed as base64 when downloading
+  // Photos — embed as base64 when downloading; shown for all variants if photos exist
   let photosHtml = "";
-  if (variant === "report" && photos.length > 0) {
+  if (photos.length > 0) {
+    const shown = photos.slice(0, 6);
     const photoSrcs = await Promise.all(
-      photos.slice(0, 6).map(async (p) => {
+      shown.map(async (p) => {
         if (download) {
           const dataUri = await fileUrlToDataUri(p.fileUrl, baseUrl);
-          // fallback to direct URL if conversion fails
           return dataUri || (p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`);
         }
         return p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`;
       })
     );
-    photosHtml = `<div class="section">
+    // Grid columns and aspect ratio based on count
+    const count = shown.length;
+    const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
+    const aspectRatio = count <= 2 ? "3/2" : count <= 4 ? "4/3" : "4/3";
+    photosHtml = `<div class="section" style="page-break-before:${variant === "report" ? "always" : "auto"}">
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
-      <div class="photo-grid">
+      <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
-          ? `<div class="photo-wrap"><img src="${src}" class="photo-thumb" alt="" /></div>`
+          ? `<div style="aspect-ratio:${aspectRatio};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#f5f5f5">
+               <img src="${src}" style="width:100%;height:100%;object-fit:contain;display:block" alt="" />
+             </div>`
           : ""
         ).join("")}
       </div>
+      ${photos.length > 6 ? `<p style="font-size:9px;color:#999;margin-top:4px;text-align:right">Pokazano 6 z ${photos.length} zdjęć</p>` : ""}
     </div>`;
   }
 
@@ -227,13 +234,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     .section { margin-bottom: 11px; }
     .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #8B1A1A; font-weight: 700; border-bottom: 1.5px solid #8B1A1A; padding-bottom: 3px; margin-bottom: 7px; }
     .text-block { border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; font-size: 11.5px; line-height: 1.6; min-height: 52px; white-space: pre-wrap; color: #1a1a1a; }
-    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-    .photo-wrap { aspect-ratio: 4/3; overflow: hidden; border-radius: 4px; border: 1px solid #ddd; background: #f5f5f5; }
-    .photo-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
     .signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; page-break-inside: avoid; }
     .sig-line { border-bottom: 1.5px solid #8B1A1A; height: 48px; }
     .sig-label { font-size: 10px; color: #555; text-align: center; margin-top: 6px; }
-    .footer { margin-top: 16px; border-top: 1px solid #ddd; padding-top: 7px; font-size: 9px; color: #999; text-align: center; }
     @media print {
       body { padding: 0; font-size: 11px; }
       @page {
@@ -290,9 +293,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     <div class="box">
       <div class="box-label">Klient</div>
       <div class="box-value">${order.client?.name ?? "—"}</div>
-      ${order.client?.phone ? `<div class="box-sub">Tel: ${order.client.phone}</div>` : ""}
+      ${((): string => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const c = order.client as any;
+        const addr = [c?.address, c?.postalCode, c?.city].filter(Boolean).join(", ");
+        return addr ? `<div class="box-sub">${addr}</div>` : "";
+      })()}
       ${order.client?.nip ? `<div class="box-sub">NIP: ${order.client.nip}</div>` : ""}
-      ${order.client?.email ? `<div class="box-sub">${order.client.email}</div>` : ""}
+      ${order.client?.phone ? `<div class="box-sub">Tel: ${order.client.phone}</div>` : ""}
     </div>
     <div class="box">
       <div class="box-label">Lokalizacja</div>
@@ -318,12 +326,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   </div>` : ""}
 
   ${materialsHtml}
-  ${photosHtml}
   ${signaturesHtml}
-
-  <div class="footer">
-    ${docTitle} &nbsp;&middot;&nbsp; Wygenerowany ${format(now, "d.MM.yyyy HH:mm", { locale: pl })} &nbsp;&middot;&nbsp; ${company?.name ?? "SerwisPro"}
-  </div>
+  ${photosHtml}
 </body>
 </html>`;
 

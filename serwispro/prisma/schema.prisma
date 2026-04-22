@@ -176,6 +176,9 @@ model Client {
   phoneAlt    String?
   email       String?
   alias       String?
+  address     String?
+  city        String?
+  postalCode  String?
   notes       String?
   isActive    Boolean            @default(true)
   createdAt   DateTime           @default(now())
