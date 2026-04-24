@@ -101,7 +101,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const assigneesText = order.assignments.length > 0
     ? order.assignments
-        .map((a) => `${a.user.firstName} ${a.user.lastName}${a.isLead ? " (odp.)" : ""}`)
+        .map((a) => `${a.user.firstName} ${a.user.lastName}`)
         .join(", ")
     : "—";
 
@@ -155,27 +155,34 @@ export async function GET(req: NextRequest, { params }: Params) {
       </div>`
     : "";
 
-  // Photos (report only) — embed as base64 when downloading
+  // Photos — embed as base64 when downloading; shown for all variants if photos exist
   let photosHtml = "";
-  if (variant === "report" && photos.length > 0) {
+  if (photos.length > 0) {
+    const shown = photos.slice(0, 6);
     const photoSrcs = await Promise.all(
-      photos.slice(0, 6).map(async (p) => {
+      shown.map(async (p) => {
         if (download) {
           const dataUri = await fileUrlToDataUri(p.fileUrl, baseUrl);
-          // fallback to direct URL if conversion fails
           return dataUri || (p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`);
         }
         return p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`;
       })
     );
-    photosHtml = `<div class="section">
+    // Grid columns and aspect ratio based on count
+    const count = shown.length;
+    const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
+    const aspectRatio = count <= 2 ? "3/2" : count <= 4 ? "4/3" : "4/3";
+    photosHtml = `<div class="section" style="page-break-before:${variant === "report" ? "always" : "auto"}">
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
-      <div class="photo-grid">
+      <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
-          ? `<div class="photo-wrap"><img src="${src}" class="photo-thumb" alt="" /></div>`
+          ? `<div style="aspect-ratio:${aspectRatio};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#f5f5f5">
+               <img src="${src}" style="width:100%;height:100%;object-fit:contain;display:block" alt="" />
+             </div>`
           : ""
         ).join("")}
       </div>
+      ${photos.length > 6 ? `<p style="font-size:9px;color:#999;margin-top:4px;text-align:right">Pokazano 6 z ${photos.length} zdjęć</p>` : ""}
     </div>`;
   }
 
@@ -197,10 +204,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     ? format(new Date(order.scheduledAt), "d MMMM yyyy", { locale: pl })
     : format(now, "d MMMM yyyy", { locale: pl });
 
-  // Grid layout: 2 cols if no hours, 3 cols if hours present
-  const infoGridStyle = hoursBox
-    ? `display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px`
-    : `display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px`;
+  // Client address for header
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clientAny = order.client as any;
+  const clientAddr = [clientAny?.address, clientAny?.postalCode, clientAny?.city].filter(Boolean).join(", ");
+
+  // Info grid: Zlecenie + optional Lokalizacja + Serwisant + optional Czas pracy
+  const infoBoxCount = 2 + (order.location ? 1 : 0) + (hoursBox ? 1 : 0);
+  const infoGridCols = infoBoxCount <= 2 ? 2 : infoBoxCount === 3 ? 3 : 4;
+  const infoGridStyle = `display:grid;grid-template-columns:repeat(${infoGridCols},1fr);gap:8px;margin-bottom:12px`;
 
   const html = `<!DOCTYPE html>
 <html lang="pl">
@@ -227,13 +239,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     .section { margin-bottom: 11px; }
     .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #8B1A1A; font-weight: 700; border-bottom: 1.5px solid #8B1A1A; padding-bottom: 3px; margin-bottom: 7px; }
     .text-block { border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; font-size: 11.5px; line-height: 1.6; min-height: 52px; white-space: pre-wrap; color: #1a1a1a; }
-    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-    .photo-wrap { aspect-ratio: 4/3; overflow: hidden; border-radius: 4px; border: 1px solid #ddd; background: #f5f5f5; }
-    .photo-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
     .signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; page-break-inside: avoid; }
     .sig-line { border-bottom: 1.5px solid #8B1A1A; height: 48px; }
     .sig-label { font-size: 10px; color: #555; text-align: center; margin-top: 6px; }
-    .footer { margin-top: 16px; border-top: 1px solid #ddd; padding-top: 7px; font-size: 9px; color: #999; text-align: center; }
     @media print {
       body { padding: 0; font-size: 11px; }
       @page {
@@ -261,8 +269,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     <span>📄</span>
     <span>Aby ukryć datę i adres URL: w oknie drukowania kliknij <strong>„Więcej ustawień"</strong> → odznacz <strong>„Nagłówki i stopki"</strong> → kliknij Zapisz</span>
   </div>` : ""}
-  <div class="header">
-    <div class="header-left">
+  <!-- Title centered -->
+  <div style="text-align:center;margin-bottom:10px">
+    <div style="font-size:17px;font-weight:700;color:#8B1A1A;text-transform:uppercase;letter-spacing:0.8px">${docTitle}</div>
+    <div style="font-size:12px;font-weight:600;color:#4a4a4a;margin-top:3px">Nr ${protocol.protocolNumber} &nbsp;·&nbsp; ${scheduledDate}</div>
+  </div>
+
+  <!-- Company (left) | Client (right) -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:3px solid #8B1A1A;padding-bottom:12px;margin-bottom:14px">
+    <div style="display:flex;align-items:flex-start;gap:10px">
       ${logoHtml}
       <div>
         <div class="company-name">${company?.name ?? "SerwisPro"}</div>
@@ -273,10 +288,13 @@ export async function GET(req: NextRequest, { params }: Params) {
         </div>
       </div>
     </div>
-    <div class="doc-info">
-      <div class="doc-number">${protocol.protocolNumber}</div>
-      <div class="doc-type">${docTitle}</div>
-      <div class="doc-date">Data: ${scheduledDate}</div>
+    <div style="text-align:right;flex-shrink:0">
+      ${order.client?.name ? `<div style="font-size:13px;font-weight:700;color:#1a1a1a">${order.client.name}</div>` : ""}
+      <div style="font-size:10px;color:#555;margin-top:3px;line-height:1.6">
+        ${clientAddr ? clientAddr + "<br/>" : ""}
+        ${order.client?.nip ? "NIP: " + order.client.nip + "<br/>" : ""}
+        ${order.client?.phone ? "Tel: " + order.client.phone : ""}
+      </div>
     </div>
   </div>
 
@@ -287,20 +305,14 @@ export async function GET(req: NextRequest, { params }: Params) {
       <div class="box-sub">${TYPE_LABELS[order.type] ?? order.type}</div>
       ${order.scheduledAt ? `<div class="box-sub">Termin: ${format(new Date(order.scheduledAt), "d.MM.yyyy", { locale: pl })}${order.scheduledEndAt ? " – " + format(new Date(order.scheduledEndAt), "HH:mm", { locale: pl }) : ""}</div>` : ""}
     </div>
-    <div class="box">
-      <div class="box-label">Klient</div>
-      <div class="box-value">${order.client?.name ?? "—"}</div>
-      ${order.client?.phone ? `<div class="box-sub">Tel: ${order.client.phone}</div>` : ""}
-      ${order.client?.nip ? `<div class="box-sub">NIP: ${order.client.nip}</div>` : ""}
-      ${order.client?.email ? `<div class="box-sub">${order.client.email}</div>` : ""}
-    </div>
+    ${order.location ? `
     <div class="box">
       <div class="box-label">Lokalizacja</div>
-      <div class="box-value">${order.location?.name ?? "—"}</div>
-      ${order.location?.address ? `<div class="box-sub">${order.location.address}</div>` : ""}
-    </div>
+      <div class="box-value">${order.location.name}</div>
+      ${order.location.address ? `<div class="box-sub">${order.location.address}</div>` : ""}
+    </div>` : ""}
     <div class="box">
-      <div class="box-label">Serwisant(ci)</div>
+      <div class="box-label">Serwisant</div>
       <div class="box-value" style="font-size:11px;font-weight:500">${assigneesText}</div>
     </div>
     ${hoursBox}
@@ -318,12 +330,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   </div>` : ""}
 
   ${materialsHtml}
-  ${photosHtml}
   ${signaturesHtml}
-
-  <div class="footer">
-    ${docTitle} &nbsp;&middot;&nbsp; Wygenerowany ${format(now, "d.MM.yyyy HH:mm", { locale: pl })} &nbsp;&middot;&nbsp; ${company?.name ?? "SerwisPro"}
-  </div>
+  ${photosHtml}
 </body>
 </html>`;
 
