@@ -181,8 +181,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
       <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
-          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#f5f5f5">
-               <img src="${src}" style="width:100%;height:100%;object-fit:contain;display:block" alt="" />
+          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd">
+               <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block" alt="" />
              </div>`
           : ""
         ).join("")}
@@ -275,10 +275,14 @@ export async function GET(req: NextRequest, { params }: Params) {
     <span>📄</span>
     <span>Aby ukryć datę i adres URL: w oknie drukowania kliknij <strong>„Więcej ustawień"</strong> → odznacz <strong>„Nagłówki i stopki"</strong> → kliknij Zapisz</span>
   </div>` : ""}
+  <!-- Number (left) | Date (right) -->
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+    <div style="font-size:13px;font-weight:700;color:#8B1A1A">Nr ${protocol.protocolNumber}</div>
+    <div style="font-size:10px;color:#666">${scheduledDate}</div>
+  </div>
   <!-- Title centered -->
   <div style="text-align:center;margin-bottom:10px">
-    <div style="font-size:17px;font-weight:700;color:#8B1A1A;text-transform:uppercase;letter-spacing:0.8px">${docTitle}</div>
-    <div style="font-size:12px;font-weight:600;color:#4a4a4a;margin-top:3px">Nr ${protocol.protocolNumber} &nbsp;·&nbsp; ${scheduledDate}</div>
+    <div style="font-size:17px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:0.8px">${docTitle}</div>
   </div>
 
   <!-- Company (left) | Client (right) -->
