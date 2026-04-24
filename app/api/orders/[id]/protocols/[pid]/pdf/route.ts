@@ -168,20 +168,21 @@ export async function GET(req: NextRequest, { params }: Params) {
         return p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`;
       })
     );
-    // Grid columns and aspect ratio — fewer photos = larger cells
+    // Grid columns and fixed cell height — fewer photos = taller cells
+    // Fixed height (not aspect-ratio) ensures photos fit on 1 page regardless of viewport width
     const count = shown.length;
-    let cols: number, aspectRatio: string;
-    if (count === 1)      { cols = 1; aspectRatio = "16/9"; }
-    else if (count === 2) { cols = 2; aspectRatio = "3/2"; }
-    else if (count === 3) { cols = 3; aspectRatio = "4/3"; }
-    else if (count === 4) { cols = 2; aspectRatio = "3/2"; }
-    else                  { cols = 3; aspectRatio = "4/3"; }
+    let cols: number, cellHeight: string;
+    if (count === 1)      { cols = 1; cellHeight = "200px"; }
+    else if (count === 2) { cols = 2; cellHeight = "180px"; }
+    else if (count === 3) { cols = 3; cellHeight = "160px"; }
+    else if (count === 4) { cols = 2; cellHeight = "130px"; }
+    else                  { cols = 3; cellHeight = "120px"; }
     photosHtml = `<div class="section">
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
       <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
-          ? `<div style="aspect-ratio:${aspectRatio};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#f5f5f5">
-               <img src="${src}" style="width:100%;height:100%;object-fit:contain;display:block" alt="" />
+          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#1a1a1a">
+               <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block" alt="" />
              </div>`
           : ""
         ).join("")}
@@ -314,6 +315,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       <div class="box-label">Lokalizacja</div>
       <div class="box-value">${order.location.name}</div>
       ${order.location.address ? `<div class="box-sub">${order.location.address}</div>` : ""}
+      ${(() => { const loc = order.location as any; const line = [loc?.postalCode, loc?.city].filter(Boolean).join(" "); return line ? `<div class="box-sub">${line}</div>` : ""; })()}
     </div>` : ""}
     <div class="box">
       <div class="box-label">Serwisant</div>
