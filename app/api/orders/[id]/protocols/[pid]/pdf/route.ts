@@ -168,11 +168,15 @@ export async function GET(req: NextRequest, { params }: Params) {
         return p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`;
       })
     );
-    // Grid columns and aspect ratio based on count
+    // Grid columns and aspect ratio — fewer photos = larger cells
     const count = shown.length;
-    const cols = count <= 2 ? count : count <= 4 ? 2 : 3;
-    const aspectRatio = count <= 2 ? "3/2" : count <= 4 ? "4/3" : "4/3";
-    photosHtml = `<div class="section" style="page-break-before:${variant === "report" ? "always" : "auto"}">
+    let cols: number, aspectRatio: string;
+    if (count === 1)      { cols = 1; aspectRatio = "16/9"; }
+    else if (count === 2) { cols = 2; aspectRatio = "3/2"; }
+    else if (count === 3) { cols = 3; aspectRatio = "4/3"; }
+    else if (count === 4) { cols = 2; aspectRatio = "3/2"; }
+    else                  { cols = 3; aspectRatio = "4/3"; }
+    photosHtml = `<div class="section">
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
       <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
