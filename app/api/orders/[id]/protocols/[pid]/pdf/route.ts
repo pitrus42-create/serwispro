@@ -181,8 +181,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
       <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
-          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd">
-               <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block" alt="" />
+          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;display:flex;align-items:center;justify-content:center">
+               <img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain;display:block" alt="" />
              </div>`
           : ""
         ).join("")}
@@ -299,7 +299,8 @@ export async function GET(req: NextRequest, { params }: Params) {
       </div>
     </div>
     <div style="text-align:right;flex-shrink:0">
-      ${order.client?.name ? `<div style="font-size:13px;font-weight:700;color:#1a1a1a">${order.client.name}</div>` : ""}
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#8B1A1A;margin-bottom:4px">Klient</div>
+      <div style="font-size:13px;font-weight:700;color:#1a1a1a">${order.client?.name ?? "—"}</div>
       <div style="font-size:10px;color:#555;margin-top:3px;line-height:1.6">
         ${clientAddr ? clientAddr + "<br/>" : ""}
         ${order.client?.nip ? "NIP: " + order.client.nip + "<br/>" : ""}
