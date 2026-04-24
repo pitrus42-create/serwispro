@@ -36,21 +36,30 @@ export async function PUT(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  const body = await req.json();
-  const client = await prisma.client.update({
-    where: { id },
-    data: {
-      ...(body.name !== undefined && { name: body.name }),
-      ...(body.type !== undefined && { type: body.type }),
-      ...(body.nip !== undefined && { nip: body.nip }),
-      ...(body.phone !== undefined && { phone: body.phone }),
-      ...(body.phoneAlt !== undefined && { phoneAlt: body.phoneAlt }),
-      ...(body.email !== undefined && { email: body.email }),
-      ...(body.alias !== undefined && { alias: body.alias }),
-      ...(body.notes !== undefined && { notes: body.notes }),
-    },
-  });
-  return NextResponse.json({ data: client });
+  try {
+    const body = await req.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = await (prisma.client.update as any)({
+      where: { id },
+      data: {
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.type !== undefined && { type: body.type }),
+        ...(body.nip !== undefined && { nip: body.nip }),
+        ...(body.phone !== undefined && { phone: body.phone }),
+        ...(body.phoneAlt !== undefined && { phoneAlt: body.phoneAlt }),
+        ...(body.email !== undefined && { email: body.email }),
+        ...(body.alias !== undefined && { alias: body.alias }),
+        ...(body.address !== undefined && { address: body.address }),
+        ...(body.city !== undefined && { city: body.city }),
+        ...(body.postalCode !== undefined && { postalCode: body.postalCode }),
+        ...(body.notes !== undefined && { notes: body.notes }),
+      },
+    });
+    return NextResponse.json({ data: client });
+  } catch (err) {
+    console.error("[PUT /api/clients/:id]", err);
+    return NextResponse.json({ error: "Update failed", detail: String(err) }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {

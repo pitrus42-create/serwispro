@@ -280,29 +280,32 @@ export async function GET(req: NextRequest, { params }: Params) {
     <div style="font-size:17px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:0.8px">${docTitle}</div>
   </div>
 
-  <!-- Company (left) | Client (right) — strict two-column grid -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;border-bottom:3px solid #8B1A1A;padding-bottom:12px;margin-bottom:14px;align-items:start">
+  <!-- Company (left) | Client (right) — same field order in both columns -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-bottom:3px solid #8B1A1A;padding-bottom:12px;margin-bottom:14px;align-items:start">
+    <!-- LEFT: Firma -->
     <div>
       <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#8B1A1A;margin-bottom:5px">Firma</div>
       <div style="display:flex;align-items:flex-start;gap:8px">
         ${logoHtml}
-        <div>
-          <div class="company-name">${company?.name ?? "SerwisPro"}</div>
-          <div class="company-details">
-            ${company?.address ? company.address + "<br/>" : ""}
-            ${company?.phone ? "Tel: " + company.phone : ""}${company?.email ? " &middot; " + company.email : ""}
-            ${company?.nip ? "<br/>NIP: " + company.nip : ""}
-          </div>
+        <div style="font-size:10px;color:#444;line-height:1.75">
+          <div style="font-size:14px;font-weight:700;color:#1a1a1a;line-height:1.2;margin-bottom:3px">${company?.name ?? "SerwisPro"}</div>
+          ${company?.nip    ? `<div>NIP: ${company.nip}</div>` : ""}
+          ${company?.address ? `<div>${company.address}</div>` : ""}
+          ${company?.email  ? `<div>${company.email}</div>` : ""}
+          ${company?.phone  ? `<div>Tel: ${company.phone}</div>` : ""}
         </div>
       </div>
     </div>
+    <!-- RIGHT: Klient -->
     <div>
       <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#8B1A1A;margin-bottom:5px">Klient</div>
-      <div class="company-name">${order.client?.name ?? "—"}</div>
-      <div class="company-details">
-        ${clientAddr ? clientAddr + "<br/>" : ""}
-        ${order.client?.nip ? "NIP: " + order.client.nip + "<br/>" : ""}
-        ${order.client?.phone ? "Tel: " + order.client.phone : ""}
+      <div style="font-size:10px;color:#444;line-height:1.75">
+        <div style="font-size:14px;font-weight:700;color:#1a1a1a;line-height:1.2;margin-bottom:3px">${order.client?.name ?? "—"}</div>
+        ${order.client?.nip  ? `<div>NIP: ${order.client.nip}</div>` : ""}
+        ${[clientAny?.postalCode, clientAny?.city].filter(Boolean).join(" ") ? `<div>${[clientAny?.postalCode, clientAny?.city].filter(Boolean).join(" ")}</div>` : ""}
+        ${clientAny?.address ? `<div>${clientAny.address}</div>` : ""}
+        ${order.client?.email ? `<div>${order.client.email}</div>` : ""}
+        ${order.client?.phone ? `<div>Tel: ${order.client.phone}</div>` : ""}
       </div>
     </div>
   </div>
