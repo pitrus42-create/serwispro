@@ -169,20 +169,20 @@ export async function GET(req: NextRequest, { params }: Params) {
       })
     );
     // Grid columns and fixed cell height — fewer photos = taller cells
-    // Fixed height (not aspect-ratio) ensures photos fit on 1 page regardless of viewport width
+    // viewport width=794 ensures consistent rendering; heights tuned to always fit on 1 A4 page
     const count = shown.length;
     let cols: number, cellHeight: string;
-    if (count === 1)      { cols = 1; cellHeight = "200px"; }
-    else if (count === 2) { cols = 2; cellHeight = "180px"; }
-    else if (count === 3) { cols = 3; cellHeight = "160px"; }
-    else if (count === 4) { cols = 2; cellHeight = "130px"; }
-    else                  { cols = 3; cellHeight = "120px"; }
-    photosHtml = `<div class="section">
+    if (count === 1)      { cols = 1; cellHeight = "190px"; }
+    else if (count === 2) { cols = 2; cellHeight = "170px"; }
+    else if (count === 3) { cols = 3; cellHeight = "150px"; }
+    else if (count === 4) { cols = 2; cellHeight = "105px"; }
+    else                  { cols = 3; cellHeight = "95px"; }
+    photosHtml = `<div class="section" style="page-break-inside:avoid">
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
       <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
-          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#1a1a1a">
-               <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block" alt="" />
+          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#f5f5f5">
+               <img src="${src}" style="width:100%;height:100%;object-fit:contain;display:block" alt="" />
              </div>`
           : ""
         ).join("")}
@@ -223,6 +223,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 <html lang="pl">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=794" />
   <title>${docTitle} ${protocol.protocolNumber}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
