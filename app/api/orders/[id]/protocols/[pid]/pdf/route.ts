@@ -171,18 +171,13 @@ export async function GET(req: NextRequest, { params }: Params) {
     // Grid columns and fixed cell height — fewer photos = taller cells
     // viewport width=794 ensures consistent rendering; heights tuned to always fit on 1 A4 page
     const count = shown.length;
-    let cols: number, cellHeight: string;
-    if (count === 1)      { cols = 1; cellHeight = "190px"; }
-    else if (count === 2) { cols = 2; cellHeight = "170px"; }
-    else if (count === 3) { cols = 3; cellHeight = "150px"; }
-    else if (count === 4) { cols = 2; cellHeight = "105px"; }
-    else                  { cols = 3; cellHeight = "95px"; }
+    const cols = count <= 2 ? count : count === 3 ? 3 : count === 4 ? 2 : 3;
     photosHtml = `<div class="section" style="page-break-inside:avoid">
       <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
       <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
         ${photoSrcs.map((src) => src
-          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd;background:#f5f5f5;display:flex;align-items:center;justify-content:center">
-               <img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain;display:block" alt="" />
+          ? `<div style="border-radius:4px;border:1px solid #ddd;overflow:hidden;line-height:0">
+               <img src="${src}" style="width:100%;height:auto;display:block" alt="" />
              </div>`
           : ""
         ).join("")}
@@ -285,23 +280,26 @@ export async function GET(req: NextRequest, { params }: Params) {
     <div style="font-size:17px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:0.8px">${docTitle}</div>
   </div>
 
-  <!-- Company (left) | Client (right) -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:3px solid #8B1A1A;padding-bottom:12px;margin-bottom:14px">
-    <div style="display:flex;align-items:flex-start;gap:10px">
-      ${logoHtml}
-      <div>
-        <div class="company-name">${company?.name ?? "SerwisPro"}</div>
-        <div class="company-details">
-          ${company?.address ? company.address + "<br/>" : ""}
-          ${company?.phone ? "Tel: " + company.phone : ""}${company?.email ? " &middot; " + company.email : ""}
-          ${company?.nip ? "<br/>NIP: " + company.nip : ""}
+  <!-- Company (left) | Client (right) — strict two-column grid -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;border-bottom:3px solid #8B1A1A;padding-bottom:12px;margin-bottom:14px;align-items:start">
+    <div>
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#8B1A1A;margin-bottom:5px">Firma</div>
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        ${logoHtml}
+        <div>
+          <div class="company-name">${company?.name ?? "SerwisPro"}</div>
+          <div class="company-details">
+            ${company?.address ? company.address + "<br/>" : ""}
+            ${company?.phone ? "Tel: " + company.phone : ""}${company?.email ? " &middot; " + company.email : ""}
+            ${company?.nip ? "<br/>NIP: " + company.nip : ""}
+          </div>
         </div>
       </div>
     </div>
-    <div style="text-align:right;flex-shrink:0">
-      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#8B1A1A;margin-bottom:4px">Klient</div>
-      <div style="font-size:13px;font-weight:700;color:#1a1a1a">${order.client?.name ?? "—"}</div>
-      <div style="font-size:10px;color:#555;margin-top:3px;line-height:1.6">
+    <div>
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#8B1A1A;margin-bottom:5px">Klient</div>
+      <div class="company-name">${order.client?.name ?? "—"}</div>
+      <div class="company-details">
         ${clientAddr ? clientAddr + "<br/>" : ""}
         ${order.client?.nip ? "NIP: " + order.client.nip + "<br/>" : ""}
         ${order.client?.phone ? "Tel: " + order.client.phone : ""}
