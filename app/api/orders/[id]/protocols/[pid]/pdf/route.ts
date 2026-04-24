@@ -17,8 +17,6 @@ async function fileUrlToDataUri(fileUrl: string, baseUrl: string): Promise<strin
       webp: "image/webp",
       svg: "image/svg+xml",
     };
-
-    // Firebase Storage or any HTTP URL — fetch directly
     if (fileUrl.startsWith("http")) {
       const res = await fetch(fileUrl);
       if (!res.ok) return "";
@@ -26,8 +24,6 @@ async function fileUrlToDataUri(fileUrl: string, baseUrl: string): Promise<strin
       const bytes = Buffer.from(await res.arrayBuffer());
       return `data:${contentType.split(";")[0]};base64,${bytes.toString("base64")}`;
     }
-
-    // Local dev — read from public/ directory
     const relative = fileUrl.startsWith("/") ? fileUrl.slice(1) : fileUrl;
     const filePath = pathModule.join(process.cwd(), "public", relative);
     const bytes = await readFile(filePath);
@@ -100,124 +96,111 @@ export async function GET(req: NextRequest, { params }: Params) {
   const docTitle = variant === "report" ? "Raport Serwisowy" : "Protokół Serwisowy";
 
   const assigneesText = order.assignments.length > 0
-    ? order.assignments
-        .map((a) => `${a.user.firstName} ${a.user.lastName}`)
-        .join(", ")
+    ? order.assignments.map((a) => `${a.user.firstName} ${a.user.lastName}`).join(", ")
     : "—";
 
-  // Hours box
   const hFrom = content.hoursFrom ?? "";
   const hTo = content.hoursTo ?? "";
-  const hoursBox = hFrom || hTo
-    ? `<div class="box">
-        <div class="box-label">Czas pracy</div>
-        <div class="box-value">${hFrom || "—"} – ${hTo || "—"}</div>
-        ${hFrom && hTo ? `<div class="box-sub">Łącznie: ${calcDuration(hFrom, hTo)}</div>` : ""}
-      </div>`
-    : "";
+  const hasHours = !!(hFrom || hTo);
 
-  // Logo — embed as base64 for download, use URL for preview
+  const scheduledDate = order.scheduledAt
+    ? format(new Date(order.scheduledAt), "d MMMM yyyy", { locale: pl })
+    : format(now, "d MMMM yyyy", { locale: pl });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clientAny = order.client as any;
+  const clientAddr = [clientAny?.address, clientAny?.postalCode, clientAny?.city].filter(Boolean).join(", ");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const locationAny = order.location as any;
+
+  // Logo
   let logoSrc = "";
   if (company?.logoUrl) {
     if (download) {
       logoSrc = await fileUrlToDataUri(company.logoUrl, baseUrl);
     } else {
-      // For HTTP preview use the URL directly (Firebase Storage or local)
       logoSrc = company.logoUrl.startsWith("http") ? company.logoUrl : `${baseUrl}${company.logoUrl}`;
     }
   }
   const logoHtml = logoSrc
-    ? `<img src="${logoSrc}" alt="Logo" style="max-height:52px;max-width:110px;object-fit:contain;display:block" />`
+    ? `<img src="${logoSrc}" alt="Logo" style="max-height:48px;max-width:100px;object-fit:contain;display:block;flex-shrink:0" />`
     : "";
 
-  // Materials
+  // Info grid columns
+  const infoBoxCount = 2 + (order.location ? 1 : 0) + (hasHours ? 1 : 0);
+  const infoGridCols = infoBoxCount <= 2 ? 2 : infoBoxCount === 3 ? 3 : 4;
+
+  // Materials table
   const materialsHtml = order.materials.length > 0
     ? `<div class="section">
         <div class="section-title">Użyte materiały</div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <table class="mat-table">
           <thead>
-            <tr style="background:#f3f4f6">
-              <th style="text-align:left;padding:5px 8px;border:1px solid #e5e7eb;font-weight:600">Materiał</th>
-              <th style="text-align:right;padding:5px 8px;border:1px solid #e5e7eb;font-weight:600">Ilość</th>
-              <th style="text-align:left;padding:5px 8px;border:1px solid #e5e7eb;font-weight:600">Jm.</th>
+            <tr>
+              <th style="text-align:left">Materiał</th>
+              <th style="text-align:right;width:60px">Ilość</th>
+              <th style="width:40px">Jm.</th>
             </tr>
           </thead>
           <tbody>
             ${order.materials.map((m) => `
               <tr>
-                <td style="padding:5px 8px;border:1px solid #e5e7eb">${m.stockItem?.name ?? "—"}</td>
-                <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right">${m.quantity}</td>
-                <td style="padding:5px 8px;border:1px solid #e5e7eb">${m.stockItem?.unit ?? ""}</td>
-              </tr>
-            `).join("")}
+                <td>${m.stockItem?.name ?? "—"}</td>
+                <td style="text-align:right">${m.quantity}</td>
+                <td>${m.stockItem?.unit ?? ""}</td>
+              </tr>`).join("")}
           </tbody>
         </table>
       </div>`
     : "";
 
-  // Photos — embed as base64 when downloading; shown for all variants if photos exist
+  // Photos
   let photosHtml = "";
   if (photos.length > 0) {
     const shown = photos.slice(0, 6);
     const photoSrcs = await Promise.all(
       shown.map(async (p) => {
         if (download) {
-          const dataUri = await fileUrlToDataUri(p.fileUrl, baseUrl);
-          return dataUri || (p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`);
+          const uri = await fileUrlToDataUri(p.fileUrl, baseUrl);
+          return uri || (p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`);
         }
         return p.fileUrl.startsWith("http") ? p.fileUrl : `${baseUrl}${p.fileUrl}`;
       })
     );
-    // Grid columns and fixed cell height — fewer photos = taller cells
-    // viewport width=794 ensures consistent rendering; heights tuned to always fit on 1 A4 page
     const count = shown.length;
     let cols: number, cellHeight: string;
-    if (count === 1)      { cols = 1; cellHeight = "190px"; }
-    else if (count === 2) { cols = 2; cellHeight = "170px"; }
-    else if (count === 3) { cols = 3; cellHeight = "150px"; }
-    else if (count === 4) { cols = 2; cellHeight = "105px"; }
-    else                  { cols = 3; cellHeight = "95px"; }
+    if      (count === 1) { cols = 1; cellHeight = "180px"; }
+    else if (count === 2) { cols = 2; cellHeight = "160px"; }
+    else if (count === 3) { cols = 3; cellHeight = "140px"; }
+    else if (count === 4) { cols = 2; cellHeight = "110px"; }
+    else                  { cols = 3; cellHeight = "90px";  }
+
     photosHtml = `<div class="section" style="page-break-inside:avoid">
-      <div class="section-title">Dokumentacja fotograficzna (${photos.length})</div>
-      <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px">
+      <div class="section-title">Dokumentacja fotograficzna${photos.length > 6 ? ` (pokazano 6 z ${photos.length})` : ` (${photos.length})`}</div>
+      <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:5px">
         ${photoSrcs.map((src) => src
-          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #ddd">
+          ? `<div style="height:${cellHeight};overflow:hidden;border-radius:4px;border:1px solid #e0e0e0">
                <img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block" alt="" />
              </div>`
           : ""
         ).join("")}
       </div>
-      ${photos.length > 6 ? `<p style="font-size:9px;color:#999;margin-top:4px;text-align:right">Pokazano 6 z ${photos.length} zdjęć</p>` : ""}
     </div>`;
   }
 
-  // Signatures (print only)
+  // Signatures (print variant only)
   const signaturesHtml = variant === "print"
     ? `<div class="signature-row">
-        <div class="signature-box">
+        <div>
           <div class="sig-line"></div>
           <div class="sig-label">Podpis serwisanta</div>
         </div>
-        <div class="signature-box">
+        <div>
           <div class="sig-line"></div>
           <div class="sig-label">Podpis klienta / potwierdzenie odbioru</div>
         </div>
       </div>`
     : "";
-
-  const scheduledDate = order.scheduledAt
-    ? format(new Date(order.scheduledAt), "d MMMM yyyy", { locale: pl })
-    : format(now, "d MMMM yyyy", { locale: pl });
-
-  // Client address for header
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const clientAny = order.client as any;
-  const clientAddr = [clientAny?.address, clientAny?.postalCode, clientAny?.city].filter(Boolean).join(", ");
-
-  // Info grid: Zlecenie + optional Lokalizacja + Serwisant + optional Czas pracy
-  const infoBoxCount = 2 + (order.location ? 1 : 0) + (hoursBox ? 1 : 0);
-  const infoGridCols = infoBoxCount <= 2 ? 2 : infoBoxCount === 3 ? 3 : 4;
-  const infoGridStyle = `display:grid;grid-template-columns:repeat(${infoGridCols},1fr);gap:8px;margin-bottom:12px`;
 
   const html = `<!DOCTYPE html>
 <html lang="pl">
@@ -226,81 +209,143 @@ export async function GET(req: NextRequest, { params }: Params) {
   <meta name="viewport" content="width=794" />
   <title>${docTitle} ${protocol.protocolNumber}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    /* ── Brand colours (All-Secure logo) ── */
-    :root { --red: #8B1A1A; --red-light: #f5e6e6; --gray: #4a4a4a; --border: #ddd; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #1a1a1a; background: white; padding: 20px 30px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #8B1A1A; padding-bottom: 14px; margin-bottom: 14px; }
-    .header-left { display: flex; align-items: flex-start; gap: 12px; }
-    .company-name { font-size: 16px; font-weight: 700; color: #1a1a1a; line-height: 1.2; }
-    .company-details { font-size: 10px; color: #555; margin-top: 4px; line-height: 1.55; }
-    .doc-info { text-align: right; flex-shrink: 0; }
-    .doc-number { font-size: 17px; font-weight: 700; color: #8B1A1A; }
-    .doc-type { font-size: 10px; color: #4a4a4a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
-    .doc-date { font-size: 10px; color: #666; margin-top: 4px; }
-    .box { border: 1px solid #ddd; border-radius: 4px; padding: 8px 10px; }
-    .box-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #8B1A1A; margin-bottom: 3px; font-weight: 700; }
-    .box-value { font-size: 12px; font-weight: 600; line-height: 1.3; color: #1a1a1a; }
-    .box-sub { font-size: 10px; color: #555; margin-top: 2px; line-height: 1.4; }
-    .section { margin-bottom: 11px; }
-    .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #8B1A1A; font-weight: 700; border-bottom: 1.5px solid #8B1A1A; padding-bottom: 3px; margin-bottom: 7px; }
-    .text-block { border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; font-size: 11.5px; line-height: 1.6; min-height: 52px; white-space: pre-wrap; color: #1a1a1a; }
-    .signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; page-break-inside: avoid; }
-    .sig-line { border-bottom: 1.5px solid #8B1A1A; height: 48px; }
-    .sig-label { font-size: 10px; color: #555; text-align: center; margin-top: 6px; }
-    @media screen {
-      body { padding-top: ${autoPrint ? "48px" : "0"}; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --red:    #8B1A1A;
+      --dark:   #1a1a1a;
+      --mid:    #4a4a4a;
+      --muted:  #777;
+      --border: #e0e0e0;
+      --bg:     #f9f9f9;
     }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11.5px;
+      color: var(--dark);
+      background: #fff;
+      padding: 22px 28px;
+      line-height: 1.4;
+    }
+
+    /* ── Top bar: Nr left · Date right ── */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 3px;
+    }
+    .topbar-num  { font-size: 11px; font-weight: 700; color: var(--red); letter-spacing: 0.2px; }
+    .topbar-date { font-size: 10px; color: var(--muted); }
+
+    /* ── Document title ── */
+    .doc-title {
+      text-align: center;
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--dark);
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      margin-bottom: 11px;
+    }
+
+    /* ── Header: company left · client right ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+      padding-bottom: 11px;
+      border-bottom: 2.5px solid var(--red);
+      margin-bottom: 12px;
+    }
+    .company-block { display: flex; align-items: flex-start; gap: 10px; }
+    .company-name  { font-size: 14px; font-weight: 700; color: var(--dark); line-height: 1.2; }
+    .company-info  { font-size: 9.5px; color: var(--muted); margin-top: 4px; line-height: 1.7; }
+    .client-block  { text-align: right; flex-shrink: 0; }
+    .client-name   { font-size: 13px; font-weight: 700; color: var(--dark); }
+    .client-info   { font-size: 9.5px; color: var(--muted); margin-top: 3px; line-height: 1.7; }
+
+    /* ── Info grid boxes ── */
+    .info-grid { display: grid; grid-template-columns: repeat(${infoGridCols}, 1fr); gap: 7px; margin-bottom: 13px; }
+    .box       { border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; background: var(--bg); }
+    .box-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--red); margin-bottom: 4px; }
+    .box-value { font-size: 12px; font-weight: 700; color: var(--dark); line-height: 1.25; }
+    .box-sub   { font-size: 9.5px; color: var(--mid); margin-top: 2px; line-height: 1.45; }
+
+    /* ── Sections ── */
+    .section       { margin-bottom: 11px; }
+    .section-title {
+      font-size: 8px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.7px; color: var(--red);
+      border-bottom: 1.5px solid var(--red);
+      padding-bottom: 3px; margin-bottom: 7px;
+    }
+    .text-block {
+      border: 1px solid var(--border); border-radius: 5px;
+      padding: 9px 12px; font-size: 11px; line-height: 1.65;
+      min-height: 46px; white-space: pre-wrap;
+      color: var(--dark); background: var(--bg);
+    }
+
+    /* ── Materials table ── */
+    .mat-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+    .mat-table th { background: #f0f0f0; padding: 5px 8px; border: 1px solid var(--border); font-weight: 700; }
+    .mat-table td { padding: 4px 8px; border: 1px solid var(--border); }
+
+    /* ── Signatures ── */
+    .signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; margin-top: 26px; page-break-inside: avoid; }
+    .sig-line  { border-bottom: 1.5px solid var(--red); height: 42px; }
+    .sig-label { font-size: 9.5px; color: var(--muted); text-align: center; margin-top: 5px; }
+
+    /* ── Print banner ── */
     .print-hint {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
-      background: #8B1A1A; color: white; text-align: center;
-      padding: 10px 16px; font-size: 13px; font-family: Arial, sans-serif;
+      background: var(--red); color: #fff; text-align: center;
+      padding: 9px 16px; font-size: 12px; font-family: Arial, sans-serif;
       display: flex; align-items: center; justify-content: center; gap: 10px;
     }
-    .print-hint strong { font-size: 14px; }
+    .print-hint strong { font-size: 13px; }
+
+    @media screen {
+      body { padding-top: ${autoPrint ? "46px" : "22px"}; }
+    }
     @media print {
-      body { padding: 0; font-size: 11px; zoom: 0.88; }
-      @page {
-        size: A4;
-        margin: 12mm 15mm;
-      }
+      html { zoom: 0.87; }
+      body { padding: 0; }
+      @page { size: A4; margin: 12mm 15mm; }
       .no-print { display: none !important; }
     }
   </style>
-  ${autoPrint ? `<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 800); });<\/script>` : ""}
+  ${autoPrint ? `<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},800);});<\/script>` : ""}
 </head>
 <body>
   ${autoPrint ? `
   <div class="no-print print-hint">
     <span>📄</span>
-    <span>Aby ukryć datę i adres URL: w oknie drukowania kliknij <strong>„Więcej ustawień"</strong> → odznacz <strong>„Nagłówki i stopki"</strong> → kliknij Zapisz</span>
+    <span>Aby ukryć URL: w oknie drukowania → <strong>Więcej ustawień</strong> → odznacz <strong>Nagłówki i stopki</strong></span>
   </div>` : ""}
-  <!-- Number (left) | Date (right) -->
-  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-    <div style="font-size:13px;font-weight:700;color:#8B1A1A">Nr ${protocol.protocolNumber}</div>
-    <div style="font-size:10px;color:#666">${scheduledDate}</div>
-  </div>
-  <!-- Title centered -->
-  <div style="text-align:center;margin-bottom:10px">
-    <div style="font-size:17px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:0.8px">${docTitle}</div>
-  </div>
 
-  <!-- Company (left) | Client (right) -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:3px solid #8B1A1A;padding-bottom:12px;margin-bottom:14px">
-    <div style="display:flex;align-items:flex-start;gap:10px">
+  <div class="topbar">
+    <span class="topbar-num">Nr ${protocol.protocolNumber}</span>
+    <span class="topbar-date">${scheduledDate}</span>
+  </div>
+  <div class="doc-title">${docTitle}</div>
+
+  <div class="header">
+    <div class="company-block">
       ${logoHtml}
       <div>
         <div class="company-name">${company?.name ?? "SerwisPro"}</div>
-        <div class="company-details">
+        <div class="company-info">
           ${company?.address ? company.address + "<br/>" : ""}
           ${company?.phone ? "Tel: " + company.phone : ""}${company?.email ? " &middot; " + company.email : ""}
           ${company?.nip ? "<br/>NIP: " + company.nip : ""}
         </div>
       </div>
     </div>
-    <div style="text-align:right;flex-shrink:0">
-      ${order.client?.name ? `<div style="font-size:13px;font-weight:700;color:#1a1a1a">${order.client.name}</div>` : ""}
-      <div style="font-size:10px;color:#555;margin-top:3px;line-height:1.6">
+    <div class="client-block">
+      ${order.client?.name ? `<div class="client-name">${order.client.name}</div>` : ""}
+      <div class="client-info">
         ${clientAddr ? clientAddr + "<br/>" : ""}
         ${order.client?.nip ? "NIP: " + order.client.nip + "<br/>" : ""}
         ${order.client?.phone ? "Tel: " + order.client.phone : ""}
@@ -308,7 +353,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     </div>
   </div>
 
-  <div style="${infoGridStyle}">
+  <div class="info-grid">
     <div class="box">
       <div class="box-label">Zlecenie</div>
       <div class="box-value">${order.orderNumber}</div>
@@ -320,13 +365,18 @@ export async function GET(req: NextRequest, { params }: Params) {
       <div class="box-label">Lokalizacja</div>
       <div class="box-value">${order.location.name}</div>
       ${order.location.address ? `<div class="box-sub">${order.location.address}</div>` : ""}
-      ${(() => { const loc = order.location as any; const line = [loc?.postalCode, loc?.city].filter(Boolean).join(" "); return line ? `<div class="box-sub">${line}</div>` : ""; })()}
+      ${[locationAny?.postalCode, locationAny?.city].filter(Boolean).join(" ") ? `<div class="box-sub">${[locationAny?.postalCode, locationAny?.city].filter(Boolean).join(" ")}</div>` : ""}
     </div>` : ""}
     <div class="box">
       <div class="box-label">Serwisant</div>
-      <div class="box-value" style="font-size:11px;font-weight:500">${assigneesText}</div>
+      <div class="box-value" style="font-size:11px;font-weight:600">${assigneesText}</div>
     </div>
-    ${hoursBox}
+    ${hasHours ? `
+    <div class="box">
+      <div class="box-label">Czas pracy</div>
+      <div class="box-value">${hFrom || "—"} – ${hTo || "—"}</div>
+      ${hFrom && hTo ? `<div class="box-sub">Łącznie: ${calcDuration(hFrom, hTo)}</div>` : ""}
+    </div>` : ""}
   </div>
 
   <div class="section">
@@ -346,11 +396,6 @@ export async function GET(req: NextRequest, { params }: Params) {
 </body>
 </html>`;
 
-  // --- HTML (preview + print-as-PDF) ---
-  // Puppeteer is not available on Firebase App Hosting (no Chromium).
-  // The browser's built-in print dialog produces perfect PDFs.
-  // ?print=1  → auto-opens print dialog (used by "Pobierz PDF" button)
-  // no param  → plain preview (used by "Podgląd" button)
   return new NextResponse(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
