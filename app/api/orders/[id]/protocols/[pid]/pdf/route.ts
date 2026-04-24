@@ -248,15 +248,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     .signature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; page-break-inside: avoid; }
     .sig-line { border-bottom: 1.5px solid #8B1A1A; height: 48px; }
     .sig-label { font-size: 10px; color: #555; text-align: center; margin-top: 6px; }
-    @media print {
-      body { padding: 0; font-size: 11px; }
-      @page {
-        size: A4;
-        margin: 12mm 15mm;
-        /* Remove browser header/footer (date, URL) */
-        margin-top: 12mm;
-      }
-      .no-print { display: none !important; }
+    @media screen {
+      body { padding-top: ${autoPrint ? "48px" : "0"}; }
     }
     .print-hint {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
@@ -265,7 +258,14 @@ export async function GET(req: NextRequest, { params }: Params) {
       display: flex; align-items: center; justify-content: center; gap: 10px;
     }
     .print-hint strong { font-size: 14px; }
-    body { padding-top: ${autoPrint ? "48px" : "0"}; }
+    @media print {
+      body { padding: 0; font-size: 11px; }
+      @page {
+        size: A4;
+        margin: 12mm 15mm;
+      }
+      .no-print { display: none !important; }
+    }
   </style>
   ${autoPrint ? `<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 800); });<\/script>` : ""}
 </head>
