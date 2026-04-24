@@ -259,7 +259,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
     .print-hint strong { font-size: 14px; }
     @media print {
-      body { padding: 0; font-size: 11px; }
+      body { padding: 0; font-size: 11px; zoom: 0.88; }
       @page {
         size: A4;
         margin: 12mm 15mm;
