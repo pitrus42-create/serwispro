@@ -56,6 +56,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   const variant = (req.nextUrl.searchParams.get("variant") ?? "print") as "print" | "report";
   const download = req.nextUrl.searchParams.get("download") === "1";
   const autoPrint = req.nextUrl.searchParams.get("print") === "1";
+  const ua = req.headers.get("user-agent") ?? "";
+  const isMobile = /mobile|android|iphone|ipad/i.test(ua);
+  const printZoom = isMobile ? 0.70 : 0.88;
 
   const [protocol, order, company, photos] = await Promise.all([
     prisma.protocol.findUnique({ where: { id: pid } }),
@@ -222,7 +225,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     .print-hint { position:fixed;top:0;left:0;right:0;z-index:9999;background:${BRAND};color:white;text-align:center;padding:10px 16px;font-size:13px;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;gap:10px; }
     .print-hint strong { font-size: 14px; }
     @media print {
-      body { padding: 0; font-size: 11px; zoom: 0.88; }
+      body { padding: 0; font-size: 11px; zoom: ${printZoom}; }
       @page { size: A4; margin: 12mm 15mm; }
       .no-print { display: none !important; }
     }
