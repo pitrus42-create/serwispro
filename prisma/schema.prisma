@@ -24,6 +24,7 @@ model User {
   lastLoginAt         DateTime?
   passwordChangedAt   DateTime?
   mustChangePassword  Boolean                  @default(false)
+  tempPasswordPlain   String?
   failedLoginAttempts Int                      @default(0)
   lockedUntil         DateTime?
   accountStatus       String                   @default("ACTIVE")
@@ -175,6 +176,9 @@ model Client {
   phoneAlt    String?
   email       String?
   alias       String?
+  address     String?
+  city        String?
+  postalCode  String?
   notes       String?
   isActive    Boolean            @default(true)
   createdAt   DateTime           @default(now())

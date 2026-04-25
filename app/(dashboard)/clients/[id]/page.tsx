@@ -137,12 +137,15 @@ function EditClientDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!r.ok) throw new Error("Błąd zapisu");
+      if (!r.ok) {
+        const errData = await r.json().catch(() => ({}));
+        throw new Error(errData.detail ?? errData.error ?? `HTTP ${r.status}`);
+      }
       toast.success("Dane klienta zostały zaktualizowane");
       onSaved();
       onClose();
-    } catch {
-      toast.error("Nie udało się zapisać zmian");
+    } catch (err) {
+      toast.error(`Nie udało się zapisać: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
     }
