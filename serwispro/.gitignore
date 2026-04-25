@@ -69,3 +69,9 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+# local dev database
+prisma/dev.db
+prisma/dev.db-journal
+prisma/dev.db-wal
+prisma/dev.db-shm
