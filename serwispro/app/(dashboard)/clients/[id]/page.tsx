@@ -137,12 +137,15 @@ function EditClientDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!r.ok) throw new Error("Błąd zapisu");
+      if (!r.ok) {
+        const errData = await r.json().catch(() => ({}));
+        throw new Error(errData.detail ?? errData.error ?? `HTTP ${r.status}`);
+      }
       toast.success("Dane klienta zostały zaktualizowane");
       onSaved();
       onClose();
-    } catch {
-      toast.error("Nie udało się zapisać zmian");
+    } catch (err) {
+      toast.error(`Nie udało się zapisać: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -356,7 +359,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [addLocationOpen, setAddLocationOpen] = useState(false);
 
   const canDelete = isAdmin(session?.user);
-  const canEdit = isAdmin(session?.user) || hasRole(session?.user, "SZEF") || hasRole(session?.user, "MENEDZER");
+  const canEdit = session?.user != null;
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -471,7 +474,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Contact info */}
         <div className="bg-white rounded-xl border p-4 space-y-3">
-          <h2 className="font-semibold text-gray-700">Dane kontaktowe 2</h2>
+          <h2 className="font-semibold text-gray-700">Dane kontaktowe</h2>
           {client.phone && (
             <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-red-800 hover:underline">
               <Phone className="h-4 w-4 text-gray-400" />

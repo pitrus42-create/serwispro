@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isAdmin, isSuperAdmin } from "@/lib/permissions";
+import { isAdmin, isSuperAdmin, hasRole } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";
 import { checkCanManageTarget, checkNotSuperAdmin } from "@/lib/user-guards";
 import { USER_INCLUDE, sanitizeUser } from "@/app/api/users/route";
@@ -67,11 +67,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = {};
 
+  const canEditPosition =
+    admin || hasRole(session.user, "SZEF") || hasRole(session.user, "MENEDZER");
+
   // Fields any user can update on their own profile
   if (firstName !== undefined) data.firstName = firstName;
   if (lastName !== undefined) data.lastName = lastName;
   if (phone !== undefined) data.phone = phone;
-  if (position !== undefined) data.position = position;
+  if (position !== undefined && canEditPosition) data.position = position;
   if (avatarUrl !== undefined) data.avatarUrl = avatarUrl;
 
   // Fields only admin can update

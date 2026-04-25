@@ -33,12 +33,14 @@ const navItems = [
   { href: "/vehicles", icon: Car, label: "Pojazdy" },
   { href: "/stock", icon: Package, label: "Magazyn" },
   { href: "/analytics", icon: BarChart3, label: "Analizy" },
-  { href: "/settings", icon: Settings, label: "Ustawienia" },
+  { href: "/settings", icon: Settings, label: "Ustawienia", roles: ["SUPERADMIN", "ADMIN", "SZEF"] },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+
+  const userRoles = session?.user?.roles as string[] | undefined;
 
   return (
     <aside className="hidden md:flex flex-col w-60 bg-white border-r border-gray-200 h-full fixed left-0 top-0 z-30">
@@ -53,7 +55,9 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-2">
         <ul className="space-y-0.5">
-          {navItems.map((item) => {
+          {navItems
+            .filter((item) => !item.roles || item.roles.some((r) => userRoles?.includes(r)))
+            .map((item) => {
             const isActive =
               item.href === "/"
                 ? pathname === "/"
@@ -83,7 +87,15 @@ export function Sidebar() {
 
       {/* User */}
       <div className="p-3 border-t border-gray-200">
-        <div className="flex items-center gap-2 mb-2">
+        <Link
+          href="/profile"
+          className={cn(
+            "flex items-center gap-2 mb-2 rounded-lg px-1 py-1 transition-colors",
+            pathname.startsWith("/profile")
+              ? "bg-red-50 text-red-900"
+              : "hover:bg-gray-100"
+          )}
+        >
           <Avatar className="w-8 h-8">
             <AvatarFallback className="bg-red-100 text-red-900 text-xs">
               {session?.user
@@ -99,7 +111,7 @@ export function Sidebar() {
               {(session?.user?.roles as string[])?.join(", ")}
             </p>
           </div>
-        </div>
+        </Link>
         <Button
           variant="ghost"
           size="sm"
