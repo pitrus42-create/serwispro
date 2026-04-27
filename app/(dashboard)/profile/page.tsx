@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
+import { isAdmin, hasRole } from "@/lib/permissions";
 import { toast } from "sonner";
 import { User, Lock, Settings2, Eye, EyeOff, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,10 @@ type PasswordForm = {
 function ProfileTab() {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
+  const canEditPosition =
+    isAdmin(session?.user) ||
+    hasRole(session?.user, "SZEF") ||
+    hasRole(session?.user, "MENEDZER");
 
   const { data } = useQuery({
     queryKey: ["me"],
@@ -132,7 +137,13 @@ function ProfileTab() {
         </div>
         <div className="space-y-1.5">
           <Label>Stanowisko</Label>
-          <Input {...register("position")} placeholder="np. Serwisant, Menedżer" />
+          {canEditPosition ? (
+            <Input {...register("position")} placeholder="np. Serwisant, Menedżer" />
+          ) : (
+            <p className="text-sm text-gray-700 py-2 px-3 bg-gray-50 rounded-md border border-transparent">
+              {me?.position || "—"}
+            </p>
+          )}
         </div>
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? "Zapisywanie..." : "Zapisz dane"}

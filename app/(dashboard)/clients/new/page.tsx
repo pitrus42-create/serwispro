@@ -29,6 +29,8 @@ const schema = z.object({
   phoneAlt: z.string().optional(),
   email: z.string().email("Nieprawidłowy email").optional().or(z.literal("")),
   address: z.string().optional(),
+  city: z.string().optional(),
+  postalCode: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -134,8 +136,19 @@ export default function NewClientPage() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="address">Adres</Label>
-          <Input id="address" {...register("address")} placeholder="ul. Przykładowa 1, 00-001 Warszawa" />
+          <Label htmlFor="address">Ulica / adres</Label>
+          <Input id="address" {...register("address")} placeholder="ul. Przykładowa 1" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="postalCode">Kod pocztowy</Label>
+            <Input id="postalCode" {...register("postalCode")} placeholder="00-001" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="city">Miasto</Label>
+            <Input id="city" {...register("city")} placeholder="Warszawa" />
+          </div>
         </div>
 
         <div className="space-y-1.5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import React, { use, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -25,6 +25,9 @@ import {
   CheckCircle2,
   UserPlus,
   Trash2,
+  Pencil,
+  Bold,
+  List,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -149,6 +152,93 @@ interface Order {
   attachments: Array<{ id: string; fileName: string; fileUrl: string; uploadedAt: string }>;
   activityLog: ActivityLog[];
   protocols: Protocol[];
+}
+
+function RichTextarea({
+  id, rows = 3, placeholder, value, onChange,
+}: {
+  id?: string; rows?: number; placeholder?: string;
+  value: string; onChange: (v: string) => void;
+}) {
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+
+  function applyBold() {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = value.slice(start, end).trim();
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+
+    if (selected) {
+      // wrap selected text
+      const newVal = `${before}**${selected}**${after}`;
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, start + 2 + selected.length); }, 0);
+    } else {
+      // insert placeholder at cursor
+      const insert = "**pogrubiony tekst**";
+      const newVal = `${before}${insert}${after}`;
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, start + 2 + "pogrubiony tekst".length); }, 0);
+    }
+  }
+
+  function applyBullet() {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    // find beginning of current line
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const lineText = value.slice(lineStart, start);
+    let newVal: string;
+    let newCursor: number;
+    if (lineText.startsWith("- ")) {
+      // remove bullet
+      newVal = value.slice(0, lineStart) + value.slice(lineStart + 2);
+      newCursor = Math.max(lineStart, start - 2);
+    } else {
+      // add bullet
+      newVal = value.slice(0, lineStart) + "- " + value.slice(lineStart);
+      newCursor = start + 2;
+    }
+    onChange(newVal);
+    setTimeout(() => { el.focus(); el.setSelectionRange(newCursor, newCursor); }, 0);
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 pb-1 border-b border-gray-100">
+        <button
+          type="button"
+          title="Pogrubienie — zaznacz tekst lub kliknij aby wstawić"
+          onClick={applyBold}
+          className="flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-100 font-bold"
+        >
+          <Bold className="h-3.5 w-3.5" />
+          <span>Pogrub</span>
+        </button>
+        <button
+          type="button"
+          title="Dodaj/usuń punkt listy w bieżącej linii"
+          onClick={applyBullet}
+          className="flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-100"
+        >
+          <List className="h-3.5 w-3.5" />
+          <span>Lista</span>
+        </button>
+      </div>
+      <Textarea
+        ref={ref}
+        id={id}
+        rows={rows}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
 }
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -323,6 +413,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       toast.success("Protokół został usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Edit protocol state
+  const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null);
+  const [editDescription, setEditDescription] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editHoursFrom, setEditHoursFrom] = useState("");
+  const [editHoursTo, setEditHoursTo] = useState("");
+
+  const editProtocolMutation = useMutation({
+    mutationFn: async ({ pid, content }: { pid: string; content: Record<string, string> }) => {
+      const r = await fetch(`/api/orders/${id}/protocols/${pid}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu protokołu");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setEditingProtocolId(null);
+      toast.success("Protokół zaktualizowany");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -760,6 +875,21 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       )}
                       <Button
                         size="sm"
+                        variant="ghost"
+                        className="gap-1.5"
+                        title="Edytuj protokół"
+                        onClick={() => {
+                          setEditingProtocolId(p.id);
+                          setEditDescription(parsed.description ?? "");
+                          setEditNotes(parsed.notes ?? "");
+                          setEditHoursFrom(parsed.hoursFrom ?? "");
+                          setEditHoursTo(parsed.hoursTo ?? "");
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="outline"
                         className="gap-1.5"
                         title="Podgląd w nowej karcie"
@@ -785,6 +915,72 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Edit protocol form */}
+          {editingProtocolId && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-amber-900 flex items-center gap-2">
+                  <Pencil className="h-4 w-4" />
+                  Edycja protokołu
+                </h3>
+                <Button size="sm" variant="ghost" onClick={() => setEditingProtocolId(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Opis wykonanych prac *</Label>
+                <RichTextarea
+                  rows={4}
+                  value={editDescription}
+                  onChange={setEditDescription}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Uwagi / zalecenia</Label>
+                <RichTextarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={setEditNotes}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Godzina rozpoczęcia</Label>
+                  <input
+                    type="time"
+                    value={editHoursFrom}
+                    onChange={(e) => setEditHoursFrom(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Godzina zakończenia</Label>
+                  <input
+                    type="time"
+                    value={editHoursTo}
+                    onChange={(e) => setEditHoursTo(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => editProtocolMutation.mutate({
+                  pid: editingProtocolId,
+                  content: {
+                    description: editDescription,
+                    notes: editNotes,
+                    ...(editHoursFrom && { hoursFrom: editHoursFrom }),
+                    ...(editHoursTo && { hoursTo: editHoursTo }),
+                  },
+                })}
+                disabled={!editDescription.trim() || editProtocolMutation.isPending}
+                className="gap-2"
+              >
+                {editProtocolMutation.isPending ? "Zapisywanie..." : "Zapisz zmiany"}
+              </Button>
             </div>
           )}
 
@@ -874,23 +1070,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
             <div className="space-y-1.5">
               <Label htmlFor="proto-desc">Opis wykonanych prac *</Label>
-              <Textarea
+              <RichTextarea
                 id="proto-desc"
                 rows={4}
                 placeholder="Opisz szczegółowo wykonane czynności serwisowe..."
                 value={protocolDescription}
-                onChange={(e) => setProtocolDescription(e.target.value)}
+                onChange={setProtocolDescription}
               />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="proto-notes">Uwagi / zalecenia</Label>
-              <Textarea
+              <RichTextarea
                 id="proto-notes"
                 rows={2}
                 placeholder="Dodatkowe uwagi, zalecenia dla klienta..."
                 value={protocolNotes}
-                onChange={(e) => setProtocolNotes(e.target.value)}
+                onChange={setProtocolNotes}
               />
             </div>
 

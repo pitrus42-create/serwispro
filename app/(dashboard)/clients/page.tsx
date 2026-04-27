@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Building2, User, ChevronRight, Phone, Mail } from "lucide-react";
+import { Plus, Search, Building2, User, ChevronRight, Phone, Mail, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,9 @@ interface Client {
   phone: string | null;
   email: string | null;
   alias: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
   _count: { orders: number; locations: number };
 }
 
@@ -107,6 +110,12 @@ export default function ClientsPage() {
                     <span className="flex items-center gap-1">
                       <Mail className="h-3 w-3" />
                       {client.email}
+                    </span>
+                  )}
+                  {(client.address || client.city) && (
+                    <span className="flex items-center gap-1 text-gray-400">
+                      <MapPin className="h-3 w-3" />
+                      {[client.address, client.postalCode, client.city].filter(Boolean).join(", ")}
                     </span>
                   )}
                 </div>

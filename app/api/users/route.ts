@@ -19,6 +19,13 @@ export const USER_INCLUDE = {
 
 export function sanitizeUser(user: Record<string, unknown>) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { passwordHash, tempPasswordPlain, ...safe } = user;
+  void tempPasswordPlain; // stripped by default — use sanitizeUserSuperAdmin for super admin
+  return safe;
+}
+
+export function sanitizeUserSuperAdmin(user: Record<string, unknown>) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash, ...safe } = user;
   return safe;
 }

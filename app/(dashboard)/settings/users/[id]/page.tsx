@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Save, KeyRound, UserX, UserCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, KeyRound, UserX, UserCheck, Trash2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +63,7 @@ type UserDetail = {
   adminNote: string | null;
   accountStatus: string;
   mustChangePassword: boolean;
+  tempPasswordPlain: string | null;
   failedLoginAttempts: number;
   lockedUntil: string | null;
   lastLoginAt: string | null;
@@ -354,10 +355,13 @@ function RolesTab({ user }: { user: UserDetail }) {
 }
 
 function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => void }) {
+  const { data: session } = useSession();
+  const isSuper = isSuperAdmin(session?.user);
   const queryClient = useQueryClient();
   const [resetOpen, setResetOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [hardDeleteOpen, setHardDeleteOpen] = useState(false);
+  const [showTempPassword, setShowTempPassword] = useState(false);
 
   const hardDeleteMutation = useMutation({
     mutationFn: async () => {
@@ -395,7 +399,8 @@ function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => v
       if (!r.ok) throw new Error((await r.json()).error);
     },
     onSuccess: () => {
-      toast.success("Hasło zresetowane. Użytkownik musi je zmienić przy logowaniu.");
+      toast.success("Hasło zresetowane. Użytkownik może się zalogować nowym hasłem.");
+      queryClient.invalidateQueries({ queryKey: ["user", user.id] });
       setResetOpen(false);
       setNewPassword("");
     },
@@ -466,6 +471,32 @@ function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => v
         </div>
       </div>
 
+      {isSuper && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+            Ostatnie hasło tymczasowe (tylko super admin)
+          </p>
+          {user.tempPasswordPlain ? (
+            <div className="flex items-center gap-2">
+              <code className="text-sm font-mono bg-white border rounded px-3 py-1.5 flex-1 select-all">
+                {showTempPassword ? user.tempPasswordPlain : "••••••••••••"}
+              </code>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowTempPassword((p) => !p)}
+              >
+                {showTempPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-amber-600">
+              Brak — hasło nie było jeszcze resetowane przez admina.
+            </p>
+          )}
+        </div>
+      )}
+
       <div>
         <Button
           variant="outline"
@@ -483,7 +514,7 @@ function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => v
             <DialogTitle>Resetuj hasło</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5 py-2">
-            <Label>Nowe hasło tymczasowe</Label>
+            <Label>Nowe hasło</Label>
             <Input
               type="text"
               value={newPassword}
@@ -491,7 +522,7 @@ function SecurityTab({ user, onDeleted }: { user: UserDetail; onDeleted: () => v
               placeholder="min. 8 znaków, wielka litera, cyfra, znak specjalny"
             />
             <p className="text-xs text-gray-500">
-              Przekaż hasło użytkownikowi — będzie musiał je zmienić przy logowaniu.
+              Przekaż hasło użytkownikowi — może się zalogować podanym hasłem.
             </p>
           </div>
           <DialogFooter>

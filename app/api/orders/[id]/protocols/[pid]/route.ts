@@ -6,6 +6,26 @@ import { NextRequest, NextResponse } from "next/server";
 
 type Params = { params: Promise<{ id: string; pid: string }> };
 
+export async function PUT(req: NextRequest, { params }: Params) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: orderId, pid } = await params;
+  const body = await req.json();
+
+  const protocol = await prisma.protocol.findUnique({ where: { id: pid } });
+  if (!protocol || protocol.orderId !== orderId) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const updated = await prisma.protocol.update({
+    where: { id: pid },
+    data: { content: JSON.stringify(body.content ?? {}) },
+  });
+
+  return NextResponse.json({ data: updated });
+}
+
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
