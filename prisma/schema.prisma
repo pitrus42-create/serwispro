@@ -337,6 +337,7 @@ model OrderMaterial {
   manualName  String?
   quantity    Float?
   unit        String?
+  unitPrice   Float?
   notes       String?
   addedBy     String?
   addedAt     DateTime   @default(now())
@@ -554,6 +555,17 @@ model ProtocolTemplate {
   isActive  Boolean  @default(true)
   createdBy String?
   createdAt DateTime @default(now())
+}
+
+model ProtocolGlobalTemplate {
+  id               String   @id @default(uuid())
+  name             String
+  defaultText      String   @default("")
+  defaultChecklist String   @default("[]")
+  defaultNotes     String   @default("")
+  createdBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model ProtocolPhoto {
