@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import React, { use, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -25,13 +25,18 @@ import {
   CheckCircle2,
   UserPlus,
   Trash2,
+  Pencil,
+  Bold,
+  List,
+  BookOpen,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +50,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { canDo, isAdmin } from "@/lib/permissions";
+import {
+  ProtocolDescriptionEditor,
+  GlobalTemplatePicker,
+  GlobalTemplateManager,
+  isValidWorkDescription,
+  getWorkDescriptionPreview,
+  serializeWorkDescription,
+  type WorkDescriptionData,
+  type ChecklistItem,
+} from "@/components/protocols/ProtocolDescriptionEditor";
 
 const STATUS_LABELS: Record<string, string> = {
   OCZEKUJACE: "Oczekujące",
@@ -141,14 +156,103 @@ interface Order {
   checklists: OrderChecklist[];
   materials: Array<{
     id: string;
+    manualName: string | null;
     quantity: number;
+    unit: string | null;
     unitPrice: number | null;
     notes: string | null;
-    stockItem: { name: string; unit: string };
+    stockItem: { name: string; unit: string } | null;
   }>;
   attachments: Array<{ id: string; fileName: string; fileUrl: string; uploadedAt: string }>;
   activityLog: ActivityLog[];
   protocols: Protocol[];
+}
+
+function RichTextarea({
+  id, rows = 3, placeholder, value, onChange,
+}: {
+  id?: string; rows?: number; placeholder?: string;
+  value: string; onChange: (v: string) => void;
+}) {
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+
+  function applyBold() {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = value.slice(start, end).trim();
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+
+    if (selected) {
+      // wrap selected text
+      const newVal = `${before}**${selected}**${after}`;
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, start + 2 + selected.length); }, 0);
+    } else {
+      // insert placeholder at cursor
+      const insert = "**pogrubiony tekst**";
+      const newVal = `${before}${insert}${after}`;
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, start + 2 + "pogrubiony tekst".length); }, 0);
+    }
+  }
+
+  function applyBullet() {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    // find beginning of current line
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const lineText = value.slice(lineStart, start);
+    let newVal: string;
+    let newCursor: number;
+    if (lineText.startsWith("- ")) {
+      // remove bullet
+      newVal = value.slice(0, lineStart) + value.slice(lineStart + 2);
+      newCursor = Math.max(lineStart, start - 2);
+    } else {
+      // add bullet
+      newVal = value.slice(0, lineStart) + "- " + value.slice(lineStart);
+      newCursor = start + 2;
+    }
+    onChange(newVal);
+    setTimeout(() => { el.focus(); el.setSelectionRange(newCursor, newCursor); }, 0);
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 pb-1 border-b border-gray-100">
+        <button
+          type="button"
+          title="Pogrubienie — zaznacz tekst lub kliknij aby wstawić"
+          onClick={applyBold}
+          className="flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-100 font-bold"
+        >
+          <Bold className="h-3.5 w-3.5" />
+          <span>Pogrub</span>
+        </button>
+        <button
+          type="button"
+          title="Dodaj/usuń punkt listy w bieżącej linii"
+          onClick={applyBullet}
+          className="flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-100"
+        >
+          <List className="h-3.5 w-3.5" />
+          <span>Lista</span>
+        </button>
+      </div>
+      <Textarea
+        ref={ref}
+        id={id}
+        rows={rows}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
 }
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -191,8 +295,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [protocolNotes, setProtocolNotes] = useState("");
   const [protocolHoursFrom, setProtocolHoursFrom] = useState("");
   const [protocolHoursTo, setProtocolHoursTo] = useState("");
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
+  const [protocolDate, setProtocolDate] = useState("");
   const [protocolPhotos, setProtocolPhotos] = useState<File[]>([]);
+  // Incrementing this key forces WorkDescriptionEditor to re-mount (reset internal state)
+  const [descEditorKey, setDescEditorKey] = useState(0);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -205,15 +313,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const order: Order | undefined = data?.data;
 
-  const { data: templatesData } = useQuery({
-    queryKey: ["protocol-templates"],
-    queryFn: async () => {
-      const r = await fetch("/api/protocol-templates");
-      return r.json();
-    },
-    enabled: activeTab === "protocols",
-  });
-  const protocolTemplates: Array<{ id: string; name: string; content: string }> = templatesData?.data ?? [];
+  useEffect(() => {
+    if (order?.scheduledAt) {
+      setProtocolDate(format(new Date(order.scheduledAt), "yyyy-MM-dd"));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.scheduledAt]);
 
   const statusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
@@ -266,7 +371,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const protocolMutation = useMutation({
     mutationFn: async ({ variant, content, photos }: {
       variant: "print" | "report";
-      content: { description: string; notes: string; hoursFrom?: string; hoursTo?: string };
+      content: { description: string; notes: string; date?: string; hoursFrom?: string; hoursTo?: string };
       photos: File[];
     }) => {
       const type = variant === "report" ? "raport" : "protokol";
@@ -306,7 +411,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       setProtocolHoursFrom("");
       setProtocolHoursTo("");
       setProtocolPhotos([]);
-      setSelectedTemplateIds(new Set());
+      setDescEditorKey((k) => k + 1);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -326,6 +431,83 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Edit protocol state
+  const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null);
+  const [editDescription, setEditDescription] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editHoursFrom, setEditHoursFrom] = useState("");
+  const [editHoursTo, setEditHoursTo] = useState("");
+  const [editDate, setEditDate] = useState("");
+
+  const editProtocolMutation = useMutation({
+    mutationFn: async ({ pid, content }: { pid: string; content: Record<string, string> }) => {
+      const r = await fetch(`/api/orders/${id}/protocols/${pid}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu protokołu");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setEditingProtocolId(null);
+      toast.success("Protokół zaktualizowany");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const [newMat, setNewMat] = useState({ name: "", qty: "", unit: "szt", price: "" });
+
+  const addMaterialMutation = useMutation({
+    mutationFn: async () => {
+      if (!newMat.name.trim()) throw new Error("Podaj nazwę materiału");
+      const r = await fetch(`/api/orders/${id}/materials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          manualName: newMat.name.trim(),
+          quantity: newMat.qty ? parseFloat(newMat.qty) : null,
+          unit: newMat.unit.trim() || null,
+          unitPrice: newMat.price ? parseFloat(newMat.price) : null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd dodawania materiału");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setNewMat({ name: "", qty: "", unit: "szt", price: "" });
+      toast.success("Materiał dodany");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMaterialMutation = useMutation({
+    mutationFn: async (mid: string) => {
+      const r = await fetch(`/api/orders/${id}/materials/${mid}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Błąd usuwania materiału");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Materiał usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function handleApplyTemplate(text: string, checklist: ChecklistItem[], notes: string) {
+    const data: WorkDescriptionData = {
+      type: "workDescription",
+      text,
+      checklist: { enabled: checklist.length > 0, items: checklist },
+    };
+    setProtocolDescription(serializeWorkDescription(data));
+    setProtocolNotes(notes);
+    setDescEditorKey((k) => k + 1);
+    setShowTemplatePicker(false);
+  }
 
   if (isLoading) {
     return (
@@ -588,7 +770,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               return (
                 <div key={checklist.id} className="bg-white rounded-xl border p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold">{checklist.name}</h3>
+                    <h3 className="font-semibold text-gray-700">{checklist.name}</h3>
                     <span className="text-sm text-gray-500">{doneCount}/{checklist.items.length}</span>
                   </div>
                   <div className="space-y-2">
@@ -624,9 +806,65 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </TabsContent>
 
         {/* Materials tab */}
-        <TabsContent value="materials">
+        <TabsContent value="materials" className="space-y-4">
+          {/* Add form */}
+          <div className="bg-white rounded-xl border p-4">
+            <h3 className="font-semibold text-gray-700 mb-3">Dodaj materiał</h3>
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="flex-1 min-w-36">
+                <Label className="text-xs text-gray-500 mb-1">Nazwa</Label>
+                <Input
+                  placeholder="Nazwa materiału"
+                  value={newMat.name}
+                  onChange={(e) => setNewMat((p) => ({ ...p, name: e.target.value }))}
+                />
+              </div>
+              <div className="w-20">
+                <Label className="text-xs text-gray-500 mb-1">Ilość</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="1"
+                  value={newMat.qty}
+                  onChange={(e) => setNewMat((p) => ({ ...p, qty: e.target.value }))}
+                />
+              </div>
+              <div className="w-24">
+                <Label className="text-xs text-gray-500 mb-1">Jm.</Label>
+                <select
+                  value={newMat.unit}
+                  onChange={(e) => setNewMat((p) => ({ ...p, unit: e.target.value }))}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                >
+                  {["szt", "m", "mb", "kg", "g", "l", "ml", "kpl", "op"].map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-28">
+                <Label className="text-xs text-gray-500 mb-1">Cena j. (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="opcjonalna"
+                  value={newMat.price}
+                  onChange={(e) => setNewMat((p) => ({ ...p, price: e.target.value }))}
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={() => addMaterialMutation.mutate()}
+                disabled={addMaterialMutation.isPending}
+              >
+                Dodaj
+              </Button>
+            </div>
+          </div>
+
+          {/* List */}
           {order.materials.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-10 text-gray-400">
               <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
               <p>Brak użytych materiałów</p>
             </div>
@@ -639,26 +877,43 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <th className="text-right p-3 font-medium text-gray-600">Ilość</th>
                     <th className="text-right p-3 font-medium text-gray-600">Cena j.</th>
                     <th className="text-right p-3 font-medium text-gray-600">Wartość</th>
+                    <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {order.materials.map((m) => (
-                    <tr key={m.id} className="border-b last:border-0">
-                      <td className="p-3">
-                        <p className="font-medium">{m.stockItem.name}</p>
-                        {m.notes && <p className="text-xs text-gray-400">{m.notes}</p>}
-                      </td>
-                      <td className="p-3 text-right text-gray-600">
-                        {m.quantity} {m.stockItem.unit}
-                      </td>
-                      <td className="p-3 text-right text-gray-600">
-                        {m.unitPrice != null ? `${m.unitPrice.toFixed(2)} zł` : "—"}
-                      </td>
-                      <td className="p-3 text-right font-medium">
-                        {m.unitPrice != null ? `${(m.quantity * m.unitPrice).toFixed(2)} zł` : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {order.materials.map((m) => {
+                    const name = m.manualName ?? m.stockItem?.name ?? "—";
+                    const unit = m.unit ?? m.stockItem?.unit ?? "";
+                    const value = m.unitPrice != null && m.quantity != null
+                      ? (m.quantity * m.unitPrice).toFixed(2)
+                      : null;
+                    return (
+                      <tr key={m.id} className="border-b last:border-0">
+                        <td className="p-3">
+                          <p className="font-medium">{name}</p>
+                          {m.notes && <p className="text-xs text-gray-400">{m.notes}</p>}
+                        </td>
+                        <td className="p-3 text-right text-gray-600">
+                          {m.quantity} {unit}
+                        </td>
+                        <td className="p-3 text-right text-gray-600">
+                          {m.unitPrice != null ? `${m.unitPrice.toFixed(2)} zł` : "—"}
+                        </td>
+                        <td className="p-3 text-right font-medium">
+                          {value != null ? `${value} zł` : "—"}
+                        </td>
+                        <td className="p-2">
+                          <button
+                            onClick={() => deleteMaterialMutation.mutate(m.id)}
+                            disabled={deleteMaterialMutation.isPending}
+                            className="text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -721,7 +976,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       </div>
                       <p className="text-xs text-gray-400 truncate">
                         {format(new Date(p.createdAt), "d MMM yyyy, HH:mm", { locale: pl })}
-                        {parsed.description && ` · ${parsed.description.slice(0, 50)}${parsed.description.length > 50 ? "…" : ""}`}
+                        {parsed.description && (() => {
+                          const preview = getWorkDescriptionPreview(parsed.description);
+                          return preview ? ` · ${preview.slice(0, 60)}${preview.length > 60 ? "…" : ""}` : null;
+                        })()}
                       </p>
                     </div>
                     <div className="flex gap-1.5 shrink-0">
@@ -760,6 +1018,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       )}
                       <Button
                         size="sm"
+                        variant="ghost"
+                        className="gap-1.5"
+                        title="Edytuj protokół"
+                        onClick={() => {
+                          setEditingProtocolId(p.id);
+                          setEditDescription(parsed.description ?? "");
+                          setEditNotes(parsed.notes ?? "");
+                          setEditHoursFrom(parsed.hoursFrom ?? "");
+                          setEditHoursTo(parsed.hoursTo ?? "");
+                          setEditDate(parsed.date ?? (order.scheduledAt ? format(new Date(order.scheduledAt), "yyyy-MM-dd") : ""));
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="outline"
                         className="gap-1.5"
                         title="Podgląd w nowej karcie"
@@ -788,10 +1062,87 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           )}
 
+          {/* Edit protocol form */}
+          {editingProtocolId && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-amber-900 flex items-center gap-2">
+                  <Pencil className="h-4 w-4" />
+                  Edycja protokołu
+                </h3>
+                <Button size="sm" variant="ghost" onClick={() => setEditingProtocolId(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Opis wykonanych prac *</Label>
+                <ProtocolDescriptionEditor
+                  key={editingProtocolId ?? "edit"}
+                  value={editDescription}
+                  onChange={setEditDescription}
+                  rows={4}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Uwagi / zalecenia</Label>
+                <RichTextarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={setEditNotes}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data wykonania</Label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Godzina rozpoczęcia</Label>
+                  <input
+                    type="time"
+                    value={editHoursFrom}
+                    onChange={(e) => setEditHoursFrom(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Godzina zakończenia</Label>
+                  <input
+                    type="time"
+                    value={editHoursTo}
+                    onChange={(e) => setEditHoursTo(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => editProtocolMutation.mutate({
+                  pid: editingProtocolId,
+                  content: {
+                    description: editDescription,
+                    notes: editNotes,
+                    ...(editDate && { date: editDate }),
+                    ...(editHoursFrom && { hoursFrom: editHoursFrom }),
+                    ...(editHoursTo && { hoursTo: editHoursTo }),
+                  },
+                })}
+                disabled={!isValidWorkDescription(editDescription) || editProtocolMutation.isPending}
+                className="gap-2"
+              >
+                {editProtocolMutation.isPending ? "Zapisywanie..." : "Zapisz zmiany"}
+              </Button>
+            </div>
+          )}
+
           {/* New protocol form */}
           <div className="bg-white rounded-xl border p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+              <h3 className="font-semibold text-gray-700 flex items-center gap-2">
                 <FilePlus className="h-5 w-5 text-red-700" />
                 Nowy protokół
               </h3>
@@ -836,64 +1187,71 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </p>
             )}
 
-            {/* Selektor szablonów */}
-            {protocolTemplates.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-gray-500 uppercase tracking-wide">Szablony (opcjonalnie)</Label>
-                <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
-                  {protocolTemplates.map((t) => (
-                    <label
-                      key={t.id}
-                      className="flex items-start gap-3 p-2.5 cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      <Checkbox
-                        checked={selectedTemplateIds.has(t.id)}
-                        onCheckedChange={(checked) => {
-                          setSelectedTemplateIds((prev) => {
-                            const next = new Set(prev);
-                            checked ? next.add(t.id) : next.delete(t.id);
-                            return next;
-                          });
-                          if (checked) {
-                            setProtocolDescription((prev) =>
-                              prev ? prev + "\n\n" + t.content : t.content
-                            );
-                          }
-                        }}
-                        className="mt-0.5"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800">{t.name}</p>
-                        <p className="text-xs text-gray-400 truncate">{t.content}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+            {/* Template picker / manager */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setShowTemplatePicker((v) => !v); setShowTemplateManager(false); }}
+                  className="gap-1.5 h-8"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  Wstaw szablon
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setShowTemplateManager((v) => !v); setShowTemplatePicker(false); }}
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                >
+                  <Settings2 className="h-3 w-3" />
+                  Zarządzaj szablonami
+                </button>
               </div>
-            )}
+              {showTemplatePicker && (
+                <GlobalTemplatePicker
+                  onApply={handleApplyTemplate}
+                  onClose={() => setShowTemplatePicker(false)}
+                />
+              )}
+              {showTemplateManager && (
+                <GlobalTemplateManager onClose={() => setShowTemplateManager(false)} />
+              )}
+            </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="proto-desc">Opis wykonanych prac *</Label>
-              <Textarea
-                id="proto-desc"
+              <Label>Opis wykonanych prac *</Label>
+              <ProtocolDescriptionEditor
+                key={descEditorKey}
+                value={protocolDescription}
+                onChange={setProtocolDescription}
                 rows={4}
                 placeholder="Opisz szczegółowo wykonane czynności serwisowe..."
-                value={protocolDescription}
-                onChange={(e) => setProtocolDescription(e.target.value)}
               />
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="proto-notes">Uwagi / zalecenia</Label>
-              <Textarea
+              <RichTextarea
                 id="proto-notes"
                 rows={2}
                 placeholder="Dodatkowe uwagi, zalecenia dla klienta..."
                 value={protocolNotes}
-                onChange={(e) => setProtocolNotes(e.target.value)}
+                onChange={setProtocolNotes}
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="proto-date">Data wykonania</Label>
+              <input
+                id="proto-date"
+                type="date"
+                value={protocolDate}
+                onChange={(e) => setProtocolDate(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="proto-hours-from">Godzina rozpoczęcia (opcjonalnie)</Label>
@@ -919,7 +1277,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
             {/* Upload zdjęć */}
             <div className="space-y-2">
-              <Label className="text-xs text-gray-500 uppercase tracking-wide">
+              <Label className="text-xs text-gray-500">
                 Zdjęcia dokumentacji (max 6)
               </Label>
               {protocolPhotos.length > 0 && (
@@ -979,9 +1337,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 onClick={() => protocolMutation.mutate({
                   variant: "print",
                   photos: [],
-                  content: { description: protocolDescription, notes: protocolNotes, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
+                  content: { description: protocolDescription, notes: protocolNotes, date: protocolDate || undefined, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
                 })}
-                disabled={!protocolDescription.trim() || protocolMutation.isPending}
+                disabled={!isValidWorkDescription(protocolDescription) || protocolMutation.isPending}
                 className="gap-2"
               >
                 <FileText className="h-4 w-4" />
@@ -992,9 +1350,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 onClick={() => protocolMutation.mutate({
                   variant: "report",
                   photos: protocolPhotos,
-                  content: { description: protocolDescription, notes: protocolNotes, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
+                  content: { description: protocolDescription, notes: protocolNotes, date: protocolDate || undefined, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
                 })}
-                disabled={!protocolDescription.trim() || protocolMutation.isPending}
+                disabled={!isValidWorkDescription(protocolDescription) || protocolMutation.isPending}
                 className="gap-2"
               >
                 <ImageIcon className="h-4 w-4" />

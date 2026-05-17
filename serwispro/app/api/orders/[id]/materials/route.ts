@@ -9,7 +9,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id: orderId } = await params;
 
-  const { stockItemId, manualName, quantity, unit, notes } = await req.json();
+  const { stockItemId, manualName, quantity, unit, unitPrice, notes } = await req.json();
 
   if (!stockItemId && !manualName) {
     return NextResponse.json({ error: "stockItemId or manualName required" }, { status: 400 });
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       manualName: manualName ?? null,
       quantity: quantity ?? null,
       unit: unit ?? null,
+      unitPrice: unitPrice ?? null,
       notes: notes ?? null,
       addedBy: session.user.id,
     },

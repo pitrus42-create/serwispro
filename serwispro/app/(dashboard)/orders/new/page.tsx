@@ -206,8 +206,9 @@ function NewOrderForm() {
         body: JSON.stringify(data),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Błąd tworzenia zlecenia");
+        let errMsg = "Błąd tworzenia zlecenia";
+        try { const err = await res.json(); errMsg = err.error ?? errMsg; } catch {}
+        throw new Error(errMsg);
       }
       const { data: order } = await res.json();
       toast.success(`Zlecenie ${order.orderNumber} zostało utworzone`);
