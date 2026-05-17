@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Plus, Trash2, Copy, ChevronUp, ChevronDown,
   Bold, List, CheckSquare, X, BookOpen, Pencil,
@@ -325,8 +325,9 @@ export function GlobalTemplatePicker({
 
   useEffect(() => {
     fetch("/api/protocol-global-templates")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((d) => setTemplates(d.data ?? []))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -424,8 +425,11 @@ export function GlobalTemplateManager({ onClose }: { onClose: () => void }) {
     setLoading(true);
     try {
       const r = await fetch("/api/protocol-global-templates");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       setTemplates(d.data ?? []);
+    } catch {
+      // silently fail — templates stay empty
     } finally {
       setLoading(false);
     }
