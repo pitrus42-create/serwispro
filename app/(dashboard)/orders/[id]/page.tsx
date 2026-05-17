@@ -57,7 +57,6 @@ import {
   isValidWorkDescription,
   getWorkDescriptionPreview,
   serializeWorkDescription,
-  uid,
   type WorkDescriptionData,
   type ChecklistItem,
 } from "@/components/protocols/ProtocolDescriptionEditor";
@@ -372,7 +371,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const protocolMutation = useMutation({
     mutationFn: async ({ variant, content, photos }: {
       variant: "print" | "report";
-      content: { description: string; notes: string; hoursFrom?: string; hoursTo?: string };
+      content: { description: string; notes: string; date?: string; hoursFrom?: string; hoursTo?: string };
       photos: File[];
     }) => {
       const type = variant === "report" ? "raport" : "protokol";
