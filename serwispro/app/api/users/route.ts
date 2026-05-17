@@ -68,21 +68,27 @@ export async function GET(req: NextRequest) {
     where.roleAssignments = { some: { roleId } };
   }
 
-  const [users, total] = await prisma.$transaction([
-    prisma.user.findMany({
-      where,
-      include: USER_INCLUDE,
-      orderBy: { firstName: "asc" },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.user.count({ where }),
-  ]);
+  try {
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: USER_INCLUDE,
+        orderBy: { firstName: "asc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
-  const safe = users.map((u) =>
-    sanitizeUser(u as unknown as Record<string, unknown>)
-  );
-  return NextResponse.json({ data: safe, total });
+    const safe = users.map((u) =>
+      sanitizeUser(u as unknown as Record<string, unknown>)
+    );
+    return NextResponse.json({ data: safe, total });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("GET /api/users error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
