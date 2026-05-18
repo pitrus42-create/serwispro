@@ -69,16 +69,40 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const users = await prisma.user.findMany({
-      where,
-      include: USER_INCLUDE,
-      orderBy: { firstName: "asc" },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-    const total = await prisma.user.count({ where });
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: { firstName: "asc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
-    const safe = users.map((u) =>
+    const userIds = users.map((u) => u.id);
+
+    const [roleAssignments, permissionOverrides, userSettingsList] = await Promise.all([
+      prisma.userRoleAssignment.findMany({
+        where: { userId: { in: userIds } },
+        include: { role: true },
+      }),
+      prisma.userPermissionOverride.findMany({
+        where: { userId: { in: userIds } },
+        include: { permission: true },
+      }),
+      prisma.userSettings.findMany({
+        where: { userId: { in: userIds } },
+      }),
+    ]);
+
+    const enriched = users.map((u) => ({
+      ...u,
+      roleAssignments: roleAssignments.filter((r) => r.userId === u.id),
+      permissionOverrides: permissionOverrides.filter((p) => p.userId === u.id),
+      userSettings: userSettingsList.find((s) => s.userId === u.id) ?? null,
+    }));
+
+    const safe = enriched.map((u) =>
       sanitizeUser(u as unknown as Record<string, unknown>)
     );
     return NextResponse.json({ data: safe, total });
