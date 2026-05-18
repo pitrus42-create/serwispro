@@ -69,16 +69,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        include: USER_INCLUDE,
-        orderBy: { firstName: "asc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.user.count({ where }),
-    ]);
+    const users = await prisma.user.findMany({
+      where,
+      include: USER_INCLUDE,
+      orderBy: { firstName: "asc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    const total = await prisma.user.count({ where });
 
     const safe = users.map((u) =>
       sanitizeUser(u as unknown as Record<string, unknown>)
