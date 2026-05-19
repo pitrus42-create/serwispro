@@ -31,7 +31,13 @@ export function sanitizeUserSuperAdmin(user: Record<string, unknown>) {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  let session;
+  try {
+    session = await auth();
+  } catch (e) {
+    console.error("GET /api/users auth error:", e);
+    return NextResponse.json({ error: "Auth error" }, { status: 500 });
+  }
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -120,8 +126,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ data: safe, total });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("GET /api/users error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("GET /api/users error:", {
+      name: e instanceof Error ? e.name : "Unknown",
+      message: msg,
+      stack: e instanceof Error ? e.stack : undefined,
+    });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
 
