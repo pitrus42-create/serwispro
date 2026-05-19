@@ -4,7 +4,8 @@ import { isAdmin, isSuperAdmin } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";
 import { validatePasswordStrength } from "@/lib/password";
 import { checkRoleAssignmentAllowed } from "@/lib/user-guards";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextAuthRequest } from "next-auth";
 import bcrypt from "bcryptjs";
 
 export const USER_INCLUDE = {
@@ -30,14 +31,8 @@ export function sanitizeUserSuperAdmin(user: Record<string, unknown>) {
   return safe;
 }
 
-export async function GET(req: NextRequest) {
-  let session;
-  try {
-    session = await auth();
-  } catch (e) {
-    console.error("GET /api/users auth error:", e);
-    return NextResponse.json({ error: "Auth error" }, { status: 500 });
-  }
+export const GET = auth(async function GET(req: NextAuthRequest) {
+  const session = req.auth;
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -133,10 +128,10 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
-}
+});
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
+export const POST = auth(async function POST(req: NextAuthRequest) {
+  const session = req.auth;
   if (!session || !isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -276,4 +271,4 @@ export async function POST(req: NextRequest) {
     { data: sanitizeUser(user as unknown as Record<string, unknown>) },
     { status: 201 }
   );
-}
+});
