@@ -16,8 +16,8 @@ function createPrismaClient() {
   }
 
   if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN in production environment"
+    console.error(
+      "[prisma] TURSO_DATABASE_URL or TURSO_AUTH_TOKEN not set — DB queries will fail"
     );
   }
 
