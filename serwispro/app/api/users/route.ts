@@ -69,36 +69,40 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        orderBy: { firstName: "asc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.user.count({ where }),
-    ]);
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { firstName: "asc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    const total = await prisma.user.count({ where });
 
     const userIds = users.map((u) => u.id);
 
-    const [roleAssignments, permissionOverrides, userSettingsList] = await Promise.all([
-      prisma.userRoleAssignment.findMany({
-        where: { userId: { in: userIds } },
-        include: { role: true },
-      }),
-      prisma.userPermissionOverride.findMany({
-        where: { userId: { in: userIds } },
-        include: { permission: true },
-      }),
-      prisma.userSettings.findMany({
-        where: { userId: { in: userIds } },
-      }),
-    ]);
+    const roleAssignments = await prisma.userRoleAssignment.findMany({
+      where: { userId: { in: userIds } },
+    });
+    const roleIds = [...new Set(roleAssignments.map((r) => r.roleId))];
+    const roles = await prisma.role.findMany({ where: { id: { in: roleIds } } });
+
+    const permissionOverrides = await prisma.userPermissionOverride.findMany({
+      where: { userId: { in: userIds } },
+    });
+    const permissionIds = [...new Set(permissionOverrides.map((p) => p.permissionId))];
+    const permissions = await prisma.permission.findMany({ where: { id: { in: permissionIds } } });
+
+    const userSettingsList = await prisma.userSettings.findMany({
+      where: { userId: { in: userIds } },
+    });
 
     const enriched = users.map((u) => ({
       ...u,
-      roleAssignments: roleAssignments.filter((r) => r.userId === u.id),
-      permissionOverrides: permissionOverrides.filter((p) => p.userId === u.id),
+      roleAssignments: roleAssignments
+        .filter((r) => r.userId === u.id)
+        .map((r) => ({ ...r, role: roles.find((role) => role.id === r.roleId) ?? null })),
+      permissionOverrides: permissionOverrides
+        .filter((p) => p.userId === u.id)
+        .map((p) => ({ ...p, permission: permissions.find((perm) => perm.id === p.permissionId) ?? null })),
       userSettings: userSettingsList.find((s) => s.userId === u.id) ?? null,
     }));
 
