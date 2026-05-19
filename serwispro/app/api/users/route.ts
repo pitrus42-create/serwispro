@@ -77,19 +77,27 @@ export async function GET(req: NextRequest) {
     });
     const total = await prisma.user.count({ where });
 
+    if (users.length === 0) {
+      return NextResponse.json({ data: [], total });
+    }
+
     const userIds = users.map((u) => u.id);
 
     const roleAssignments = await prisma.userRoleAssignment.findMany({
       where: { userId: { in: userIds } },
     });
     const roleIds = [...new Set(roleAssignments.map((r) => r.roleId))];
-    const roles = await prisma.role.findMany({ where: { id: { in: roleIds } } });
+    const roles = roleIds.length > 0
+      ? await prisma.role.findMany({ where: { id: { in: roleIds } } })
+      : [];
 
     const permissionOverrides = await prisma.userPermissionOverride.findMany({
       where: { userId: { in: userIds } },
     });
     const permissionIds = [...new Set(permissionOverrides.map((p) => p.permissionId))];
-    const permissions = await prisma.permission.findMany({ where: { id: { in: permissionIds } } });
+    const permissions = permissionIds.length > 0
+      ? await prisma.permission.findMany({ where: { id: { in: permissionIds } } })
+      : [];
 
     const userSettingsList = await prisma.userSettings.findMany({
       where: { userId: { in: userIds } },
