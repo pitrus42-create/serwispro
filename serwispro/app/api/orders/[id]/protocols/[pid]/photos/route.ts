@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFile } from "@/lib/storage";
 import { NextRequest, NextResponse } from "next/server";
@@ -9,7 +9,7 @@ type Params = { params: Promise<{ id: string; pid: string }> };
 export const maxDuration = 60; // allow up to 60s for large photo uploads
 
 export async function GET(_req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { pid } = await params;
 
@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const session = await auth();
+    const session = await getAuth(req);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { id: orderId, pid } = await params;
 

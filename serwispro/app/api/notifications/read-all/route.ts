@@ -1,9 +1,9 @@
-import { auth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 export async function PATCH() {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const result = await prisma.notification.updateMany({

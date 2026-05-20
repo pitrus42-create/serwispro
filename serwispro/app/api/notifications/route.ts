@@ -1,9 +1,9 @@
-import { auth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -15,16 +15,14 @@ export async function GET(req: NextRequest) {
     ...(readOnly ? { isRead: false } : {}),
   };
 
-  const [data, unreadCount] = await Promise.all([
-    prisma.notification.findMany({
-      where,
-      orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
-      take: limit,
-    }),
-    prisma.notification.count({
-      where: { userId: session.user.id, isRead: false },
-    }),
-  ]);
+  const data = await prisma.notification.findMany({
+    where,
+    orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
+    take: limit,
+  });
+  const unreadCount = await prisma.notification.count({
+    where: { userId: session.user.id, isRead: false },
+  });
 
   return NextResponse.json({ data, unreadCount });
 }

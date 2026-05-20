@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+﻿import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, isSuperAdmin, hasRole } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";
@@ -17,7 +17,7 @@ async function getTargetRoles(userId: string): Promise<string[]> {
 }
 
 export async function GET(req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -104,7 +104,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session || !isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

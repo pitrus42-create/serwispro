@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+﻿import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateOrderNumber } from "@/lib/order-number";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
@@ -7,7 +7,7 @@ import { isAdmin } from "@/lib/permissions";
 import { startOfDay } from "date-fns";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -48,32 +48,30 @@ export async function GET(req: NextRequest) {
     ...(q ? { OR: [{ orderNumber: { contains: q } }, { title: { contains: q } }, { description: { contains: q } }] } : {}),
   };
 
-  const [total, data] = await Promise.all([
-    prisma.order.count({ where }),
-    prisma.order.findMany({
-      where,
-      include: {
-        client: { select: { id: true, name: true } },
-        location: { select: { id: true, name: true, address: true, city: true } },
-        assignments: {
-          include: { user: { select: { id: true, firstName: true, lastName: true } } },
-        },
+  const total = await prisma.order.count({ where });
+  const data = await prisma.order.findMany({
+    where,
+    include: {
+      client: { select: { id: true, name: true } },
+      location: { select: { id: true, name: true, address: true, city: true } },
+      assignments: {
+        include: { user: { select: { id: true, firstName: true, lastName: true } } },
       },
-      orderBy: [
-        { isCritical: "desc" },
-        { scheduledAt: "asc" },
-        { createdAt: "desc" },
-      ],
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-  ]);
+    },
+    orderBy: [
+      { isCritical: "desc" },
+      { scheduledAt: "asc" },
+      { createdAt: "desc" },
+    ],
+    skip: (page - 1) * limit,
+    take: limit,
+  });
 
   return NextResponse.json({ data, total, page, limit });
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();

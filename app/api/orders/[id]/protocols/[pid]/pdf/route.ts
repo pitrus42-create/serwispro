@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+﻿import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { format, parseISO } from "date-fns";
@@ -205,7 +205,7 @@ function markdownToChecklist(text: string): string {
 }
 
 export async function GET(req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: orderId, pid } = await params;
@@ -215,31 +215,29 @@ export async function GET(req: NextRequest, { params }: Params) {
   const isMobile = /mobile|android|iphone|ipad/i.test(ua);
   const printZoom = isMobile ? 0.70 : 0.88;
 
-  const [protocol, order, company, photos] = await Promise.all([
-    prisma.protocol.findUnique({ where: { id: pid } }),
-    prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        client: true,
-        location: true,
-        assignments: {
-          orderBy: [{ isLead: "desc" }],
-          include: { user: { select: { firstName: true, lastName: true } } },
-        },
-        materials: {
-          include: { stockItem: { select: { name: true, unit: true } } },
-        },
-        checklists: {
-          include: { items: { orderBy: { itemOrder: "asc" } } },
-        },
+  const protocol = await prisma.protocol.findUnique({ where: { id: pid } });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      client: true,
+      location: true,
+      assignments: {
+        orderBy: [{ isLead: "desc" }],
+        include: { user: { select: { firstName: true, lastName: true } } },
       },
-    }),
-    prisma.companySettings.findUnique({ where: { id: 1 } }),
-    prisma.protocolPhoto.findMany({
-      where: { protocolId: pid },
-      orderBy: { uploadedAt: "asc" },
-    }),
-  ]);
+      materials: {
+        include: { stockItem: { select: { name: true, unit: true } } },
+      },
+      checklists: {
+        include: { items: { orderBy: { itemOrder: "asc" } } },
+      },
+    },
+  });
+  const company = await prisma.companySettings.findUnique({ where: { id: 1 } });
+  const photos = await prisma.protocolPhoto.findMany({
+    where: { protocolId: pid },
+    orderBy: { uploadedAt: "asc" },
+  });
 
   if (!protocol || !order) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

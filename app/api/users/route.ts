@@ -4,7 +4,8 @@ import { isAdmin, isSuperAdmin } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";
 import { validatePasswordStrength } from "@/lib/password";
 import { checkRoleAssignmentAllowed } from "@/lib/user-guards";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextAuthRequest } from "next-auth";
 import bcrypt from "bcryptjs";
 
 export const USER_INCLUDE = {
@@ -30,8 +31,8 @@ export function sanitizeUserSuperAdmin(user: Record<string, unknown>) {
   return safe;
 }
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
+export const GET = auth(async function GET(req: NextAuthRequest) {
+  const session = req.auth;
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -68,25 +69,69 @@ export async function GET(req: NextRequest) {
     where.roleAssignments = { some: { roleId } };
   }
 
-  const [users, total] = await prisma.$transaction([
-    prisma.user.findMany({
+  try {
+    const users = await prisma.user.findMany({
       where,
-      include: USER_INCLUDE,
       orderBy: { firstName: "asc" },
       skip: (page - 1) * limit,
       take: limit,
-    }),
-    prisma.user.count({ where }),
-  ]);
+    });
+    const total = await prisma.user.count({ where });
 
-  const safe = users.map((u) =>
-    sanitizeUser(u as unknown as Record<string, unknown>)
-  );
-  return NextResponse.json({ data: safe, total });
-}
+    if (users.length === 0) {
+      return NextResponse.json({ data: [], total });
+    }
 
-export async function POST(req: NextRequest) {
-  const session = await auth();
+    const userIds = users.map((u) => u.id);
+
+    const roleAssignments = await prisma.userRoleAssignment.findMany({
+      where: { userId: { in: userIds } },
+    });
+    const roleIds = [...new Set(roleAssignments.map((r) => r.roleId))];
+    const roles = roleIds.length > 0
+      ? await prisma.role.findMany({ where: { id: { in: roleIds } } })
+      : [];
+
+    const permissionOverrides = await prisma.userPermissionOverride.findMany({
+      where: { userId: { in: userIds } },
+    });
+    const permissionIds = [...new Set(permissionOverrides.map((p) => p.permissionId))];
+    const permissions = permissionIds.length > 0
+      ? await prisma.permission.findMany({ where: { id: { in: permissionIds } } })
+      : [];
+
+    const userSettingsList = await prisma.userSettings.findMany({
+      where: { userId: { in: userIds } },
+    });
+
+    const enriched = users.map((u) => ({
+      ...u,
+      roleAssignments: roleAssignments
+        .filter((r) => r.userId === u.id)
+        .map((r) => ({ ...r, role: roles.find((role) => role.id === r.roleId) ?? null })),
+      permissionOverrides: permissionOverrides
+        .filter((p) => p.userId === u.id)
+        .map((p) => ({ ...p, permission: permissions.find((perm) => perm.id === p.permissionId) ?? null })),
+      userSettings: userSettingsList.find((s) => s.userId === u.id) ?? null,
+    }));
+
+    const safe = enriched.map((u) =>
+      sanitizeUser(u as unknown as Record<string, unknown>)
+    );
+    return NextResponse.json({ data: safe, total });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("GET /api/users error:", {
+      name: e instanceof Error ? e.name : "Unknown",
+      message: msg,
+      stack: e instanceof Error ? e.stack : undefined,
+    });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+});
+
+export const POST = auth(async function POST(req: NextAuthRequest) {
+  const session = req.auth;
   if (!session || !isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -226,4 +271,4 @@ export async function POST(req: NextRequest) {
     { data: sanitizeUser(user as unknown as Record<string, unknown>) },
     { status: 201 }
   );
-}
+});

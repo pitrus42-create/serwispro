@@ -1,11 +1,11 @@
-import { auth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/permissions";
 import { uploadFile } from "@/lib/storage";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session || !isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

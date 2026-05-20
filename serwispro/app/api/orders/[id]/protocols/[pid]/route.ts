@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/permissions";
 import { deleteFile } from "@/lib/storage";
@@ -27,7 +27,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   if (!isAdmin(session.user)) {

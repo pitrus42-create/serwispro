@@ -3,6 +3,9 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { authConfig } from "../auth.config";
+import { decode } from "@auth/core/jwt";
+import type { NextRequest } from "next/server";
+import type { Session } from "next-auth";
 import { resolveEffectivePermissions } from "./permissions-resolver";
 
 const LOCKOUT_ATTEMPTS = 5;
@@ -272,3 +275,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   secret: process.env.NEXTAUTH_SECRET,
 });
+
+// Odczytuje sesję bezpośrednio z JWT cookie na requescie, bez wywoływania headers()
+// Wymagane w Next.js 16 — next-auth beta.30 woła headers() poza async storage (E251)
+export async function getAuth(req: NextRequest): Promise<Session | null> {
+  const secure = req.url.startsWith("https://");
+  const cookieName = `${secure ? "__Secure-" : ""}authjs.session-token`;
+  const token = req.cookies.get(cookieName)?.value;
+  if (!token) return null;
+  try {
+    const decoded = await decode({
+      token,
+      secret: process.env.NEXTAUTH_SECRET!,
+      salt: cookieName,
+    });
+    if (!decoded) return null;
+    return {
+      user: {
+        id: decoded.id as string,
+        email: decoded.email as string,
+        name: decoded.name as string,
+        firstName: decoded.firstName as string,
+        lastName: decoded.lastName as string,
+        roles: (decoded.roles as string[]) ?? [],
+        effectivePermissions:
+          (decoded.effectivePermissions as Record<string, boolean>) ?? {},
+        permissions: (decoded.permissions as Record<string, boolean>) ?? {},
+        mustChangePassword: (decoded.mustChangePassword as boolean) ?? false,
+        accountStatus: (decoded.accountStatus as string) ?? "ACTIVE",
+      },
+      expires: new Date(
+        ((decoded.exp as number) ?? 0) * 1000
+      ).toISOString(),
+    } as Session;
+  } catch {
+    return null;
+  }
+}

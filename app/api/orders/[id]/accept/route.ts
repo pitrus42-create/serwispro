@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+﻿import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getClientIp } from "@/lib/audit";
 import { NextRequest, NextResponse } from "next/server";
@@ -9,7 +9,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
