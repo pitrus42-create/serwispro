@@ -70,7 +70,7 @@ function deserialize(t: {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

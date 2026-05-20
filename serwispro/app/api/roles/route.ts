@@ -1,10 +1,10 @@
-import { auth, getAuth } from "@/lib/auth";
+﻿import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, isSuperAdmin } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getAuth(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
