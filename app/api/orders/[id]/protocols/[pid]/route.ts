@@ -26,7 +26,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   return NextResponse.json({ data: updated });
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

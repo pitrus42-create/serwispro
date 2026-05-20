@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string; pid: string }> };
 
 export const maxDuration = 60; // allow up to 60s for large photo uploads
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { pid } = await params;
