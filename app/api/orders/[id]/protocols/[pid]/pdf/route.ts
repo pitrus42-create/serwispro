@@ -65,10 +65,10 @@ function markdownToHtml(text: string): string {
 }
 
 // ── Status config for PDF ─────────────────────────────────────────────────
-const PDF_STATUS: Record<string, { bg: string; color: string; label: string }> = {
+const PDF_STATUS: Record<string, { bg: string; color: string; label: string; border?: string }> = {
   OK:           { bg: "#dcfce7", color: "#14532d", label: "OK" },
-  WYKONANO:     { bg: "#e0e7ff", color: "#1e3a8a", label: "WYKONANO" },
-  NAPRAWIONO:   { bg: "#dbeafe", color: "#1e40af", label: "NAPRAWIONO" },
+  WYKONANO:     { bg: "#dbeafe", color: "#1e3a8a", label: "WYKONANO", border: "1px solid #bfdbfe" },
+  NAPRAWIONO:   { bg: "#e0f2fe", color: "#0369a1", label: "NAPRAWIONO" },
   WYMIENIONO:   { bg: "#ede9fe", color: "#5b21b6", label: "WYMIENIONO" },
   SPRAWDZIC:    { bg: "#fef3c7", color: "#78350f", label: "DO SPRAWDZENIA" },
   USTERKA:      { bg: "#fee2e2", color: "#7f1d1d", label: "USTERKA" },
@@ -87,7 +87,7 @@ const STATUS_COLS_PDF = new Set([
 function pdfStatusBadge(val: string): string {
   const st = PDF_STATUS[val];
   if (!st) return esc(val);
-  return `<span style="background:${st.bg};color:${st.color};font-size:7px;font-weight:700;letter-spacing:0.3px;padding:2px 0;border-radius:4px;display:inline-block;width:78px;text-align:center;white-space:nowrap">${st.label}</span>`;
+  return `<span style="background:${st.bg};color:${st.color};${st.border ? `border:${st.border};` : ""}font-size:6.5px;font-weight:800;letter-spacing:0.03em;padding:0;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;width:78px;height:16px;text-align:center;white-space:nowrap">${st.label}</span>`;
 }
 
 interface PdfTokens {
@@ -101,23 +101,24 @@ function renderChecklistItemsPdf(
   t: PdfTokens,
 ): string {
   if (!items.length) return "";
-  const BADGE_BASE = `flex-shrink:0;font-size:7px;font-weight:700;letter-spacing:0.3px;padding:2px 0;border-radius:4px;display:inline-block;width:78px;text-align:center;white-space:nowrap;margin-top:1px`;
+  const BADGE_BASE = `flex-shrink:0;align-self:flex-start;font-size:6.5px;font-weight:800;letter-spacing:0.03em;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;width:78px;height:16px;white-space:nowrap`;
   const makeCell = (item: { text: string; status: string; comment: string } | undefined, pr: string, pl: string) => {
-    if (!item) return `<td style="width:50%;padding:4px ${pr} 4px ${pl};border-bottom:1px solid ${t.C_BORDER}"></td>`;
+    if (!item) return `<td style="width:50%;padding:5px ${pr} 5px ${pl};border-bottom:1px solid ${t.C_BORDER}"></td>`;
     const st = PDF_STATUS[item.status] ?? PDF_STATUS.OK;
-    return `<td style="width:50%;padding:4px ${pr} 4px ${pl};vertical-align:top;border-bottom:1px solid ${t.C_BORDER}">
+    const bdStyle = st.border ? `border:${st.border};` : "";
+    return `<td style="width:50%;padding:5px ${pr} 5px ${pl};vertical-align:top;border-bottom:1px solid ${t.C_BORDER}">
       <div style="display:flex;align-items:flex-start;gap:8px">
-        <span style="${BADGE_BASE};background:${st.bg};color:${st.color}">${st.label}</span>
+        <span style="${BADGE_BASE};background:${st.bg};color:${st.color};${bdStyle}">${st.label}</span>
         <div style="flex:1;min-width:0">
-          <div style="font-size:10.5px;font-weight:500;line-height:1.4;color:#0f172a">${esc(item.text)}</div>
-          ${item.comment ? `<div style="font-size:8.5px;color:${t.C_MUTED};margin-top:1px">${esc(item.comment)}</div>` : ""}
+          <div style="font-size:9.5px;font-weight:500;line-height:1.32;color:#111827;word-break:break-word;overflow-wrap:anywhere">${esc(item.text)}</div>
+          ${item.comment ? `<div style="font-size:8px;color:${t.C_MUTED};margin-top:1px;word-break:break-word">${esc(item.comment)}</div>` : ""}
         </div>
       </div>
     </td>`;
   };
   const rows: string[] = [];
   for (let i = 0; i < items.length; i += 2) {
-    rows.push(`<tr>${makeCell(items[i], "6px", "0")}${makeCell(items[i + 1], "0", "6px")}</tr>`);
+    rows.push(`<tr>${makeCell(items[i], "8px", "0")}${makeCell(items[i + 1], "0", "8px")}</tr>`);
   }
   return `<table style="width:100%;border-collapse:collapse">${rows.join("")}</table>`;
 }
@@ -378,21 +379,21 @@ export async function GET(req: NextRequest, { params }: Params) {
           const rows: string[] = [];
           for (let i = 0; i < cl.items.length; i += 2) {
             const makeChkCell = (item: typeof cl.items[0] | undefined, pr: string, pl: string) => {
-              if (!item) return `<td style="width:50%;padding:4px ${pr} 4px ${pl};border-bottom:1px solid ${C_BORDER}"></td>`;
+              if (!item) return `<td style="width:50%;padding:5px ${pr} 5px ${pl};border-bottom:1px solid ${C_BORDER}"></td>`;
               const chkBg    = item.isChecked ? "#dcfce7" : C_BORDER;
               const chkColor = item.isChecked ? C_SUCCESS  : C_MUTED2;
               const chkIcon  = item.isChecked ? "&#10003;" : "&#8211;";
-              return `<td style="width:50%;padding:4px ${pr} 4px ${pl};vertical-align:top;border-bottom:1px solid ${C_BORDER}">
+              return `<td style="width:50%;padding:5px ${pr} 5px ${pl};vertical-align:top;border-bottom:1px solid ${C_BORDER}">
                 <div style="display:flex;align-items:flex-start;gap:7px">
-                  <span style="flex-shrink:0;width:15px;height:15px;border-radius:50%;background:${chkBg};color:${chkColor};font-size:8px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;margin-top:2px">${chkIcon}</span>
+                  <span style="flex-shrink:0;align-self:flex-start;width:15px;height:15px;border-radius:50%;background:${chkBg};color:${chkColor};font-size:8px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;margin-top:1px">${chkIcon}</span>
                   <div style="flex:1;min-width:0">
-                    <div style="font-size:10.5px;line-height:1.4">${esc(item.text)}</div>
-                    ${item.note ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:1px">${esc(item.note)}</div>` : ""}
+                    <div style="font-size:9.5px;line-height:1.32;word-break:break-word;overflow-wrap:anywhere">${esc(item.text)}</div>
+                    ${item.note ? `<div style="font-size:8px;color:${C_MUTED};margin-top:1px;word-break:break-word">${esc(item.note)}</div>` : ""}
                   </div>
                 </div>
               </td>`;
             };
-            rows.push(`<tr>${makeChkCell(cl.items[i], "6px", "0")}${makeChkCell(cl.items[i + 1], "0", "6px")}</tr>`);
+            rows.push(`<tr>${makeChkCell(cl.items[i], "8px", "0")}${makeChkCell(cl.items[i + 1], "0", "8px")}</tr>`);
           }
           return `
             ${orderChecklists.length > 1
@@ -452,28 +453,33 @@ export async function GET(req: NextRequest, { params }: Params) {
     : "";
 
   // Combined block: location + order number + type + date
+  const locDisplay = locName.trim() || `<span style="color:${C_MUTED2};font-style:italic">Brak podanej lokalizacji</span>`;
   const orderInfoBlockHtml =
-    `<div style="background:white;border:1px solid ${C_CARD_BORD};border-radius:${R_CARD};overflow:hidden;box-shadow:${SHADOW};margin-bottom:10px">
-      <div style="background:${C_PRIMARY};padding:7px 12px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <div>
-          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:rgba(255,255,255,0.5);margin-bottom:1px">Lokalizacja serwisu</div>
-          <span style="font-size:12px;font-weight:700;color:white;line-height:1.25">${esc(locName) || "—"}</span>
-          ${locSub ? `<span style="font-size:8.5px;color:rgba(255,255,255,0.55);margin-left:8px;font-weight:400">${esc(locSub)}</span>` : ""}
+    `<div style="background:white;border:1px solid ${C_BORDER};border-left:4px solid ${C_PRIMARY};border-radius:${R_CARD};box-shadow:${SHADOW};margin-bottom:10px;overflow:hidden">
+      <!-- top row: location + type badge -->
+      <div style="padding:8px 12px 7px;border-bottom:1px solid ${C_BORDER}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${C_MUTED2};margin-bottom:2px">Lokalizacja serwisu</div>
+            <div style="font-size:12px;font-weight:700;color:${C_TEXT};line-height:1.25;word-break:break-word;overflow-wrap:anywhere">${locDisplay}</div>
+            ${locSub ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere">${esc(locSub)}</div>` : ""}
+          </div>
+          ${orderTypeLabel ? `<span style="flex-shrink:0;background:#e8eef6;color:#1f3a56;font-size:7px;font-weight:700;height:18px;padding:0 8px;border-radius:999px;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center;margin-top:1px">${esc(orderTypeLabel)}</span>` : ""}
         </div>
-        ${orderTypeLabel ? `<span style="flex-shrink:0;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.9);font-size:7px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:0.3px;text-transform:uppercase;white-space:nowrap">${esc(orderTypeLabel)}</span>` : ""}
       </div>
+      <!-- bottom row: nr zlecenia, data, opis skrócony -->
       <div style="padding:6px 12px;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
         <div style="flex-shrink:0">
-          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Nr zlecenia</div>
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Nr zlecenia</div>
           <div style="font-size:11px;font-weight:700;color:${C_TEXT}">${esc(order.orderNumber)}</div>
         </div>
         ${orderDateStr ? `<div style="flex-shrink:0">
-          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Data</div>
-          <div style="font-size:10px;font-weight:500;color:${C_MUTED}">${orderDateStr}</div>
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Data</div>
+          <div style="font-size:10px;font-weight:600;color:${C_MUTED}">${orderDateStr}</div>
         </div>` : ""}
         ${content.shortDescription ? `<div style="flex:1;min-width:0">
-          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Opis skrócony</div>
-          <div style="font-size:9.5px;color:${C_MUTED}">${esc(content.shortDescription)}</div>
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Opis skrócony</div>
+          <div style="font-size:9px;color:${C_MUTED};word-break:break-word;overflow-wrap:anywhere;line-height:1.3">${esc(content.shortDescription)}</div>
         </div>` : ""}
       </div>
     </div>`;
@@ -534,35 +540,36 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
 <div class="frame">
 
   <!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
-  <!-- 3-column: [Wykonawca 38%] [Logo center 24%] [Zamawiający 38%] -->
-  <table style="width:100%;border-collapse:collapse">
-    <tr>
-      <td style="vertical-align:top;padding-bottom:12px;white-space:nowrap;width:38%">
-        <div style="${HDR_LABEL}">Wykonawca</div>
-        <div style="${HDR_NAME}">${esc(company?.name ?? "SerwisPro")}</div>
-        <div style="${HDR_DATA}">
-          ${company?.nip     ? `NIP: ${esc(company.nip)}<br>` : ""}
-          ${company?.address ? `${esc(company.address)}<br>` : ""}
-          ${company?.phone   ? `Tel: ${esc(company.phone)}<br>` : ""}
-          ${company?.email   ? `${esc(company.email)}` : ""}
-        </div>
-      </td>
-      <td style="vertical-align:middle;text-align:center;padding-bottom:12px;width:24%">
-        ${logoSrc ? `<img src="${logoSrc}" alt="" style="max-height:50px;max-width:140px;object-fit:contain;display:block;margin:0 auto" />` : ""}
-      </td>
-      <td style="vertical-align:top;text-align:right;padding-bottom:12px;white-space:nowrap;width:38%">
-        ${order.client ? `
-        <div style="${HDR_LABEL}">Zamawiający</div>
-        <div style="${HDR_NAME}">${esc(order.client.name ?? "")}</div>
-        <div style="${HDR_DATA}">
-          ${clientAny?.nip     ? `NIP: ${esc(clientAny.nip)}<br>` : ""}
-          ${clientAddr         ? `${esc(clientAddr)}<br>` : ""}
-          ${order.client.phone ? `Tel: ${esc(order.client.phone)}<br>` : ""}
-          ${order.client.email ? `${esc(order.client.email)}` : ""}
-        </div>` : ""}
-      </td>
-    </tr>
-  </table>
+  <!-- grid: 1fr [logo auto] 1fr — logo centered, sides expand symmetrically -->
+  <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:20px;padding-bottom:12px">
+    <!-- Wykonawca -->
+    <div>
+      <div style="${HDR_LABEL}">Wykonawca</div>
+      <div style="${HDR_NAME}">${esc(company?.name ?? "SerwisPro")}</div>
+      <div style="${HDR_DATA}">
+        ${company?.nip     ? `NIP: ${esc(company.nip)}<br>` : ""}
+        ${company?.address ? `${esc(company.address)}<br>` : ""}
+        ${company?.phone   ? `Tel: ${esc(company.phone)}<br>` : ""}
+        ${company?.email   ? `${esc(company.email)}` : ""}
+      </div>
+    </div>
+    <!-- Logo centered -->
+    <div style="display:flex;align-items:center;justify-content:center;padding-top:2px">
+      ${logoSrc ? `<img src="${logoSrc}" alt="" style="max-height:62px;max-width:175px;object-fit:contain;display:block" />` : ""}
+    </div>
+    <!-- Zamawiający -->
+    <div style="text-align:right">
+      ${order.client ? `
+      <div style="${HDR_LABEL}">Zamawiający</div>
+      <div style="${HDR_NAME}">${esc(order.client.name ?? "")}</div>
+      <div style="${HDR_DATA}">
+        ${clientAny?.nip     ? `NIP: ${esc(clientAny.nip)}<br>` : ""}
+        ${clientAddr         ? `${esc(clientAddr)}<br>` : ""}
+        ${order.client.phone ? `Tel: ${esc(order.client.phone)}<br>` : ""}
+        ${order.client.email ? `${esc(order.client.email)}` : ""}
+      </div>` : ""}
+    </div>
+  </div>
   <div style="height:2px;background:${C_PRIMARY};margin-bottom:14px;border-radius:1px"></div>
 
   <!-- ═══ ZLECENIE ══════════════════════════════════════════════════════════ -->
