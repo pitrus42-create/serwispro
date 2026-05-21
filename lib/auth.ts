@@ -279,9 +279,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 // Odczytuje sesję bezpośrednio z JWT cookie na requescie, bez wywoływania headers()
 // Wymagane w Next.js 16 — next-auth beta.30 woła headers() poza async storage (E251)
 export async function getAuth(req: NextRequest): Promise<Session | null> {
-  const secure = req.url.startsWith("https://");
-  const cookieName = `${secure ? "__Secure-" : ""}authjs.session-token`;
-  const token = req.cookies.get(cookieName)?.value;
+  // In Cloud Run / Firebase App Hosting, req.url is http:// internally even when the user
+  // connects via https://. Check both cookie names and use whichever is present.
+  const secureName = "__Secure-authjs.session-token";
+  const plainName = "authjs.session-token";
+  const secureToken = req.cookies.get(secureName)?.value;
+  const plainToken = req.cookies.get(plainName)?.value;
+  const cookieName = secureToken ? secureName : plainName;
+  const token = secureToken ?? plainToken;
   if (!token) return null;
   try {
     const decoded = await decode({
