@@ -452,35 +452,29 @@ export async function GET(req: NextRequest, { params }: Params) {
       ].filter(Boolean).join(" · ")
     : "";
 
-  // Combined block: location + order number + type + date
+  // Combined block: location + order number + date + type — single-row card matching card() style
   const locDisplay = locName.trim() || `<span style="color:${C_MUTED2};font-style:italic">Brak podanej lokalizacji</span>`;
+  const locLine    = [locName.trim(), locSub].filter(Boolean).join(" · ") || "Brak podanej lokalizacji";
   const orderInfoBlockHtml =
-    `<div style="background:white;border:1px solid ${C_BORDER};border-left:4px solid ${C_PRIMARY};border-radius:${R_CARD};box-shadow:${SHADOW};margin-bottom:10px;overflow:hidden">
-      <!-- top row: location + type badge -->
-      <div style="padding:8px 12px 7px;border-bottom:1px solid ${C_BORDER}">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${C_MUTED2};margin-bottom:2px">Lokalizacja serwisu</div>
-            <div style="font-size:12px;font-weight:700;color:${C_TEXT};line-height:1.25;word-break:break-word;overflow-wrap:anywhere">${locDisplay}</div>
-            ${locSub ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere">${esc(locSub)}</div>` : ""}
-          </div>
-          ${orderTypeLabel ? `<span style="flex-shrink:0;background:#e8eef6;color:#1f3a56;font-size:7px;font-weight:700;height:18px;padding:0 8px;border-radius:999px;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center;margin-top:1px">${esc(orderTypeLabel)}</span>` : ""}
-        </div>
+    `<div style="background:white;border:1px solid ${C_CARD_BORD};border-radius:${R_CARD};overflow:hidden;box-shadow:${SHADOW};margin-bottom:10px">
+      <div style="background:${C_CARD_HDR};padding:4px 12px">
+        <div style="font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:white">Zlecenie serwisowe</div>
       </div>
-      <!-- bottom row: nr zlecenia, data, opis skrócony -->
-      <div style="padding:6px 12px;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
-        <div style="flex-shrink:0">
-          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Nr zlecenia</div>
-          <div style="font-size:11px;font-weight:700;color:${C_TEXT}">${esc(order.orderNumber)}</div>
+      <div style="display:grid;grid-template-columns:minmax(0,1.8fr) minmax(90px,0.7fr) minmax(80px,0.6fr) auto;align-items:center;gap:14px;padding:9px 12px">
+        <div style="min-width:0">
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Lokalizacja</div>
+          <div style="font-size:10.5px;font-weight:700;color:${C_TEXT};line-height:1.25;overflow-wrap:anywhere;word-break:break-word">${locDisplay}</div>
+          ${locSub ? `<div style="font-size:8px;color:${C_MUTED};margin-top:1px;overflow-wrap:anywhere;word-break:break-word">${esc(locSub)}</div>` : ""}
         </div>
-        ${orderDateStr ? `<div style="flex-shrink:0">
+        <div>
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Nr zlecenia</div>
+          <div style="font-size:10.5px;font-weight:700;color:${C_TEXT};white-space:nowrap">${esc(order.orderNumber)}</div>
+        </div>
+        <div>
           <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Data</div>
-          <div style="font-size:10px;font-weight:600;color:${C_MUTED}">${orderDateStr}</div>
-        </div>` : ""}
-        ${content.shortDescription ? `<div style="flex:1;min-width:0">
-          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Opis skrócony</div>
-          <div style="font-size:9px;color:${C_MUTED};word-break:break-word;overflow-wrap:anywhere;line-height:1.3">${esc(content.shortDescription)}</div>
-        </div>` : ""}
+          <div style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap">${orderDateStr || "—"}</div>
+        </div>
+        ${orderTypeLabel ? `<span style="background:#e8eef6;color:#1f3a56;font-size:7px;font-weight:700;height:18px;padding:0 9px;border-radius:999px;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center">${esc(orderTypeLabel)}</span>` : "<span></span>"}
       </div>
     </div>`;
 
@@ -555,7 +549,7 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
     </div>
     <!-- Logo centered -->
     <div style="display:flex;align-items:center;justify-content:center;padding-top:2px">
-      ${logoSrc ? `<img src="${logoSrc}" alt="" style="max-height:62px;max-width:175px;object-fit:contain;display:block" />` : ""}
+      ${logoSrc ? `<img src="${logoSrc}" alt="" style="max-height:74px;max-width:210px;object-fit:contain;display:block" />` : ""}
     </div>
     <!-- Zamawiający -->
     <div style="text-align:right">
@@ -574,7 +568,6 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
 
   <!-- ═══ ZLECENIE ══════════════════════════════════════════════════════════ -->
   <div style="margin-bottom:12px">
-    <div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:7px">Zlecenie serwisowe</div>
     ${orderInfoBlockHtml}
     ${infoGridHtml}
   </div>
@@ -596,12 +589,11 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
 
   <!-- ═══ UWAGI ════════════════════════════════════════════════════════════ -->
   ${notesHtml ? `<div style="margin-bottom:12px;page-break-inside:avoid">
-    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-left:4px solid #0ea5e9;border-radius:${R_CARD};padding:13px 15px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="background:#dcfce7;color:#14532d;font-size:6.5px;font-weight:700;letter-spacing:0.4px;padding:2px 7px;border-radius:4px;text-transform:uppercase">&#10003; Zako&#324;czono</span>
-        <span style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0c4a6e">Podsumowanie serwisu</span>
+    <div style="background:#eff8fc;border:1px solid #bfe7f5;border-left:4px solid #22a9d6;border-radius:${R_CARD};padding:12px 16px">
+      <div style="text-align:center;margin-bottom:8px">
+        <span style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#1f3a56">Podsumowanie serwisu</span>
       </div>
-      <div style="font-size:11px;line-height:1.75;color:${C_TEXT}">${notesHtml}</div>
+      <div style="font-size:10.5px;line-height:1.6;color:${C_TEXT}">${notesHtml}</div>
     </div>
   </div>` : ""}
 
