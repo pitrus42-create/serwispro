@@ -95,21 +95,31 @@ interface PdfTokens {
   C_MUTED: string; C_MUTED2: string; R_CARD: string; SHADOW: string;
 }
 
-// Render a flat list of checklist items (shared by legacy + new format)
+// Render a 2-column table of checklist items (shared by legacy + new format)
 function renderChecklistItemsPdf(
   items: Array<{ text: string; status: string; comment: string }>,
   t: PdfTokens,
 ): string {
-  return items.map((item) => {
+  if (!items.length) return "";
+  const BADGE_BASE = `flex-shrink:0;font-size:7px;font-weight:700;letter-spacing:0.3px;padding:2px 0;border-radius:4px;display:inline-block;width:78px;text-align:center;white-space:nowrap;margin-top:1px`;
+  const makeCell = (item: { text: string; status: string; comment: string } | undefined, pr: string, pl: string) => {
+    if (!item) return `<td style="width:50%;padding:4px ${pr} 4px ${pl};border-bottom:1px solid ${t.C_BORDER}"></td>`;
     const st = PDF_STATUS[item.status] ?? PDF_STATUS.OK;
-    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;border-bottom:1px solid ${t.C_BORDER}">
-      <span style="flex-shrink:0;background:${st.bg};color:${st.color};font-size:7px;font-weight:700;letter-spacing:0.3px;padding:2px 0;border-radius:4px;display:inline-block;width:78px;text-align:center;white-space:nowrap;margin-top:2px">${st.label}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:11px;font-weight:500;line-height:1.4;color:#0f172a">${esc(item.text)}</div>
-        ${item.comment ? `<div style="font-size:9px;color:${t.C_MUTED};margin-top:1px">${esc(item.comment)}</div>` : ""}
+    return `<td style="width:50%;padding:4px ${pr} 4px ${pl};vertical-align:top;border-bottom:1px solid ${t.C_BORDER}">
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <span style="${BADGE_BASE};background:${st.bg};color:${st.color}">${st.label}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:10.5px;font-weight:500;line-height:1.4;color:#0f172a">${esc(item.text)}</div>
+          ${item.comment ? `<div style="font-size:8.5px;color:${t.C_MUTED};margin-top:1px">${esc(item.comment)}</div>` : ""}
+        </div>
       </div>
-    </div>`;
-  }).join("");
+    </td>`;
+  };
+  const rows: string[] = [];
+  for (let i = 0; i < items.length; i += 2) {
+    rows.push(`<tr>${makeCell(items[i], "6px", "0")}${makeCell(items[i + 1], "0", "6px")}</tr>`);
+  }
+  return `<table style="width:100%;border-collapse:collapse">${rows.join("")}</table>`;
 }
 
 function renderTablePdf(
@@ -364,29 +374,34 @@ export async function GET(req: NextRequest, { params }: Params) {
   const checklistsHtml = orderChecklists?.length > 0
     ? `<div style="margin-bottom:12px;page-break-inside:avoid">
         ${sh("Checklist")}
-        ${orderChecklists.map((cl) => `
-          ${orderChecklists.length > 1
-            ? `<div style="font-size:8.5px;font-weight:600;color:${C_MUTED};margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px">${esc(cl.name)}</div>`
-            : ""}
-          <table style="width:100%;border-collapse:collapse;border:1px solid ${C_BORDER};border-radius:${R_CARD};overflow:hidden;margin-bottom:6px;box-shadow:${SHADOW}">
-            <thead>
-              <tr style="background:${C_SURFACE}">
-                <th style="text-align:left;padding:5px 9px;border-bottom:1px solid ${C_BORDER};font-size:7.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED}">Zadanie</th>
-                <th style="text-align:center;padding:5px 9px;border-bottom:1px solid ${C_BORDER};font-size:7.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};width:60px">Status</th>
-                <th style="text-align:left;padding:5px 9px;border-bottom:1px solid ${C_BORDER};font-size:7.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED}">Notatka</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${cl.items.map((item, i) => `
-                <tr style="${i % 2 === 1 ? `background:${C_SURFACE}` : "background:white"}">
-                  <td style="padding:5px 9px;font-size:10.5px;border-bottom:1px solid ${C_BORDER}">${esc(item.text)}</td>
-                  <td style="padding:5px 9px;text-align:center;border-bottom:1px solid ${C_BORDER}">
-                    <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:${item.isChecked ? "#dcfce7" : C_BORDER};color:${item.isChecked ? C_SUCCESS : C_MUTED2};font-size:9px;font-weight:800">${item.isChecked ? "&#10003;" : "&#8211;"}</span>
-                  </td>
-                  <td style="padding:5px 9px;font-size:9px;color:${C_MUTED};border-bottom:1px solid ${C_BORDER}">${item.note ? esc(item.note) : ""}</td>
-                </tr>`).join("")}
-            </tbody>
-          </table>`).join("")}
+        ${orderChecklists.map((cl) => {
+          const rows: string[] = [];
+          for (let i = 0; i < cl.items.length; i += 2) {
+            const makeChkCell = (item: typeof cl.items[0] | undefined, pr: string, pl: string) => {
+              if (!item) return `<td style="width:50%;padding:4px ${pr} 4px ${pl};border-bottom:1px solid ${C_BORDER}"></td>`;
+              const chkBg    = item.isChecked ? "#dcfce7" : C_BORDER;
+              const chkColor = item.isChecked ? C_SUCCESS  : C_MUTED2;
+              const chkIcon  = item.isChecked ? "&#10003;" : "&#8211;";
+              return `<td style="width:50%;padding:4px ${pr} 4px ${pl};vertical-align:top;border-bottom:1px solid ${C_BORDER}">
+                <div style="display:flex;align-items:flex-start;gap:7px">
+                  <span style="flex-shrink:0;width:15px;height:15px;border-radius:50%;background:${chkBg};color:${chkColor};font-size:8px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;margin-top:2px">${chkIcon}</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:10.5px;line-height:1.4">${esc(item.text)}</div>
+                    ${item.note ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:1px">${esc(item.note)}</div>` : ""}
+                  </div>
+                </div>
+              </td>`;
+            };
+            rows.push(`<tr>${makeChkCell(cl.items[i], "6px", "0")}${makeChkCell(cl.items[i + 1], "0", "6px")}</tr>`);
+          }
+          return `
+            ${orderChecklists.length > 1
+              ? `<div style="font-size:8.5px;font-weight:600;color:${C_MUTED};margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px">${esc(cl.name)}</div>`
+              : ""}
+            <table style="width:100%;border-collapse:collapse;border:1px solid ${C_BORDER};border-radius:${R_CARD};overflow:hidden;margin-bottom:6px;box-shadow:${SHADOW}">
+              <tbody>${rows.join("")}</tbody>
+            </table>`;
+        }).join("")}
       </div>`
     : "";
 
@@ -421,23 +436,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   // ── Info cards ────────────────────────────────────────────────────────────
   const infoCards: string[] = [];
 
-  const orderTypeLine = [
-    TYPE_LABELS[order.type] ?? order.type,
-    order.scheduledAt ? format(new Date(order.scheduledAt), "d.MM.yyyy", { locale: pl }) : null,
-  ].filter(Boolean).join(" · ");
-
-  // Order number — accent left border + dark header
-  infoCards.push(
-    `<div style="background:white;border:1px solid ${C_CARD_BORD};border-left:3px solid ${C_ACCENT};border-radius:${R_CARD};overflow:hidden;box-shadow:${SHADOW}">
-      <div style="background:${C_CARD_HDR};padding:4px 10px">
-        <div style="font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:white">Nr zlecenia</div>
-      </div>
-      <div style="padding:7px 10px">
-        <div style="font-size:11px;font-weight:600;color:${C_TEXT};line-height:1.3">${esc(order.orderNumber)}</div>
-        ${orderTypeLine ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:2px">${orderTypeLine}</div>` : ""}
-      </div>
-    </div>`
-  );
+  const orderTypeLabel = TYPE_LABELS[order.type] ?? order.type;
+  const orderDateStr   = order.scheduledAt
+    ? format(new Date(order.scheduledAt), "dd.MM.yyyy", { locale: pl })
+    : "";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const locObj  = order.location as any;
@@ -448,13 +450,33 @@ export async function GET(req: NextRequest, { params }: Params) {
         [locObj?.postalCode, locObj?.city].filter(Boolean).join(" "),
       ].filter(Boolean).join(" · ")
     : "";
-  const locationBlockHtml = order.location
-    ? `<div style="text-align:center;margin-bottom:10px;padding:11px 20px;background:white;border:1px solid ${C_CARD_BORD};border-radius:${R_CARD};box-shadow:${SHADOW}">
-        <div style="font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${C_MUTED2};margin-bottom:3px">Lokalizacja serwisu</div>
-        <div style="font-size:15px;font-weight:700;color:${C_TEXT};line-height:1.3">${esc(locName)}</div>
-        ${locSub ? `<div style="font-size:9px;color:${C_MUTED};margin-top:3px">${esc(locSub)}</div>` : ""}
-      </div>`
-    : "";
+
+  // Combined block: location + order number + type + date
+  const orderInfoBlockHtml =
+    `<div style="background:white;border:1px solid ${C_CARD_BORD};border-radius:${R_CARD};overflow:hidden;box-shadow:${SHADOW};margin-bottom:10px">
+      <div style="background:${C_PRIMARY};padding:7px 12px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:rgba(255,255,255,0.5);margin-bottom:1px">Lokalizacja serwisu</div>
+          <span style="font-size:12px;font-weight:700;color:white;line-height:1.25">${esc(locName) || "—"}</span>
+          ${locSub ? `<span style="font-size:8.5px;color:rgba(255,255,255,0.55);margin-left:8px;font-weight:400">${esc(locSub)}</span>` : ""}
+        </div>
+        ${orderTypeLabel ? `<span style="flex-shrink:0;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.9);font-size:7px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:0.3px;text-transform:uppercase;white-space:nowrap">${esc(orderTypeLabel)}</span>` : ""}
+      </div>
+      <div style="padding:6px 12px;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+        <div style="flex-shrink:0">
+          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Nr zlecenia</div>
+          <div style="font-size:11px;font-weight:700;color:${C_TEXT}">${esc(order.orderNumber)}</div>
+        </div>
+        ${orderDateStr ? `<div style="flex-shrink:0">
+          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Data</div>
+          <div style="font-size:10px;font-weight:500;color:${C_MUTED}">${orderDateStr}</div>
+        </div>` : ""}
+        ${content.shortDescription ? `<div style="flex:1;min-width:0">
+          <div style="font-size:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Opis skrócony</div>
+          <div style="font-size:9.5px;color:${C_MUTED}">${esc(content.shortDescription)}</div>
+        </div>` : ""}
+      </div>
+    </div>`;
 
   infoCards.push(card("Serwisant", esc(assigneesText)));
 
@@ -512,21 +534,10 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
 <div class="frame">
 
   <!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
-  <!--
-    3-column table: [Wykonawca] [spacer] [Zamawiajacy]
-    Logo goes in its own row above so company name and client name
-    are always in the same <tr> — guaranteed optical alignment.
-  -->
+  <!-- 3-column: [Wykonawca 38%] [Logo center 24%] [Zamawiający 38%] -->
   <table style="width:100%;border-collapse:collapse">
-    ${logoSrc ? `<tr>
-      <td style="padding-bottom:5px;vertical-align:bottom">
-        <img src="${logoSrc}" alt="" style="max-height:46px;max-width:130px;object-fit:contain;display:block" />
-      </td>
-      <td style="width:100%"></td>
-      <td style="padding-bottom:5px"></td>
-    </tr>` : ""}
     <tr>
-      <td style="vertical-align:top;padding-bottom:12px;white-space:nowrap">
+      <td style="vertical-align:top;padding-bottom:12px;white-space:nowrap;width:38%">
         <div style="${HDR_LABEL}">Wykonawca</div>
         <div style="${HDR_NAME}">${esc(company?.name ?? "SerwisPro")}</div>
         <div style="${HDR_DATA}">
@@ -536,8 +547,10 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
           ${company?.email   ? `${esc(company.email)}` : ""}
         </div>
       </td>
-      <td style="width:100%"></td>
-      <td style="vertical-align:top;text-align:right;padding-bottom:12px;white-space:nowrap">
+      <td style="vertical-align:middle;text-align:center;padding-bottom:12px;width:24%">
+        ${logoSrc ? `<img src="${logoSrc}" alt="" style="max-height:50px;max-width:140px;object-fit:contain;display:block;margin:0 auto" />` : ""}
+      </td>
+      <td style="vertical-align:top;text-align:right;padding-bottom:12px;white-space:nowrap;width:38%">
         ${order.client ? `
         <div style="${HDR_LABEL}">Zamawiający</div>
         <div style="${HDR_NAME}">${esc(order.client.name ?? "")}</div>
@@ -555,7 +568,7 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
   <!-- ═══ ZLECENIE ══════════════════════════════════════════════════════════ -->
   <div style="margin-bottom:12px">
     <div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:7px">Zlecenie serwisowe</div>
-    ${locationBlockHtml}
+    ${orderInfoBlockHtml}
     ${infoGridHtml}
   </div>
 
