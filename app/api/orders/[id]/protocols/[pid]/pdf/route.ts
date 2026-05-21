@@ -66,18 +66,18 @@ function markdownToHtml(text: string): string {
 
 // ── Status config for PDF ─────────────────────────────────────────────────
 const PDF_STATUS: Record<string, { bg: string; color: string; label: string }> = {
-  OK:           { bg: "#f0fdf4", color: "#166534", label: "OK" },
-  WYKONANO:     { bg: "#eff6ff", color: "#1d4ed8", label: "Wykonano" },
-  NAPRAWIONO:   { bg: "#f0fdfa", color: "#0f766e", label: "Naprawiono" },
-  WYMIENIONO:   { bg: "#f5f3ff", color: "#6d28d9", label: "Wymieniono" },
-  SPRAWDZIC:    { bg: "#fffbeb", color: "#92400e", label: "Do sprawdzenia" },
-  USTERKA:      { bg: "#fef2f2", color: "#991b1b", label: "Usterka" },
-  BRAK_DOSTEPU: { bg: "#f8fafc", color: "#475569", label: "Brak dostępu" },
-  ND:           { bg: "#f8fafc", color: "#94a3b8", label: "Nie dotyczy" },
+  OK:           { bg: "#dcfce7", color: "#14532d", label: "OK" },
+  WYKONANO:     { bg: "#e0e7ff", color: "#1e3a8a", label: "WYKONANO" },
+  NAPRAWIONO:   { bg: "#dbeafe", color: "#1e40af", label: "NAPRAWIONO" },
+  WYMIENIONO:   { bg: "#ede9fe", color: "#5b21b6", label: "WYMIENIONO" },
+  SPRAWDZIC:    { bg: "#fef3c7", color: "#78350f", label: "DO SPRAWDZENIA" },
+  USTERKA:      { bg: "#fee2e2", color: "#7f1d1d", label: "USTERKA" },
+  BRAK_DOSTEPU: { bg: "#f1f5f9", color: "#475569", label: "BRAK DOSTĘPU" },
+  ND:           { bg: "#f8fafc", color: "#94a3b8", label: "NIE DOTYCZY" },
   // Legacy keys
-  "Do sprawdzenia": { bg: "#fffbeb", color: "#92400e", label: "Do sprawdzenia" },
-  "Usterka":        { bg: "#fef2f2", color: "#991b1b", label: "Usterka" },
-  "Nie dotyczy":    { bg: "#f8fafc", color: "#64748b", label: "Nie dotyczy" },
+  "Do sprawdzenia": { bg: "#fef3c7", color: "#78350f", label: "DO SPRAWDZENIA" },
+  "Usterka":        { bg: "#fee2e2", color: "#7f1d1d", label: "USTERKA" },
+  "Nie dotyczy":    { bg: "#f8fafc", color: "#94a3b8", label: "NIE DOTYCZY" },
 };
 
 const STATUS_COLS_PDF = new Set([
@@ -87,7 +87,7 @@ const STATUS_COLS_PDF = new Set([
 function pdfStatusBadge(val: string): string {
   const st = PDF_STATUS[val];
   if (!st) return esc(val);
-  return `<span style="background:${st.bg};color:${st.color};font-size:8px;font-weight:600;padding:2px 8px;border-radius:10px;display:inline-block;white-space:nowrap">${st.label}</span>`;
+  return `<span style="background:${st.bg};color:${st.color};font-size:7px;font-weight:700;letter-spacing:0.3px;padding:2px 0;border-radius:4px;display:inline-block;width:78px;text-align:center;white-space:nowrap">${st.label}</span>`;
 }
 
 interface PdfTokens {
@@ -103,7 +103,7 @@ function renderChecklistItemsPdf(
   return items.map((item) => {
     const st = PDF_STATUS[item.status] ?? PDF_STATUS.OK;
     return `<div style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;border-bottom:1px solid ${t.C_BORDER}">
-      <span style="flex-shrink:0;background:${st.bg};color:${st.color};font-size:7.5px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:2px;white-space:nowrap">${st.label}</span>
+      <span style="flex-shrink:0;background:${st.bg};color:${st.color};font-size:7px;font-weight:700;letter-spacing:0.3px;padding:2px 0;border-radius:4px;display:inline-block;width:78px;text-align:center;white-space:nowrap;margin-top:2px">${st.label}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:11px;font-weight:500;line-height:1.4;color:#0f172a">${esc(item.text)}</div>
         ${item.comment ? `<div style="font-size:9px;color:${t.C_MUTED};margin-top:1px">${esc(item.comment)}</div>` : ""}
@@ -439,15 +439,22 @@ export async function GET(req: NextRequest, { params }: Params) {
     </div>`
   );
 
-  if (order.location) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loc    = order.location as any;
-    const locSub = [
-      order.location.address,
-      [loc?.postalCode, loc?.city].filter(Boolean).join(" "),
-    ].filter(Boolean).join(" · ");
-    infoCards.push(card("Lokalizacja", esc(order.location.name), locSub ? esc(locSub) : ""));
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const locObj  = order.location as any;
+  const locName = order.location?.name ?? "";
+  const locSub  = order.location
+    ? [
+        order.location.address,
+        [locObj?.postalCode, locObj?.city].filter(Boolean).join(" "),
+      ].filter(Boolean).join(" · ")
+    : "";
+  const locationBlockHtml = order.location
+    ? `<div style="text-align:center;margin-bottom:10px;padding:11px 20px;background:white;border:1px solid ${C_CARD_BORD};border-radius:${R_CARD};box-shadow:${SHADOW}">
+        <div style="font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:${C_MUTED2};margin-bottom:3px">Lokalizacja serwisu</div>
+        <div style="font-size:15px;font-weight:700;color:${C_TEXT};line-height:1.3">${esc(locName)}</div>
+        ${locSub ? `<div style="font-size:9px;color:${C_MUTED};margin-top:3px">${esc(locSub)}</div>` : ""}
+      </div>`
+    : "";
 
   infoCards.push(card("Serwisant", esc(assigneesText)));
 
@@ -548,6 +555,7 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
   <!-- ═══ ZLECENIE ══════════════════════════════════════════════════════════ -->
   <div style="margin-bottom:12px">
     <div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:7px">Zlecenie serwisowe</div>
+    ${locationBlockHtml}
     ${infoGridHtml}
   </div>
 
@@ -567,9 +575,14 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
   ${photosHtml}
 
   <!-- ═══ UWAGI ════════════════════════════════════════════════════════════ -->
-  ${notesHtml ? `<div style="margin-bottom:12px">
-    ${sh("Uwagi / zalecenia")}
-    <div class="text-block">${notesHtml}</div>
+  ${notesHtml ? `<div style="margin-bottom:12px;page-break-inside:avoid">
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-left:4px solid #0ea5e9;border-radius:${R_CARD};padding:13px 15px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="background:#dcfce7;color:#14532d;font-size:6.5px;font-weight:700;letter-spacing:0.4px;padding:2px 7px;border-radius:4px;text-transform:uppercase">&#10003; Zako&#324;czono</span>
+        <span style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0c4a6e">Podsumowanie serwisu</span>
+      </div>
+      <div style="font-size:11px;line-height:1.75;color:${C_TEXT}">${notesHtml}</div>
+    </div>
   </div>` : ""}
 
 </div>
