@@ -271,6 +271,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const hFrom = content.hoursFrom ?? "";
   const hTo   = content.hoursTo   ?? "";
   const hDate = content.date      ?? "";
+  const confirmDate = format(new Date(protocol.createdAt), "dd.MM.yyyy", { locale: pl });
 
   // Logo
   let logoSrc = "";
@@ -497,6 +498,41 @@ export async function GET(req: NextRequest, { params }: Params) {
     ${infoCards.join("")}
   </div>`;
 
+  // ── Electronic confirmation ───────────────────────────────────────────────
+  const electronicConfirmationHtml =
+    `<div style="margin-top:14px;border:1px solid #cfd6df;border-radius:6px;overflow:hidden;background:#ffffff;page-break-inside:avoid;break-inside:avoid">
+      <div style="background:#26394d;color:#ffffff;text-align:center;padding:6px 10px;font-size:7.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase">
+        POTWIERDZENIE ELEKTRONICZNE PROTOKOŁU
+      </div>
+      <div style="padding:12px 16px;background:#ffffff">
+        <div style="text-align:center;margin-bottom:6px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;background:#e8f5ee;color:#166534;font-size:7px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase">
+            &#10003;&nbsp;POTWIERDZONO ELEKTRONICZNIE
+          </span>
+        </div>
+        <div style="text-align:center;font-size:10px;line-height:1.45;font-weight:600;color:#111827">
+          Niniejszy protokół został potwierdzony elektronicznie w systemie ${esc(company?.name ?? "All-Secure")} i nie wymaga podpisu odręcznego.
+        </div>
+        <div style="margin-top:4px;text-align:center;font-size:8.5px;line-height:1.35;color:#4b5563">
+          Dokument stanowi potwierdzenie wykonania czynności serwisowych wskazanych w protokole.
+        </div>
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid #e5e7eb;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="text-align:center">
+            <div style="font-size:6.8px;line-height:1.2;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:#6b7280">Data potwierdzenia</div>
+            <div style="margin-top:2px;font-size:8.5px;line-height:1.25;font-weight:700;color:#111827">${confirmDate}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:6.8px;line-height:1.2;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:#6b7280">Wygenerowano przez</div>
+            <div style="margin-top:2px;font-size:8.5px;line-height:1.25;font-weight:700;color:#111827">${esc(company?.name ?? "All-Secure")}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:6.8px;line-height:1.2;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:#6b7280">Status dokumentu</div>
+            <div style="margin-top:2px;font-size:8.5px;line-height:1.25;font-weight:700;color:#111827">Potwierdzony elektronicznie</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
   // ── Header style constants ────────────────────────────────────────────────
   const HDR_LABEL = `font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:3px`;
   const HDR_NAME  = `font-size:12px;font-weight:700;color:${C_TEXT};line-height:1.3`;
@@ -596,6 +632,9 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
       <div style="font-size:10.5px;line-height:1.6;color:${C_TEXT}">${notesHtml}</div>
     </div>
   </div>` : ""}
+
+  <!-- ═══ POTWIERDZENIE ELEKTRONICZNE ══════════════════════════════════════ -->
+  ${electronicConfirmationHtml}
 
 </div>
 </body>
