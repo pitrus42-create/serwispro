@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+﻿import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -18,7 +18,7 @@ function deserialize(t: {
 }
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { tid } = await params;
@@ -44,8 +44,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   return NextResponse.json({ data: deserialize(updated) });
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const session = await auth();
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { tid } = await params;

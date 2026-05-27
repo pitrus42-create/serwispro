@@ -1,11 +1,10 @@
-import { auth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, isSuperAdmin } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";
 import { validatePasswordStrength } from "@/lib/password";
 import { checkRoleAssignmentAllowed } from "@/lib/user-guards";
-import { NextResponse } from "next/server";
-import type { NextAuthRequest } from "next-auth";
+import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
 export const USER_INCLUDE = {
@@ -31,8 +30,8 @@ export function sanitizeUserSuperAdmin(user: Record<string, unknown>) {
   return safe;
 }
 
-export const GET = auth(async function GET(req: NextAuthRequest) {
-  const session = req.auth;
+export async function GET(req: NextRequest) {
+  const session = await getAuth(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -128,10 +127,10 @@ export const GET = auth(async function GET(req: NextAuthRequest) {
     });
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
-});
+}
 
-export const POST = auth(async function POST(req: NextAuthRequest) {
-  const session = req.auth;
+export async function POST(req: NextRequest) {
+  const session = await getAuth(req);
   if (!session || !isAdmin(session.user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -271,4 +270,4 @@ export const POST = auth(async function POST(req: NextAuthRequest) {
     { data: sanitizeUser(user as unknown as Record<string, unknown>) },
     { status: 201 }
   );
-});
+}

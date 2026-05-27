@@ -1,0 +1,244 @@
+"use client";
+
+import { useState } from "react";
+import {
+  AlertTriangle,
+  ClipboardList,
+  Wrench,
+  Zap,
+  ChevronRight,
+  Calendar,
+  Users,
+  UserPlus,
+  StickyNote,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { formatDateTime } from "@/lib/utils";
+import { ORDER_TYPE_CONFIG } from "@/constants/colors";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { canDo } from "@/lib/permissions";
+import { PersonalPanel } from "./PersonalPanel";
+import type { DashboardData } from "./types";
+
+const TYPE_COLORS: Record<string, string> = {
+  AWARIA: "bg-red-500",
+  PRZEGLAD: "bg-red-700",
+  KONSERWACJA: "bg-teal-500",
+  INSTALACJA: "bg-purple-500",
+  INNE: "bg-gray-400",
+};
+
+function getGreeting(firstName?: string) {
+  const h = new Date().getHours();
+  const salut = h < 12 ? "Dzień dobry" : h < 18 ? "Cześć" : "Dobry wieczór";
+  const emoji = h < 12 ? "☀️" : h < 18 ? "👋" : "🌙";
+  return `${salut}, ${firstName ?? ""}! ${emoji}`;
+}
+
+function formatShortDate() {
+  return new Date().toLocaleDateString("pl-PL", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+export function DashboardMobile({
+  data,
+  firstName,
+}: {
+  data: DashboardData;
+  firstName?: string;
+}) {
+  const { data: session } = useSession();
+  const canCreateOrders = canDo(session?.user, "orders:create");
+  const d = data;
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  const pills = [
+    { value: d.overdueOrders,        label: "Zaległe",     color: "bg-amber-100 text-amber-800",   href: "/orders?overdue=true" },
+    { value: d.openAlerts,           label: "Awarie",      color: "bg-orange-100 text-orange-800",  href: "/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU" },
+    { value: d.highPriorityOrders,   label: "Pilne",       color: "bg-purple-100 text-purple-800",  href: "/orders?priority=WYSOKI,KRYTYCZNY" },
+    { value: d.pendingMaintenance,   label: "Konserwacje", color: "bg-teal-100 text-teal-800",      href: "/orders?type=KONSERWACJA" },
+    { value: d.todayOrders.length,   label: "Dziś",        color: "bg-red-100 text-red-900",        href: "/calendar" },
+  ].filter((p) => p.value > 0);
+
+  const allClear = pills.length === 0 && d.criticalAlerts === 0;
+
+  return (
+    <div className="space-y-5 max-w-2xl mx-auto">
+      {/* Greeting + notes button */}
+      <div className="flex items-center justify-between -mt-1">
+        <p className="text-base font-semibold text-gray-900">{getGreeting(firstName)}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-400 capitalize">{formatShortDate()}</p>
+          <button
+            onClick={() => setPanelOpen(true)}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            title="Notatki i zadania"
+          >
+            <StickyNote className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Critical alert banner */}
+      {d.criticalAlerts > 0 && (
+        <Link
+          href="/orders?critical=true"
+          className="-mx-4 flex items-center gap-3 bg-red-600 text-white px-4 min-h-14 animate-pulse-red"
+        >
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          <p className="flex-1 font-bold text-sm leading-tight">
+            {d.criticalAlerts}× AWARIA KRYTYCZNA — Dotknij aby zobaczyć
+          </p>
+          <ChevronRight className="w-5 h-5 shrink-0 opacity-70" />
+        </Link>
+      )}
+
+      {/* Smart stat pills */}
+      {allClear ? (
+        <p className="text-sm text-green-600 font-medium py-1">Wszystko w porządku ✓</p>
+      ) : (
+        <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 py-1">
+          {pills.map((p) => (
+            <Link
+              key={p.label}
+              href={p.href}
+              className={`${p.color} rounded-full px-3 py-1 text-sm font-medium shrink-0 whitespace-nowrap`}
+            >
+              {p.label} {p.value}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* Primary CTAs */}
+      {canCreateOrders && (
+        <div className="flex gap-3">
+          <Button asChild className="bg-red-600 hover:bg-red-700 h-12 flex-1 rounded-xl font-bold text-sm">
+            <Link href="/orders/new?type=AWARIA">
+              <Zap className="w-4 h-4 mr-1.5" />
+              Nowa Awaria
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="h-12 flex-1 rounded-xl text-sm">
+            <Link href="/orders/new">
+              <ClipboardList className="w-4 h-4 mr-1.5" />
+              Nowe Zlecenie
+            </Link>
+          </Button>
+        </div>
+      )}
+
+      {/* Today section */}
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Moje dzisiaj
+          </h2>
+          <Link href="/calendar" className="text-xs text-red-800 font-medium">
+            Kalendarz →
+          </Link>
+        </div>
+
+        {d.todayOrders.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            Brak zaplanowanych zadań na dziś
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {d.todayOrders.map((order) => {
+              const typeConfig = ORDER_TYPE_CONFIG[order.type as keyof typeof ORDER_TYPE_CONFIG];
+              const barColor = TYPE_COLORS[order.type] ?? "bg-gray-400";
+              return (
+                <li key={order.id}>
+                  <Link
+                    href={`/orders/${order.id}`}
+                    className="flex items-center gap-3 py-3 min-h-14"
+                  >
+                    <span className={`w-1 h-8 rounded-full shrink-0 ${barColor}`} />
+                    <span className="text-xl shrink-0">{typeConfig?.icon ?? "📋"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate text-gray-900">
+                        {order.title ?? order.client?.name ?? order.orderNumber}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {formatDateTime(order.scheduledAt)}
+                        {order.client?.name ? ` · ${order.client.name}` : ""}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* Secondary ghost actions */}
+      <div className="flex gap-2 flex-wrap pb-2">
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/calendar">
+            <Calendar className="w-4 h-4 mr-1.5" />
+            Kalendarz
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/clients">
+            <Users className="w-4 h-4 mr-1.5" />
+            Klienci
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/clients/new">
+            <UserPlus className="w-4 h-4 mr-1.5" />
+            Nowy klient
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="text-gray-600">
+          <Link href="/orders">
+            <Wrench className="w-4 h-4 mr-1.5" />
+            Wszystkie zlecenia
+          </Link>
+        </Button>
+      </div>
+
+      {/* Bottom sheet — notes & tasks */}
+      {panelOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-black/40"
+            onClick={() => setPanelOpen(false)}
+          />
+          {/* Sheet */}
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[80vh]">
+            {/* Handle + header */}
+            <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <StickyNote className="h-4 w-4 text-amber-500" />
+                <h2 className="text-sm font-semibold text-gray-800">Notatki i zadania</h2>
+              </div>
+              <button
+                onClick={() => setPanelOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {/* Drag handle visual */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-gray-200" />
+            {/* Scrollable content */}
+            <div className="overflow-y-auto px-4 pb-6 pt-1">
+              <PersonalPanel />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,1406 @@
+"use client";
+
+import React, { use, useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { format } from "date-fns";
+import { pl } from "date-fns/locale";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  AlertTriangle,
+  Clock,
+  MapPin,
+  User,
+  FileText,
+  Package,
+  CheckSquare,
+  Activity,
+  Paperclip,
+  Download,
+  FilePlus,
+  ImageIcon,
+  X,
+  CheckCircle2,
+  UserPlus,
+  Trash2,
+  Pencil,
+  Bold,
+  List,
+  BookOpen,
+  Settings2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+import { canDo, isAdmin } from "@/lib/permissions";
+import {
+  ProtocolDescriptionEditor,
+  GlobalTemplatePicker,
+  GlobalTemplateManager,
+  isValidWorkDescription,
+  getWorkDescriptionPreview,
+  serializeWorkDescription,
+  type WorkDescriptionData,
+  type ChecklistItem,
+} from "@/components/protocols/ProtocolDescriptionEditor";
+
+const STATUS_LABELS: Record<string, string> = {
+  OCZEKUJACE: "Oczekujące",
+  PRZYJETE: "Przyjęte",
+  W_TOKU: "W toku",
+  ZAPLANOWANE: "Zaplanowane",
+  ZAKONCZONE: "Zakończone",
+  ANULOWANE: "Anulowane",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  OCZEKUJACE: "bg-gray-100 text-gray-700",
+  PRZYJETE: "bg-red-100 text-red-900",
+  W_TOKU: "bg-amber-100 text-amber-700",
+  ZAPLANOWANE: "bg-purple-100 text-purple-700",
+  ZAKONCZONE: "bg-green-100 text-green-700",
+  ANULOWANE: "bg-red-100 text-red-700",
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+  NISKI: "bg-gray-100 text-gray-600",
+  NORMALNY: "bg-red-100 text-red-800",
+  WYSOKI: "bg-orange-100 text-orange-600",
+  KRYTYCZNY: "bg-red-100 text-red-700",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  AWARIA: "Awaria",
+  KONSERWACJA: "Konserwacja",
+  MONTAZ: "Montaż",
+  MODERNIZACJA: "Modernizacja",
+  INNE: "Inne",
+};
+
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  OCZEKUJACE: ["PRZYJETE", "ANULOWANE"],
+  PRZYJETE: ["W_TOKU", "ZAPLANOWANE", "ANULOWANE"],
+  ZAPLANOWANE: ["W_TOKU", "ANULOWANE"],
+  W_TOKU: ["ZAKONCZONE", "PRZYJETE"],
+  ZAKONCZONE: [],
+  ANULOWANE: [],
+};
+
+interface OrderChecklistItem {
+  id: string;
+  text: string;
+  isChecked: boolean;
+  itemOrder: number;
+  note: string | null;
+}
+
+interface OrderChecklist {
+  id: string;
+  name: string;
+  items: OrderChecklistItem[];
+}
+
+interface Protocol {
+  id: string;
+  protocolNumber: string;
+  type: string;
+  content: string;
+  pdfGenerated: boolean;
+  createdAt: string;
+}
+
+interface ActivityLog {
+  id: string;
+  action: string;
+  details: string | null;
+  createdAt: string;
+  user: { firstName: string; lastName: string };
+}
+
+interface Order {
+  id: string;
+  orderNumber: string;
+  type: string;
+  status: string;
+  priority: string;
+  isCritical: boolean;
+  title: string | null;
+  description: string | null;
+  internalNotes: string | null;
+  scheduledAt: string | null;
+  scheduledEndAt: string | null;
+  completedAt: string | null;
+  client: { id: string; name: string; phone: string | null; email: string | null } | null;
+  location: { id: string; name: string; address: string | null; city: string | null } | null;
+  assignments: Array<{
+    isLead: boolean;
+    user: { id: string; firstName: string; lastName: string };
+  }>;
+  checklists: OrderChecklist[];
+  materials: Array<{
+    id: string;
+    manualName: string | null;
+    quantity: number;
+    unit: string | null;
+    unitPrice: number | null;
+    notes: string | null;
+    stockItem: { name: string; unit: string } | null;
+  }>;
+  attachments: Array<{ id: string; fileName: string; fileUrl: string; uploadedAt: string }>;
+  activityLog: ActivityLog[];
+  protocols: Protocol[];
+}
+
+function RichTextarea({
+  id, rows = 3, placeholder, value, onChange,
+}: {
+  id?: string; rows?: number; placeholder?: string;
+  value: string; onChange: (v: string) => void;
+}) {
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+
+  function applyBold() {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = value.slice(start, end).trim();
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+
+    if (selected) {
+      // wrap selected text
+      const newVal = `${before}**${selected}**${after}`;
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, start + 2 + selected.length); }, 0);
+    } else {
+      // insert placeholder at cursor
+      const insert = "**pogrubiony tekst**";
+      const newVal = `${before}${insert}${after}`;
+      onChange(newVal);
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, start + 2 + "pogrubiony tekst".length); }, 0);
+    }
+  }
+
+  function applyBullet() {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    // find beginning of current line
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const lineText = value.slice(lineStart, start);
+    let newVal: string;
+    let newCursor: number;
+    if (lineText.startsWith("- ")) {
+      // remove bullet
+      newVal = value.slice(0, lineStart) + value.slice(lineStart + 2);
+      newCursor = Math.max(lineStart, start - 2);
+    } else {
+      // add bullet
+      newVal = value.slice(0, lineStart) + "- " + value.slice(lineStart);
+      newCursor = start + 2;
+    }
+    onChange(newVal);
+    setTimeout(() => { el.focus(); el.setSelectionRange(newCursor, newCursor); }, 0);
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 pb-1 border-b border-gray-100">
+        <button
+          type="button"
+          title="Pogrubienie — zaznacz tekst lub kliknij aby wstawić"
+          onClick={applyBold}
+          className="flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-100 font-bold"
+        >
+          <Bold className="h-3.5 w-3.5" />
+          <span>Pogrub</span>
+        </button>
+        <button
+          type="button"
+          title="Dodaj/usuń punkt listy w bieżącej linii"
+          onClick={applyBullet}
+          className="flex items-center gap-1 px-2 py-1 text-xs border rounded hover:bg-gray-100"
+        >
+          <List className="h-3.5 w-3.5" />
+          <span>Lista</span>
+        </button>
+      </div>
+      <Textarea
+        ref={ref}
+        id={id}
+        rows={rows}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: session } = useSession();
+  const [activeTab, setActiveTab] = useState("info");
+
+  // Compress image to max 1600px, JPEG 80% — reduces phone photos from ~5MB to ~300KB
+  async function compressImage(file: File): Promise<File> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1600;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => resolve(blob
+            ? new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" })
+            : file
+          ),
+          "image/jpeg", 0.8
+        );
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+  const [protocolDescription, setProtocolDescription] = useState("");
+  const [protocolNotes, setProtocolNotes] = useState("");
+  const [protocolHoursFrom, setProtocolHoursFrom] = useState("");
+  const [protocolHoursTo, setProtocolHoursTo] = useState("");
+  const [protocolDate, setProtocolDate] = useState("");
+  const [protocolPhotos, setProtocolPhotos] = useState<File[]>([]);
+  // Incrementing this key forces WorkDescriptionEditor to re-mount (reset internal state)
+  const [descEditorKey, setDescEditorKey] = useState(0);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["order", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/orders/${id}`);
+      if (!r.ok) throw new Error("Not found");
+      return r.json();
+    },
+  });
+
+  const order: Order | undefined = data?.data;
+
+  useEffect(() => {
+    if (order?.scheduledAt) {
+      setProtocolDate(format(new Date(order.scheduledAt), "yyyy-MM-dd"));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.scheduledAt]);
+
+  const statusMutation = useMutation({
+    mutationFn: async (newStatus: string) => {
+      const r = await fetch(`/api/orders/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!r.ok) throw new Error("Błąd zmiany statusu");
+      return r.json();
+    },
+    onSuccess: (_, newStatus) => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success(`Status zmieniony na: ${STATUS_LABELS[newStatus]}`);
+    },
+    onError: () => toast.error("Błąd zmiany statusu"),
+  });
+
+  const checklistMutation = useMutation({
+    mutationFn: async ({ checklistId, itemId, isChecked }: { checklistId: string; itemId: string; isChecked: boolean }) => {
+      const r = await fetch(`/api/orders/${id}/checklists/${checklistId}/items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isChecked }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+      return r.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["order", id] }),
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!r.ok) throw new Error("Błąd przyjęcia zlecenia");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Zlecenie przyjęte — jesteś teraz przypisanym serwisantem");
+    },
+    onError: () => toast.error("Błąd przyjęcia zlecenia"),
+  });
+
+  const protocolMutation = useMutation({
+    mutationFn: async ({ variant, content, photos }: {
+      variant: "print" | "report";
+      content: { description: string; notes: string; date?: string; hoursFrom?: string; hoursTo?: string };
+      photos: File[];
+    }) => {
+      const type = variant === "report" ? "raport" : "protokol";
+      const r = await fetch(`/api/orders/${id}/protocols`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, content }),
+      });
+      if (!r.ok) throw new Error("Błąd tworzenia protokołu");
+      const res = await r.json();
+      const protocol = res.data;
+
+      // Upload photos inside mutationFn so they're guaranteed to complete
+      if (variant === "report" && photos.length > 0) {
+        const fd = new FormData();
+        photos.forEach((f) => fd.append("photos", f));
+        const photoRes = await fetch(`/api/orders/${id}/protocols/${protocol.id}/photos`, {
+          method: "POST",
+          body: fd,
+        });
+        if (!photoRes.ok) throw new Error("Błąd przesyłania zdjęć");
+      }
+
+      return { protocol, variant, photoCount: photos.length };
+    },
+    onSuccess: ({ protocol, variant, photoCount }) => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      const photoInfo = variant === "report" && photoCount > 0
+        ? ` (${photoCount} ${photoCount === 1 ? "zdjęcie" : "zdjęcia"})`
+        : "";
+      toast.success(
+        `Protokół ${protocol.protocolNumber} został utworzony${photoInfo} — kliknij „Podgląd" aby go otworzyć`,
+        { duration: 5000 }
+      );
+      setProtocolDescription("");
+      setProtocolNotes("");
+      setProtocolHoursFrom("");
+      setProtocolHoursTo("");
+      setProtocolPhotos([]);
+      setDescEditorKey((k) => k + 1);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteProtocolMutation = useMutation({
+    mutationFn: async (pid: string) => {
+      const r = await fetch(`/api/orders/${id}/protocols/${pid}`, { method: "DELETE" });
+      if (!r.ok) {
+        const data = await r.json().catch(() => null);
+        throw new Error(data?.message ?? "Błąd usuwania protokołu");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Protokół został usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Edit protocol state
+  const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null);
+  const [editDescription, setEditDescription] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editHoursFrom, setEditHoursFrom] = useState("");
+  const [editHoursTo, setEditHoursTo] = useState("");
+  const [editDate, setEditDate] = useState("");
+
+  const editProtocolMutation = useMutation({
+    mutationFn: async ({ pid, content }: { pid: string; content: Record<string, string> }) => {
+      const r = await fetch(`/api/orders/${id}/protocols/${pid}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu protokołu");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setEditingProtocolId(null);
+      toast.success("Protokół zaktualizowany");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const [newMat, setNewMat] = useState({ name: "", qty: "", unit: "szt", price: "" });
+
+  const addMaterialMutation = useMutation({
+    mutationFn: async () => {
+      if (!newMat.name.trim()) throw new Error("Podaj nazwę materiału");
+      const r = await fetch(`/api/orders/${id}/materials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          manualName: newMat.name.trim(),
+          quantity: newMat.qty ? parseFloat(newMat.qty) : null,
+          unit: newMat.unit.trim() || null,
+          unitPrice: newMat.price ? parseFloat(newMat.price) : null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd dodawania materiału");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setNewMat({ name: "", qty: "", unit: "szt", price: "" });
+      toast.success("Materiał dodany");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMaterialMutation = useMutation({
+    mutationFn: async (mid: string) => {
+      const r = await fetch(`/api/orders/${id}/materials/${mid}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Błąd usuwania materiału");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Materiał usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function handleApplyTemplate(text: string, checklist: ChecklistItem[], notes: string) {
+    const data: WorkDescriptionData = {
+      type: "workDescription",
+      text,
+      checklist: { enabled: checklist.length > 0, items: checklist },
+    };
+    setProtocolDescription(serializeWorkDescription(data));
+    setProtocolNotes(notes);
+    setDescEditorKey((k) => k + 1);
+    setShowTemplatePicker(false);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto space-y-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <div className="p-6 text-center text-gray-500">
+        <p>Nie znaleziono zlecenia</p>
+        <Button variant="outline" className="mt-4" onClick={() => router.push("/orders")}>
+          Powrót do listy
+        </Button>
+      </div>
+    );
+  }
+
+  const lead = order.assignments.find((a) => a.isLead);
+  const helpers = order.assignments.filter((a) => !a.isLead);
+  const nextStatuses = STATUS_TRANSITIONS[order.status] ?? [];
+  const canCreate = canDo(session?.user, "orders:create");
+  const canDeleteProtocol = isAdmin(session?.user);
+  const isAssignedToMe = order.assignments.some((a) => a.user.id === session?.user?.id);
+  const isUnassigned = order.assignments.length === 0;
+  // Can close: roles with orders:close permission OR serwisant assigned to this order
+  const canClose = canDo(session?.user, "orders:close") || (isAssignedToMe && !canCreate);
+  const canAccept = !canCreate && (isUnassigned || isAssignedToMe) && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isAssignedToMe;
+  const hasProtocol = (order.protocols?.length ?? 0) > 0;
+
+  return (
+    <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="flex items-start gap-3 mb-4">
+        <Button variant="ghost" size="icon" onClick={() => router.push("/orders")}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <span className="text-sm font-mono text-gray-400">{order.orderNumber}</span>
+            {order.isCritical && (
+              <span className="flex items-center gap-1 text-xs text-red-600 font-semibold animate-pulse">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                KRYTYCZNA
+              </span>
+            )}
+          </div>
+          <h1 className="text-xl font-bold text-gray-900 leading-tight">
+            {order.title ?? order.client?.name ?? `Zlecenie ${order.orderNumber}`}
+          </h1>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <Badge className={cn(STATUS_COLORS[order.status])}>
+              {STATUS_LABELS[order.status]}
+            </Badge>
+            <Badge className={cn(PRIORITY_COLORS[order.priority])}>
+              {order.priority}
+            </Badge>
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+              {TYPE_LABELS[order.type] ?? order.type}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Accept button for serwisant — unassigned orders */}
+      {canAccept && (
+        <div className="mb-4">
+          <Button
+            className="bg-green-600 hover:bg-green-700 gap-2"
+            disabled={acceptMutation.isPending}
+            onClick={() => acceptMutation.mutate()}
+          >
+            <UserPlus className="h-4 w-4" />
+            Przyjmij zlecenie
+          </Button>
+          <p className="text-xs text-gray-400 mt-1">Zostaniesz przypisany jako serwisant odpowiedzialny</p>
+        </div>
+      )}
+
+      {/* Status change — show to all except "Zakończone" which serwisant does via protocol */}
+      {nextStatuses.length > 0 && (
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {nextStatuses
+            .filter((s) => canCreate || s !== "ZAKONCZONE") // serwisant zamyka przez protokół
+            .map((s) => (
+              <Button
+                key={s}
+                size="sm"
+                variant={s === "ZAKONCZONE" ? "default" : s === "ANULOWANE" ? "destructive" : "outline"}
+                disabled={statusMutation.isPending}
+                onClick={() => statusMutation.mutate(s)}
+              >
+                → {STATUS_LABELS[s]}
+              </Button>
+            ))}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-4 w-full sm:w-auto">
+          <TabsTrigger value="info" className="flex items-center gap-1.5">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Szczegóły</span>
+          </TabsTrigger>
+          <TabsTrigger value="checklists" className="flex items-center gap-1.5">
+            <CheckSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Checklista</span>
+            {order.checklists.length > 0 && (
+              <span className="text-xs bg-red-100 text-red-900 rounded-full px-1.5">
+                {order.checklists.reduce((a, c) => a + c.items.filter((i) => i.isChecked).length, 0)}/
+                {order.checklists.reduce((a, c) => a + c.items.length, 0)}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="materials" className="flex items-center gap-1.5">
+            <Package className="h-4 w-4" />
+            <span className="hidden sm:inline">Materiały</span>
+          </TabsTrigger>
+          <TabsTrigger value="attachments" className="flex items-center gap-1.5">
+            <Paperclip className="h-4 w-4" />
+            <span className="hidden sm:inline">Pliki</span>
+          </TabsTrigger>
+          <TabsTrigger value="protocols" className="flex items-center gap-1.5">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Protokoły</span>
+            {(order.protocols?.length ?? 0) > 0 && (
+              <span className="text-xs bg-red-100 text-red-900 rounded-full px-1.5">
+                {order.protocols.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="log" className="flex items-center gap-1.5">
+            <Activity className="h-4 w-4" />
+            <span className="hidden sm:inline">Historia</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Info tab */}
+        <TabsContent value="info" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Client & Location */}
+            <div className="bg-white rounded-xl border p-4 space-y-3">
+              <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Klient
+              </h3>
+              {order.client ? (
+                <div>
+                  <p className="font-medium">{order.client.name}</p>
+                  {order.client.phone && <p className="text-sm text-gray-500">{order.client.phone}</p>}
+                  {order.client.email && <p className="text-sm text-gray-500">{order.client.email}</p>}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Brak klienta</p>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border p-4 space-y-3">
+              <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Lokalizacja
+              </h3>
+              {order.location ? (
+                <div>
+                  <p className="font-medium">{order.location.name}</p>
+                  {order.location.address && (
+                    <p className="text-sm text-gray-500">{order.location.address}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Brak lokalizacji</p>
+              )}
+            </div>
+
+            {/* Schedule */}
+            <div className="bg-white rounded-xl border p-4 space-y-3">
+              <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Termin
+              </h3>
+              {order.scheduledAt ? (
+                <div>
+                  <p className="font-medium">
+                    {format(new Date(order.scheduledAt), "d MMMM yyyy, HH:mm", { locale: pl })}
+                  </p>
+                  {order.scheduledEndAt && (
+                    <p className="text-sm text-gray-500">
+                      do {format(new Date(order.scheduledEndAt), "HH:mm", { locale: pl })}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Nie ustalono terminu</p>
+              )}
+              {order.completedAt && (
+                <p className="text-sm text-green-600">
+                  Zakończono: {format(new Date(order.completedAt), "d MMM yyyy, HH:mm", { locale: pl })}
+                </p>
+              )}
+            </div>
+
+            {/* Assignees */}
+            <div className="bg-white rounded-xl border p-4 space-y-3">
+              <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Przypisani
+              </h3>
+              {lead ? (
+                <div>
+                  <p className="font-medium">{lead.user.firstName} {lead.user.lastName}</p>
+                  <p className="text-xs text-gray-400">Odpowiedzialny</p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Nieprzypisane</p>
+              )}
+              {helpers.length > 0 && (
+                <div className="space-y-1">
+                  {helpers.map((h) => (
+                    <p key={h.user.id} className="text-sm text-gray-600">
+                      {h.user.firstName} {h.user.lastName}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
+          {order.description && (
+            <div className="bg-white rounded-xl border p-4">
+              <h3 className="font-semibold text-gray-700 mb-2">Opis</h3>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">{order.description}</p>
+            </div>
+          )}
+
+          {/* Internal notes */}
+          {order.internalNotes && (
+            <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+              <h3 className="font-semibold text-amber-800 mb-2">Notatki wewnętrzne</h3>
+              <p className="text-sm text-amber-700 whitespace-pre-wrap">{order.internalNotes}</p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Checklists tab */}
+        <TabsContent value="checklists" className="space-y-4">
+          {order.checklists.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <CheckSquare className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p>Brak checklisty dla tego zlecenia</p>
+            </div>
+          ) : (
+            order.checklists.map((checklist) => {
+              const doneCount = checklist.items.filter((i) => i.isChecked).length;
+              return (
+                <div key={checklist.id} className="bg-white rounded-xl border p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-gray-700">{checklist.name}</h3>
+                    <span className="text-sm text-gray-500">{doneCount}/{checklist.items.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {checklist.items.map((item) => (
+                      <label
+                        key={item.id}
+                        className="flex items-start gap-3 cursor-pointer group"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.isChecked}
+                          onChange={(e) =>
+                            checklistMutation.mutate({ checklistId: checklist.id, itemId: item.id, isChecked: e.target.checked })
+                          }
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-red-800"
+                        />
+                        <span
+                          className={cn(
+                            "text-sm",
+                            item.isChecked ? "line-through text-gray-400" : "text-gray-700",
+                            !item.isChecked && "font-medium"
+                          )}
+                        >
+                          {item.text}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </TabsContent>
+
+        {/* Materials tab */}
+        <TabsContent value="materials" className="space-y-4">
+          {/* Add form */}
+          <div className="bg-white rounded-xl border p-4">
+            <h3 className="font-semibold text-gray-700 mb-3">Dodaj materiał</h3>
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="flex-1 min-w-36">
+                <Label className="text-xs text-gray-500 mb-1">Nazwa</Label>
+                <Input
+                  placeholder="Nazwa materiału"
+                  value={newMat.name}
+                  onChange={(e) => setNewMat((p) => ({ ...p, name: e.target.value }))}
+                />
+              </div>
+              <div className="w-20">
+                <Label className="text-xs text-gray-500 mb-1">Ilość</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="1"
+                  value={newMat.qty}
+                  onChange={(e) => setNewMat((p) => ({ ...p, qty: e.target.value }))}
+                />
+              </div>
+              <div className="w-24">
+                <Label className="text-xs text-gray-500 mb-1">Jm.</Label>
+                <select
+                  value={newMat.unit}
+                  onChange={(e) => setNewMat((p) => ({ ...p, unit: e.target.value }))}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                >
+                  {["szt", "m", "mb", "kg", "g", "l", "ml", "kpl", "op"].map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-28">
+                <Label className="text-xs text-gray-500 mb-1">Cena j. (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="opcjonalna"
+                  value={newMat.price}
+                  onChange={(e) => setNewMat((p) => ({ ...p, price: e.target.value }))}
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={() => addMaterialMutation.mutate()}
+                disabled={addMaterialMutation.isPending}
+              >
+                Dodaj
+              </Button>
+            </div>
+          </div>
+
+          {/* List */}
+          {order.materials.length === 0 ? (
+            <div className="text-center py-10 text-gray-400">
+              <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p>Brak użytych materiałów</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-3 font-medium text-gray-600">Materiał</th>
+                    <th className="text-right p-3 font-medium text-gray-600">Ilość</th>
+                    <th className="text-right p-3 font-medium text-gray-600">Cena j.</th>
+                    <th className="text-right p-3 font-medium text-gray-600">Wartość</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.materials.map((m) => {
+                    const name = m.manualName ?? m.stockItem?.name ?? "—";
+                    const unit = m.unit ?? m.stockItem?.unit ?? "";
+                    const value = m.unitPrice != null && m.quantity != null
+                      ? (m.quantity * m.unitPrice).toFixed(2)
+                      : null;
+                    return (
+                      <tr key={m.id} className="border-b last:border-0">
+                        <td className="p-3">
+                          <p className="font-medium">{name}</p>
+                          {m.notes && <p className="text-xs text-gray-400">{m.notes}</p>}
+                        </td>
+                        <td className="p-3 text-right text-gray-600">
+                          {m.quantity} {unit}
+                        </td>
+                        <td className="p-3 text-right text-gray-600">
+                          {m.unitPrice != null ? `${m.unitPrice.toFixed(2)} zł` : "—"}
+                        </td>
+                        <td className="p-3 text-right font-medium">
+                          {value != null ? `${value} zł` : "—"}
+                        </td>
+                        <td className="p-2">
+                          <button
+                            onClick={() => deleteMaterialMutation.mutate(m.id)}
+                            disabled={deleteMaterialMutation.isPending}
+                            className="text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Attachments tab */}
+        <TabsContent value="attachments">
+          {order.attachments.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Paperclip className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p>Brak załączników</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {order.attachments.map((att) => (
+                <a
+                  key={att.id}
+                  href={att.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 bg-white rounded-xl border p-3 hover:bg-gray-50 transition-colors"
+                >
+                  <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{att.fileName}</p>
+                    <p className="text-xs text-gray-400">
+                      {format(new Date(att.uploadedAt), "d MMM yyyy", { locale: pl })}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Protocols tab */}
+        <TabsContent value="protocols" className="space-y-4">
+          {/* Existing protocols */}
+          {(order.protocols?.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <h3 className="font-semibold text-gray-700 text-sm">Wygenerowane protokoły</h3>
+              {order.protocols.map((p) => {
+                let parsed: Record<string, string> = {};
+                try { parsed = JSON.parse(p.content); } catch { /* empty */ }
+                const isReport = p.type === "raport";
+                const pdfVariant = isReport ? "report" : "print";
+                return (
+                  <div key={p.id} className="bg-white rounded-lg border p-4 flex items-center gap-3">
+                    {isReport
+                      ? <ImageIcon className="h-5 w-5 text-purple-500 shrink-0" />
+                      : <FileText className="h-5 w-5 text-red-700 shrink-0" />
+                    }
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{p.protocolNumber}</p>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${isReport ? "bg-purple-100 text-purple-700" : "bg-red-100 text-red-900"}`}>
+                          {isReport ? "Raport" : "Protokół"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 truncate">
+                        {format(new Date(p.createdAt), "d MMM yyyy, HH:mm", { locale: pl })}
+                        {parsed.description && (() => {
+                          const preview = getWorkDescriptionPreview(parsed.description);
+                          return preview ? ` · ${preview.slice(0, 60)}${preview.length > 60 ? "…" : ""}` : null;
+                        })()}
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      {canDeleteProtocol && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50"
+                              title="Usuń protokół"
+                              disabled={deleteProtocolMutation.isPending}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Usunąć protokół?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Protokół <strong>{p.protocolNumber}</strong> oraz wszystkie powiązane
+                                zdjęcia zostaną trwale usunięte. Tej operacji nie można cofnąć.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700"
+                                onClick={() => deleteProtocolMutation.mutate(p.id)}
+                              >
+                                Usuń
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1.5"
+                        title="Edytuj protokół"
+                        onClick={() => {
+                          setEditingProtocolId(p.id);
+                          setEditDescription(parsed.description ?? "");
+                          setEditNotes(parsed.notes ?? "");
+                          setEditHoursFrom(parsed.hoursFrom ?? "");
+                          setEditHoursTo(parsed.hoursTo ?? "");
+                          setEditDate(parsed.date ?? (order.scheduledAt ? format(new Date(order.scheduledAt), "yyyy-MM-dd") : ""));
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        title="Podgląd w nowej karcie"
+                        onClick={() => window.open(`/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}`, "_blank")}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Podgląd
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        title="Otwórz i zapisz jako PDF (Ctrl+P → Zapisz jako PDF)"
+                        onClick={() => window.open(
+                          `/api/orders/${id}/protocols/${p.id}/pdf?variant=${pdfVariant}&print=1`,
+                          "_blank"
+                        )}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        PDF
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Edit protocol form */}
+          {editingProtocolId && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-amber-900 flex items-center gap-2">
+                  <Pencil className="h-4 w-4" />
+                  Edycja protokołu
+                </h3>
+                <Button size="sm" variant="ghost" onClick={() => setEditingProtocolId(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Opis wykonanych prac *</Label>
+                <ProtocolDescriptionEditor
+                  key={editingProtocolId ?? "edit"}
+                  value={editDescription}
+                  onChange={setEditDescription}
+                  rows={4}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Uwagi / zalecenia</Label>
+                <RichTextarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={setEditNotes}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Data wykonania</Label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Godzina rozpoczęcia</Label>
+                  <input
+                    type="time"
+                    value={editHoursFrom}
+                    onChange={(e) => setEditHoursFrom(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Godzina zakończenia</Label>
+                  <input
+                    type="time"
+                    value={editHoursTo}
+                    onChange={(e) => setEditHoursTo(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => editProtocolMutation.mutate({
+                  pid: editingProtocolId,
+                  content: {
+                    description: editDescription,
+                    notes: editNotes,
+                    ...(editDate && { date: editDate }),
+                    ...(editHoursFrom && { hoursFrom: editHoursFrom }),
+                    ...(editHoursTo && { hoursTo: editHoursTo }),
+                  },
+                })}
+                disabled={!isValidWorkDescription(editDescription) || editProtocolMutation.isPending}
+                className="gap-2"
+              >
+                {editProtocolMutation.isPending ? "Zapisywanie..." : "Zapisz zmiany"}
+              </Button>
+            </div>
+          )}
+
+          {/* New protocol form */}
+          <div className="bg-white rounded-xl border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                <FilePlus className="h-5 w-5 text-red-700" />
+                Nowy protokół
+              </h3>
+              {canClose && order.status !== "ZAKONCZONE" && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 gap-1.5"
+                      disabled={!hasProtocol}
+                      title={!hasProtocol ? "Najpierw wygeneruj protokół" : undefined}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Zakończ zlecenie
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Zakończyć zlecenie?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Zlecenie {order.orderNumber} zostanie oznaczone jako{" "}
+                        <strong>Zakończone</strong>. Protokół został wygenerowany.
+                        Tej operacji nie można cofnąć bez pomocy administratora.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => statusMutation.mutate("ZAKONCZONE")}
+                      >
+                        Tak, zakończ
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+            {!hasProtocol && canClose && order.status !== "ZAKONCZONE" && (
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                Aby zakończyć zlecenie, najpierw wygeneruj protokół serwisowy.
+              </p>
+            )}
+
+            {/* Template picker / manager */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setShowTemplatePicker((v) => !v); setShowTemplateManager(false); }}
+                  className="gap-1.5 h-8"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  Wstaw szablon
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setShowTemplateManager((v) => !v); setShowTemplatePicker(false); }}
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                >
+                  <Settings2 className="h-3 w-3" />
+                  Zarządzaj szablonami
+                </button>
+              </div>
+              {showTemplatePicker && (
+                <GlobalTemplatePicker
+                  onApply={handleApplyTemplate}
+                  onClose={() => setShowTemplatePicker(false)}
+                />
+              )}
+              {showTemplateManager && (
+                <GlobalTemplateManager onClose={() => setShowTemplateManager(false)} />
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Opis wykonanych prac *</Label>
+              <ProtocolDescriptionEditor
+                key={descEditorKey}
+                value={protocolDescription}
+                onChange={setProtocolDescription}
+                rows={4}
+                placeholder="Opisz szczegółowo wykonane czynności serwisowe..."
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="proto-notes">Uwagi / zalecenia</Label>
+              <RichTextarea
+                id="proto-notes"
+                rows={2}
+                placeholder="Dodatkowe uwagi, zalecenia dla klienta..."
+                value={protocolNotes}
+                onChange={setProtocolNotes}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="proto-date">Data wykonania</Label>
+              <input
+                id="proto-date"
+                type="date"
+                value={protocolDate}
+                onChange={(e) => setProtocolDate(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="proto-hours-from">Godzina rozpoczęcia (opcjonalnie)</Label>
+                <input
+                  id="proto-hours-from"
+                  type="time"
+                  value={protocolHoursFrom}
+                  onChange={(e) => setProtocolHoursFrom(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="proto-hours-to">Godzina zakończenia (opcjonalnie)</Label>
+                <input
+                  id="proto-hours-to"
+                  type="time"
+                  value={protocolHoursTo}
+                  onChange={(e) => setProtocolHoursTo(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
+
+            {/* Upload zdjęć */}
+            <div className="space-y-2">
+              <Label className="text-xs text-gray-500">
+                Zdjęcia dokumentacji (max 6)
+              </Label>
+              {protocolPhotos.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {protocolPhotos.map((f, i) => (
+                    <div
+                      key={i}
+                      className="aspect-video rounded-lg overflow-hidden border bg-gray-50 relative group"
+                    >
+                      <img
+                        src={URL.createObjectURL(f)}
+                        className="w-full h-full object-cover"
+                        alt=""
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProtocolPhotos((prev) => prev.filter((_, j) => j !== i))
+                        }
+                        className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                id="proto-photos"
+                onChange={async (e) => {
+                  const raw = Array.from(e.target.files ?? []).slice(0, 6);
+                  e.target.value = "";
+                  const compressed = await Promise.all(raw.map(compressImage));
+                  setProtocolPhotos(compressed);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById("proto-photos")?.click()}
+                className="gap-2"
+              >
+                <ImageIcon className="h-4 w-4" />
+                {protocolPhotos.length > 0
+                  ? `${protocolPhotos.length} ${protocolPhotos.length === 1 ? "zdjęcie" : "zdjęcia"} wybrane`
+                  : "Dodaj zdjęcia"}
+              </Button>
+            </div>
+
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                onClick={() => protocolMutation.mutate({
+                  variant: "print",
+                  photos: [],
+                  content: { description: protocolDescription, notes: protocolNotes, date: protocolDate || undefined, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
+                })}
+                disabled={!isValidWorkDescription(protocolDescription) || protocolMutation.isPending}
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                {protocolMutation.isPending ? "Generowanie..." : "Generuj Protokół"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => protocolMutation.mutate({
+                  variant: "report",
+                  photos: protocolPhotos,
+                  content: { description: protocolDescription, notes: protocolNotes, date: protocolDate || undefined, hoursFrom: protocolHoursFrom || undefined, hoursTo: protocolHoursTo || undefined },
+                })}
+                disabled={!isValidWorkDescription(protocolDescription) || protocolMutation.isPending}
+                className="gap-2"
+              >
+                <ImageIcon className="h-4 w-4" />
+                {protocolMutation.isPending ? "Generowanie..." : "Generuj Raport (ze zdjęciami)"}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-400">
+              Protokół — do druku z podpisami. Raport — z dokumentacją zdjęciową, gotowy do wysyłki emailem.
+            </p>
+          </div>
+        </TabsContent>
+
+        {/* Activity log tab */}
+        <TabsContent value="log">
+          {order.activityLog.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Activity className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p>Brak historii</p>
+            </div>
+          ) : (
+            <div className="relative space-y-0">
+              {order.activityLog.map((entry, index) => (
+                <div key={entry.id} className="flex gap-3 pb-4">
+                  <div className="flex flex-col items-center">
+                    <div className="h-2.5 w-2.5 rounded-full bg-red-600 mt-1.5 shrink-0" />
+                    {index < order.activityLog.length - 1 && (
+                      <div className="flex-1 w-px bg-gray-200 mt-1" />
+                    )}
+                  </div>
+                  <div className="flex-1 pb-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        {entry.user.firstName} {entry.user.lastName}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {format(new Date(entry.createdAt), "d MMM, HH:mm", { locale: pl })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-0.5">
+                      {entry.details ?? entry.action}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

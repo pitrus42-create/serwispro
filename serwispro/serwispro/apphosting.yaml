@@ -1,0 +1,35 @@
+runConfig:
+  concurrency: 10
+  minInstances: 0
+
+env:
+  - variable: NEXTAUTH_URL
+    value: https://my-web-app--alarmy-serwis.europe-west4.hosted.app
+  - variable: NEXT_PUBLIC_APP_URL
+    value: https://my-web-app--alarmy-serwis.europe-west4.hosted.app
+  - variable: NEXT_PUBLIC_APP_NAME
+    value: SerwisPro
+  - variable: STORAGE_MODE
+    value: local
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: alarmy-serwis.firebaseapp.com
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: alarmy-serwis
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:750392845726:web:d558d661b401f8a9bb628f
+  - variable: FIREBASE_PROJECT_ID
+    value: alarmy-serwis
+  - variable: FIREBASE_CLIENT_EMAIL
+    value: firebase-adminsdk-fbsvc@alarmy-serwis.iam.gserviceaccount.com
+  - variable: TURSO_DATABASE_URL
+    value: libsql://serwispro-pitrus42-create.aws-us-east-1.turso.io
+  - variable: NEXTAUTH_SECRET
+    value: serwispro-super-secret-key-2026-dev
+  - variable: AUTH_SECRET
+    value: serwispro-super-secret-key-2026-dev
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: NEXT_PUBLIC_FIREBASE_API_KEY
+  - variable: TURSO_AUTH_TOKEN
+    secret: TURSO_AUTH_TOKEN
+  - variable: FIREBASE_PRIVATE_KEY
+    secret: FIREBASE_PRIVATE_KEY

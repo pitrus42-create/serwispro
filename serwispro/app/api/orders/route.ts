@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+﻿import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateOrderNumber } from "@/lib/order-number";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
@@ -7,7 +7,7 @@ import { isAdmin } from "@/lib/permissions";
 import { startOfDay } from "date-fns";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -48,32 +48,30 @@ export async function GET(req: NextRequest) {
     ...(q ? { OR: [{ orderNumber: { contains: q } }, { title: { contains: q } }, { description: { contains: q } }] } : {}),
   };
 
-  const [total, data] = await Promise.all([
-    prisma.order.count({ where }),
-    prisma.order.findMany({
-      where,
-      include: {
-        client: { select: { id: true, name: true } },
-        location: { select: { id: true, name: true, address: true, city: true } },
-        assignments: {
-          include: { user: { select: { id: true, firstName: true, lastName: true } } },
-        },
+  const total = await prisma.order.count({ where });
+  const data = await prisma.order.findMany({
+    where,
+    include: {
+      client: { select: { id: true, name: true } },
+      location: { select: { id: true, name: true, address: true, city: true } },
+      assignments: {
+        include: { user: { select: { id: true, firstName: true, lastName: true } } },
       },
-      orderBy: [
-        { isCritical: "desc" },
-        { scheduledAt: "asc" },
-        { createdAt: "desc" },
-      ],
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-  ]);
+    },
+    orderBy: [
+      { isCritical: "desc" },
+      { scheduledAt: "asc" },
+      { createdAt: "desc" },
+    ],
+    skip: (page - 1) * limit,
+    take: limit,
+  });
 
   return NextResponse.json({ data, total, page, limit });
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
@@ -95,85 +93,75 @@ export async function POST(req: NextRequest) {
 
   if (!type) return NextResponse.json({ error: "type is required" }, { status: 400 });
 
-  try {
-    const orderNumber = await generateOrderNumber();
+  const orderNumber = await generateOrderNumber();
 
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        type,
-        priority,
-        isCritical: type === "AWARIA" ? isCritical : false,
-        clientId: clientId ?? null,
-        locationId: locationId ?? null,
-        title: title ?? null,
-        description: description ?? null,
-        internalNotes: internalNotes ?? null,
-        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-        scheduledEndAt: scheduledEndAt ? new Date(scheduledEndAt) : null,
-        dayOrder: dayOrder ?? null,
-        createdById: session.user.id,
-        assignments: {
-          create: [
-            ...(responsibleId ? [{ userId: responsibleId, isLead: true }] : []),
-            ...helperIds.map((uid: string) => ({ userId: uid, isLead: false })),
-          ],
-        },
+  const order = await prisma.order.create({
+    data: {
+      orderNumber,
+      type,
+      priority,
+      isCritical: type === "AWARIA" ? isCritical : false,
+      clientId: clientId ?? null,
+      locationId: locationId ?? null,
+      title: title ?? null,
+      description: description ?? null,
+      internalNotes: internalNotes ?? null,
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      scheduledEndAt: scheduledEndAt ? new Date(scheduledEndAt) : null,
+      dayOrder: dayOrder ?? null,
+      createdById: session.user.id,
+      assignments: {
+        create: [
+          ...(responsibleId ? [{ userId: responsibleId, isLead: true }] : []),
+          ...helperIds.map((uid: string) => ({ userId: uid, isLead: false })),
+        ],
       },
-      include: {
-        client: true,
-        location: true,
-        assignments: { include: { user: true } },
-      },
+    },
+    include: {
+      client: true,
+      location: true,
+      assignments: { include: { user: true } },
+    },
+  });
+
+  // Activity log
+  await prisma.orderActivityLog.create({
+    data: {
+      orderId: order.id,
+      userId: session.user.id,
+      action: "order_created",
+      details: JSON.stringify({ type, priority, isCritical }),
+    },
+  });
+
+  // Notifications
+  const assignedUserIds = order.assignments.map((a) => a.userId);
+  const notifyIds = assignedUserIds.filter((id) => id !== session.user.id);
+
+  if (notifyIds.length) {
+    await createNotification({
+      userIds: notifyIds,
+      type: "order_assigned",
+      priority: 3,
+      title: `Przypisano Cię do zlecenia ${orderNumber}`,
+      message: title ?? description ?? undefined,
+      link: `/orders/${order.id}`,
+      relatedEntityType: "order",
+      relatedEntityId: order.id,
     });
-
-    // Activity log
-    await prisma.orderActivityLog.create({
-      data: {
-        orderId: order.id,
-        userId: session.user.id,
-        action: "order_created",
-        details: JSON.stringify({ type, priority, isCritical }),
-      },
-    });
-
-    // Notifications (non-critical — don't let failures block order creation)
-    try {
-      const assignedUserIds = order.assignments.map((a) => a.userId);
-      const notifyIds = assignedUserIds.filter((id) => id !== session.user.id);
-
-      if (notifyIds.length) {
-        await createNotification({
-          userIds: notifyIds,
-          type: "order_assigned",
-          priority: 3,
-          title: `Przypisano Cię do zlecenia ${orderNumber}`,
-          message: title ?? description ?? undefined,
-          link: `/orders/${order.id}`,
-          relatedEntityType: "order",
-          relatedEntityId: order.id,
-        });
-      }
-
-      if (isCritical && type === "AWARIA") {
-        await notifyAdmins({
-          type: "critical_failure",
-          priority: 1,
-          title: `🔴 AWARIA KRYTYCZNA: ${order.client?.name ?? "Klient"}`,
-          message: title ?? description ?? "Nowa awaria krytyczna",
-          link: `/orders/${order.id}`,
-          relatedEntityType: "order",
-          relatedEntityId: order.id,
-        });
-      }
-    } catch (notifErr) {
-      console.error("Notification error (non-fatal):", notifErr);
-    }
-
-    return NextResponse.json({ data: order }, { status: 201 });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("POST /api/orders error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
   }
+
+  if (isCritical && type === "AWARIA") {
+    await notifyAdmins({
+      type: "critical_failure",
+      priority: 1,
+      title: `🔴 AWARIA KRYTYCZNA: ${order.client?.name ?? "Klient"}`,
+      message: title ?? description ?? "Nowa awaria krytyczna",
+      link: `/orders/${order.id}`,
+      relatedEntityType: "order",
+      relatedEntityId: order.id,
+    });
+  }
+
+  return NextResponse.json({ data: order }, { status: 201 });
 }
