@@ -250,6 +250,8 @@ function EditOrderForm({ id }: { id: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          clientId: data.clientId || null,
+          locationId: data.locationId || null,
           scheduledAt: data.scheduledAt || null,
           scheduledEndAt: data.scheduledEndAt || null,
           title: data.title || null,
