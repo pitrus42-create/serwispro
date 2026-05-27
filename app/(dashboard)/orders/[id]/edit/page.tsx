@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, use, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -158,17 +158,9 @@ function ClientSearch({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  return (
-    <Suspense fallback={
-      <div className="p-6 max-w-2xl mx-auto space-y-4">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
-      </div>
-    }>
-      <EditOrderForm id={id} />
-    </Suspense>
-  );
+export default function EditOrderPage() {
+  const params = useParams<{ id: string }>();
+  return <EditOrderForm id={params.id} />;
 }
 
 function EditOrderForm({ id }: { id: string }) {
