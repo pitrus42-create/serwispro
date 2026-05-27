@@ -169,7 +169,9 @@ export default function OrdersPage() {
   if (search) params.q = search;
   if (activeTab === "DO_ROZLICZENIA") {
     params.settled = "false";
-  } else if (activeTab !== "all") {
+  } else if (activeTab === "all") {
+    params.status = "OCZEKUJACE,PRZYJETE,W_TOKU,ZAPLANOWANE,ZAKONCZONE";
+  } else {
     params.status = activeTab;
   }
   if (type !== "all") params.type = type;

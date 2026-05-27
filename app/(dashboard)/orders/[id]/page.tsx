@@ -34,6 +34,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -301,6 +304,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [descEditorKey, setDescEditorKey] = useState(0);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [assignEditing, setAssignEditing] = useState(false);
+  const [assignAddId, setAssignAddId] = useState("none");
+  const [assignAddLead, setAssignAddLead] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -493,6 +499,55 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       toast.success("Materiał usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const { data: usersData } = useQuery({
+    queryKey: ["users-list"],
+    queryFn: async () => {
+      const r = await fetch("/api/users?limit=100");
+      if (!r.ok) return { data: [] };
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const allUsers: { id: string; firstName: string; lastName: string }[] = usersData?.data ?? [];
+
+  const assignAddMutation = useMutation({
+    mutationFn: async ({ userId, isLead }: { userId: string; isLead: boolean }) => {
+      const r = await fetch(`/api/orders/${id}/assignments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, isLead }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error ?? "Błąd dodawania serwisanta");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setAssignAddId("none");
+      setAssignAddLead(false);
+      toast.success("Serwisant dodany");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const assignRemoveMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const r = await fetch(`/api/orders/${id}/assignments?userId=${userId}`, { method: "DELETE" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error ?? "Błąd usuwania serwisanta");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Serwisant usunięty");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -716,27 +771,108 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
             {/* Assignees */}
             <div className="bg-white rounded-xl border p-4 space-y-3">
-              <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Przypisani
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Przypisani
+                </h3>
+                {canCreate && !["ZAKONCZONE", "ANULOWANE"].includes(order.status) && (
+                  <button
+                    onClick={() => setAssignEditing((v) => !v)}
+                    className={cn(
+                      "p-1 rounded hover:bg-gray-100 transition-colors",
+                      assignEditing ? "text-red-700" : "text-gray-400"
+                    )}
+                    title="Edytuj przypisania"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Lead */}
               {lead ? (
-                <div>
-                  <p className="font-medium">{lead.user.firstName} {lead.user.lastName}</p>
-                  <p className="text-xs text-gray-400">Odpowiedzialny</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{lead.user.firstName} {lead.user.lastName}</p>
+                    <p className="text-xs text-gray-400">Odpowiedzialny</p>
+                  </div>
+                  {assignEditing && (
+                    <button
+                      onClick={() => assignRemoveMutation.mutate(lead.user.id)}
+                      disabled={assignRemoveMutation.isPending}
+                      className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                      title="Usuń"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-gray-400">Nieprzypisane</p>
               )}
+
+              {/* Helpers */}
               {helpers.length > 0 && (
                 <div className="space-y-1">
                   {helpers.map((h) => (
-                    <p key={h.user.id} className="text-sm text-gray-600">
-                      {h.user.firstName} {h.user.lastName}
-                    </p>
+                    <div key={h.user.id} className="flex items-center justify-between">
+                      <p className="text-sm text-gray-600">{h.user.firstName} {h.user.lastName}</p>
+                      {assignEditing && (
+                        <button
+                          onClick={() => assignRemoveMutation.mutate(h.user.id)}
+                          disabled={assignRemoveMutation.isPending}
+                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Usuń"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
+
+              {/* Add assignee form */}
+              {assignEditing && (() => {
+                const assignedIds = new Set(order.assignments.map((a) => a.user.id));
+                const available = allUsers.filter((u) => !assignedIds.has(u.id));
+                return (
+                  <div className="pt-2 border-t border-gray-100 space-y-2">
+                    <Select value={assignAddId} onValueChange={setAssignAddId}>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="Wybierz serwisanta..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— wybierz —</SelectItem>
+                        {available.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.firstName} {u.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={assignAddLead}
+                        onChange={(e) => setAssignAddLead(e.target.checked)}
+                        className="rounded"
+                      />
+                      Odpowiedzialny (lead)
+                    </label>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      disabled={assignAddId === "none" || assignAddMutation.isPending}
+                      onClick={() => assignAddMutation.mutate({ userId: assignAddId, isLead: assignAddLead })}
+                    >
+                      <UserPlus className="h-3.5 w-3.5 mr-1" />
+                      Dodaj
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
