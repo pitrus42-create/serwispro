@@ -963,12 +963,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="space-y-1.5">
               <Label>Lokalizacja</Label>
               <Select
-                value={editForm.locationId ?? ""}
-                onValueChange={v => setEditForm(p => ({ ...p, locationId: v || undefined }))}
+                value={editForm.locationId ?? "none"}
+                onValueChange={v => setEditForm(p => ({ ...p, locationId: v === "none" ? undefined : v }))}
               >
                 <SelectTrigger><SelectValue placeholder="Wybierz lokalizację..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— brak —</SelectItem>
+                  <SelectItem value="none">— brak —</SelectItem>
                   {editLocations.map(l => (
                     <SelectItem key={l.id} value={l.id}>
                       {l.name}{l.address ? ` – ${l.address}` : ""}
