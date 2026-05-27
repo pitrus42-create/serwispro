@@ -307,6 +307,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [assignEditing, setAssignEditing] = useState(false);
   const [assignAddId, setAssignAddId] = useState("none");
   const [assignAddLead, setAssignAddLead] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -339,6 +340,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: (_, newStatus) => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
       toast.success(`Status zmieniony na: ${STATUS_LABELS[newStatus]}`);
     },
     onError: () => toast.error("Błąd zmiany statusu"),
@@ -552,6 +554,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteOrderMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}`, { method: "DELETE" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error ?? "Błąd usuwania zlecenia");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Zlecenie usunięte");
+      router.push("/orders");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   function handleApplyTemplate(text: string, checklist: ChecklistItem[], notes: string) {
     const data: WorkDescriptionData = {
       type: "workDescription",
@@ -629,7 +648,93 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </span>
           </div>
         </div>
+        {canCreate && (
+          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            {order.status !== "ANULOWANE" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => router.push(`/orders/${id}/edit`)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edytuj
+              </Button>
+            )}
+            {isAdmin(session?.user) && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" title="Usuń zlecenie" className="text-gray-400 hover:text-red-500">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Usuń zlecenie?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Ta operacja jest nieodwracalna. Zlecenie {order.orderNumber} oraz wszystkie powiązane dane (materiały, checklist, załączniki) zostaną permanentnie usunięte.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-red-600 hover:bg-red-700"
+                      onClick={() => deleteOrderMutation.mutate()}
+                      disabled={deleteOrderMutation.isPending}
+                    >
+                      Usuń zlecenie
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ANULOWANE banner */}
+      {order.status === "ANULOWANE" && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-red-800">Zlecenie anulowane</p>
+            <p className="text-sm text-red-600 mt-0.5">To zlecenie zostało anulowane i nie jest widoczne w aktywnym kalendarzu.</p>
+          </div>
+          {isAdmin(session?.user) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate("OCZEKUJACE")}
+            >
+              Przywróć zlecenie
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Cancel confirmation dialog */}
+      <AlertDialog open={pendingStatus === "ANULOWANE"} onOpenChange={(open) => { if (!open) setPendingStatus(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Anulować zlecenie?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Czy na pewno chcesz anulować to zlecenie? Zlecenie pozostanie w historii, ale nie będzie widoczne jako aktywne w kalendarzu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingStatus(null)}>Nie, wróć</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={statusMutation.isPending}
+              onClick={() => { statusMutation.mutate("ANULOWANE"); setPendingStatus(null); }}
+            >
+              Tak, anuluj zlecenie
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Accept button for serwisant — unassigned orders */}
       {canAccept && (
@@ -657,7 +762,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 size="sm"
                 variant={s === "ZAKONCZONE" ? "default" : s === "ANULOWANE" ? "destructive" : "outline"}
                 disabled={statusMutation.isPending}
-                onClick={() => statusMutation.mutate(s)}
+                onClick={() => s === "ANULOWANE" ? setPendingStatus("ANULOWANE") : statusMutation.mutate(s)}
               >
                 → {STATUS_LABELS[s]}
               </Button>
