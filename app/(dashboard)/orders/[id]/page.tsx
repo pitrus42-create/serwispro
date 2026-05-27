@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useState, useEffect } from "react";
+import React, { use, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -30,6 +30,7 @@ import {
   List,
   BookOpen,
   Settings2,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -258,6 +260,121 @@ function RichTextarea({
   );
 }
 
+interface EditClient { id: string; name: string | null; alias: string | null; phone: string | null; }
+
+function EditClientSearch({
+  value,
+  onChange,
+  initialClient,
+}: {
+  value: string | undefined;
+  onChange: (clientId: string | undefined, client: EditClient | undefined) => void;
+  initialClient?: EditClient;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<EditClient[]>([]);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<EditClient | undefined>(initialClient);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSelected(initialClient);
+  }, [initialClient]);
+
+  useEffect(() => {
+    const down = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", down);
+    return () => document.removeEventListener("mousedown", down);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); setOpen(false); return; }
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/clients?q=${encodeURIComponent(query)}&limit=8`);
+        const d = await r.json();
+        setResults(d.data ?? []);
+        setOpen(true);
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function select(c: EditClient) {
+    setSelected(c);
+    setQuery("");
+    setOpen(false);
+    onChange(c.id, c);
+  }
+
+  function clear() {
+    setSelected(undefined);
+    setQuery("");
+    onChange(undefined, undefined);
+  }
+
+  function clientLabel(c: EditClient) {
+    const parts = [c.name, c.alias].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "Klient bez nazwy";
+  }
+
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-gray-50">
+        <div>
+          <p className="text-sm font-medium text-gray-900">{clientLabel(selected)}</p>
+          {selected.phone && <p className="text-xs text-gray-500">{selected.phone}</p>}
+        </div>
+        <button type="button" onClick={clear} className="text-gray-400 hover:text-gray-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="Szukaj po nazwie, telefonie, pseudonimie..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="pl-9"
+          autoComplete="off"
+        />
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {loading ? (
+            <div className="px-3 py-2 text-sm text-gray-500">Szukam...</div>
+          ) : results.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">Brak wyników</div>
+          ) : (
+            results.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => select(c)}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-sm font-medium text-gray-900">{clientLabel(c)}</p>
+                {c.phone && <p className="text-xs text-gray-500">{c.phone}</p>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -308,6 +425,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [assignAddId, setAssignAddId] = useState("none");
   const [assignAddLead, setAssignAddLead] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editForm, setEditForm] = useState({
+    type: "", priority: "", isCritical: false,
+    title: "", description: "", internalNotes: "",
+    scheduledAt: "", scheduledEndAt: "",
+    clientId: "" as string | undefined,
+    locationId: "" as string | undefined,
+    responsibleId: "",
+  });
+  const [editLocations, setEditLocations] = useState<Array<{ id: string; name: string; address: string | null }>>([]);
+  const [editClient, setEditClient] = useState<{ id: string; name: string | null; alias: string | null; phone: string | null } | undefined>();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -326,6 +454,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.scheduledAt]);
+
+  useEffect(() => {
+    if (!editForm.clientId) { setEditLocations([]); return; }
+    fetch(`/api/clients/${editForm.clientId}/locations`)
+      .then(r => r.json())
+      .then(d => setEditLocations(d.data ?? []))
+      .catch(() => setEditLocations([]));
+  }, [editForm.clientId]);
 
   const statusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
@@ -571,6 +707,65 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const saveEditMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editForm.type,
+          priority: editForm.priority,
+          isCritical: editForm.isCritical,
+          clientId: editForm.clientId || null,
+          locationId: editForm.locationId || null,
+          title: editForm.title || null,
+          description: editForm.description || null,
+          internalNotes: editForm.internalNotes || null,
+          scheduledAt: editForm.scheduledAt || null,
+          scheduledEndAt: editForm.scheduledEndAt || null,
+          responsibleId: editForm.responsibleId || null,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error ?? "Błąd zapisywania");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      setEditingOrder(false);
+      toast.success("Zlecenie zaktualizowane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function startEditing() {
+    if (!order) return;
+    const lead = order.assignments.find(a => a.isLead);
+    setEditForm({
+      type: order.type,
+      priority: order.priority,
+      isCritical: order.isCritical,
+      title: order.title ?? "",
+      description: order.description ?? "",
+      internalNotes: order.internalNotes ?? "",
+      scheduledAt: order.scheduledAt ? new Date(order.scheduledAt).toISOString().slice(0, 16) : "",
+      scheduledEndAt: order.scheduledEndAt ? new Date(order.scheduledEndAt).toISOString().slice(0, 16) : "",
+      clientId: order.client?.id ?? undefined,
+      locationId: order.location?.id ?? undefined,
+      responsibleId: lead?.user.id ?? "",
+    });
+    if (order.client) {
+      setEditClient({ id: order.client.id, name: order.client.name, alias: null, phone: order.client.phone });
+    } else {
+      setEditClient(undefined);
+    }
+    setEditingOrder(true);
+  }
+
   function handleApplyTemplate(text: string, checklist: ChecklistItem[], notes: string) {
     const data: WorkDescriptionData = {
       type: "workDescription",
@@ -655,7 +850,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => router.push(`/orders/${id}/edit`)}
+                onClick={startEditing}
               >
                 <Pencil className="h-3.5 w-3.5" />
                 Edytuj
@@ -691,6 +886,166 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
       </div>
+
+      {/* Inline edit panel */}
+      {editingOrder && (
+        <div className="bg-gray-50 border rounded-xl p-5 mb-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">Edytuj zlecenie</h3>
+            <Button size="sm" variant="ghost" onClick={() => setEditingOrder(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Typ zlecenia</Label>
+              <Select value={editForm.type} onValueChange={v => setEditForm(p => ({ ...p, type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AWARIA">Awaria</SelectItem>
+                  <SelectItem value="KONSERWACJA">Konserwacja</SelectItem>
+                  <SelectItem value="MONTAZ">Montaż</SelectItem>
+                  <SelectItem value="MODERNIZACJA">Modernizacja</SelectItem>
+                  <SelectItem value="INNE">Inne</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Priorytet</Label>
+              <Select value={editForm.priority} onValueChange={v => setEditForm(p => ({ ...p, priority: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NISKI">Niski</SelectItem>
+                  <SelectItem value="NORMALNY">Normalny</SelectItem>
+                  <SelectItem value="WYSOKI">Wysoki</SelectItem>
+                  <SelectItem value="KRYTYCZNY">Krytyczny</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {editForm.type === "AWARIA" && (
+            <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+                <p className="text-sm font-medium text-red-900">Awaria krytyczna</p>
+              </div>
+              <Switch
+                checked={editForm.isCritical}
+                onCheckedChange={v => setEditForm(p => ({ ...p, isCritical: v }))}
+              />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label>Tytuł</Label>
+            <Input
+              value={editForm.title}
+              onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))}
+              placeholder="Krótki opis zlecenia..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Klient</Label>
+            <EditClientSearch
+              value={editForm.clientId}
+              initialClient={editClient}
+              onChange={(clientId, client) => {
+                setEditForm(p => ({ ...p, clientId: clientId ?? undefined, locationId: undefined }));
+                setEditClient(client ?? undefined);
+              }}
+            />
+          </div>
+
+          {editForm.clientId && (
+            <div className="space-y-1.5">
+              <Label>Lokalizacja</Label>
+              <Select
+                value={editForm.locationId ?? ""}
+                onValueChange={v => setEditForm(p => ({ ...p, locationId: v || undefined }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Wybierz lokalizację..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">— brak —</SelectItem>
+                  {editLocations.map(l => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}{l.address ? ` – ${l.address}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Data od</Label>
+              <input
+                type="datetime-local"
+                value={editForm.scheduledAt}
+                onChange={e => setEditForm(p => ({ ...p, scheduledAt: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Data do</Label>
+              <input
+                type="datetime-local"
+                value={editForm.scheduledEndAt}
+                onChange={e => setEditForm(p => ({ ...p, scheduledEndAt: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Odpowiedzialny serwisant</Label>
+            <Select
+              value={editForm.responsibleId || "none"}
+              onValueChange={v => setEditForm(p => ({ ...p, responsibleId: v === "none" ? "" : v }))}
+            >
+              <SelectTrigger><SelectValue placeholder="Wybierz..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— nieprzypisany —</SelectItem>
+                {allUsers.map(u => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.firstName} {u.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Opis</Label>
+            <Textarea
+              value={editForm.description}
+              onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+              rows={3}
+              placeholder="Dokładny opis zlecenia..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notatki wewnętrzne</Label>
+            <Textarea
+              value={editForm.internalNotes}
+              onChange={e => setEditForm(p => ({ ...p, internalNotes: e.target.value }))}
+              rows={2}
+              placeholder="Widoczne tylko dla zespołu..."
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <Button onClick={() => saveEditMutation.mutate()} disabled={saveEditMutation.isPending}>
+              {saveEditMutation.isPending ? "Zapisywanie..." : "Zapisz zmiany"}
+            </Button>
+            <Button variant="outline" onClick={() => setEditingOrder(false)}>Anuluj</Button>
+          </div>
+        </div>
+      )}
 
       {/* ANULOWANE banner */}
       {order.status === "ANULOWANE" && (
