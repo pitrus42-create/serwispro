@@ -15,6 +15,12 @@ function createPrismaClient() {
     return new PrismaClient({ adapter } as never);
   }
 
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[prisma] TURSO_DATABASE_URL or TURSO_AUTH_TOKEN not set — DB queries will fail"
+    );
+  }
+
   // Fallback do lokalnego SQLite (dev bez Turso)
   const dbPath = path.join(process.cwd(), "prisma", "dev.db");
   const adapter = new PrismaLibSql({ url: `file:${dbPath}` });
