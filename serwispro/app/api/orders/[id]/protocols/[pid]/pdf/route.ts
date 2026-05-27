@@ -641,6 +641,9 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
 </html>`;
 
   return new NextResponse(html, {
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
   });
 }
