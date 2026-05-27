@@ -1,4 +1,4 @@
-﻿import { auth, getAuth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateProtocolNumber } from "@/lib/order-number";
 import { NextRequest, NextResponse } from "next/server";

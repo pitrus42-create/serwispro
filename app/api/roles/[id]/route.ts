@@ -1,4 +1,4 @@
-﻿import { auth, getAuth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin, isSuperAdmin } from "@/lib/permissions";
 import { logAudit, getClientIp } from "@/lib/audit";

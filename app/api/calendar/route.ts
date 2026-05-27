@@ -1,4 +1,4 @@
-﻿import { auth, getAuth } from "@/lib/auth";
+import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/permissions";
 import { NextRequest, NextResponse } from "next/server";
