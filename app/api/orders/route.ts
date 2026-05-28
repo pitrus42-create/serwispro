@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const critical = searchParams.get("critical");
   const overdue = searchParams.get("overdue");
   const settled = searchParams.get("settled");
+  const pending = searchParams.get("pending");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const q = searchParams.get("q");
@@ -33,7 +34,9 @@ export async function GET(req: NextRequest) {
       : userId
       ? { assignments: { some: { userId } } }
       : {}),
-    ...(status?.length ? { status: { in: status } } : {}),
+    ...(pending === "true"
+      ? { scheduledAt: null, status: { notIn: ["ZAKONCZONE", "ANULOWANE"] } }
+      : status?.length ? { status: { in: status } } : {}),
     ...(type?.length ? { type: { in: type } } : {}),
     ...(priority?.length ? { priority: { in: priority } } : {}),
     ...(clientId ? { clientId } : {}),

@@ -512,11 +512,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["order", id] }),
   });
 
+  const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
+  const [acceptDate, setAcceptDate] = useState("");
+
   const acceptMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (scheduledAt: string | null) => {
       const r = await fetch(`/api/orders/${id}/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: scheduledAt || null }),
       });
       if (!r.ok) throw new Error("Błąd przyjęcia zlecenia");
       return r.json();
@@ -524,6 +528,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      setAcceptDialogOpen(false);
       toast.success("Zlecenie przyjęte — jesteś teraz przypisanym serwisantem");
     },
     onError: () => toast.error("Błąd przyjęcia zlecenia"),
@@ -1175,7 +1181,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <Button
             className="bg-green-600 hover:bg-green-700 gap-2"
             disabled={acceptMutation.isPending}
-            onClick={() => acceptMutation.mutate()}
+            onClick={() => { setAcceptDate(""); setAcceptDialogOpen(true); }}
           >
             <UserPlus className="h-4 w-4" />
             Przyjmij zlecenie
@@ -1183,6 +1189,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <p className="text-xs text-gray-400 mt-1">Zostaniesz przypisany jako serwisant odpowiedzialny</p>
         </div>
       )}
+
+      {/* Accept dialog */}
+      <AlertDialog open={acceptDialogOpen} onOpenChange={setAcceptDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Przyjmij zlecenie</AlertDialogTitle>
+            <AlertDialogDescription>
+              Możesz od razu wybrać datę realizacji, aby zlecenie pojawiło się w kalendarzu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2 space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Data realizacji (opcjonalnie)</label>
+            <input
+              type="date"
+              value={acceptDate}
+              onChange={(e) => setAcceptDate(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            />
+            <p className="text-xs text-gray-400">Jeżeli nie znasz daty, możesz ją ustawić później.</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700"
+              disabled={acceptMutation.isPending}
+              onClick={() => acceptMutation.mutate(acceptDate || null)}
+            >
+              {acceptMutation.isPending ? "Przyjmowanie..." : "Przyjmij zlecenie"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Status change — show to all except "Zakończone" which serwisant does via protocol */}
       {nextStatuses.length > 0 && (

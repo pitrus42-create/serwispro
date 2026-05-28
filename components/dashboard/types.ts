@@ -13,6 +13,7 @@ export interface DashboardData {
   }[];
   highPriorityOrders: number;
   pendingMaintenance: number;
+  pendingOrders: number;
   recentActivity: {
     id: string;
     action: string;

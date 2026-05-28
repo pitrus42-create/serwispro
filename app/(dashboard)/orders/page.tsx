@@ -56,9 +56,10 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 type DatePreset = "all" | "today" | "week" | "month";
-type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA";
+type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA" | "BEZ_TERMINU";
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: "BEZ_TERMINU", label: "Bez terminu" },
   { key: "OCZEKUJACE", label: "Oczekujące" },
   { key: "PRZYJETE", label: "Przyjęte" },
   { key: "W_TOKU", label: "W toku" },
@@ -147,7 +148,7 @@ export default function OrdersPage() {
     (session.user as { role?: string }).role === "ADMIN"
   );
 
-  const [activeTab, setActiveTab] = useState<TabKey>("OCZEKUJACE");
+  const [activeTab, setActiveTab] = useState<TabKey>("BEZ_TERMINU");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("all");
   const [priority, setPriority] = useState("all");
@@ -169,6 +170,8 @@ export default function OrdersPage() {
   if (search) params.q = search;
   if (activeTab === "DO_ROZLICZENIA") {
     params.settled = "false";
+  } else if (activeTab === "BEZ_TERMINU") {
+    params.pending = "true";
   } else if (activeTab === "all") {
     params.status = "OCZEKUJACE,PRZYJETE,W_TOKU,ZAPLANOWANE,ZAKONCZONE";
   } else {
@@ -225,6 +228,14 @@ export default function OrdersPage() {
   });
   const unsettledCount: number = unsettledData?.total ?? 0;
 
+  // Count orders without date for badge
+  const { data: pendingCountData } = useQuery({
+    queryKey: ["orders-pending-count"],
+    queryFn: () => fetchOrders({ pending: "true", limit: "1" }),
+    refetchInterval: 30_000,
+  });
+  const pendingCount: number = pendingCountData?.total ?? 0;
+
   const activeFilters: { label: string; clear: () => void }[] = [];
   if (type !== "all") activeFilters.push({ label: TYPE_LABELS[type] ?? type, clear: () => { setType("all"); setPage(1); } });
   if (priority !== "all") activeFilters.push({ label: priority, clear: () => { setPriority("all"); setPage(1); } });
@@ -280,6 +291,11 @@ export default function OrdersPage() {
             )}
           >
             {tab.label}
+            {tab.key === "BEZ_TERMINU" && pendingCount > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-blue-500 text-white rounded-full">
+                {pendingCount > 99 ? "99+" : pendingCount}
+              </span>
+            )}
             {tab.key === "DO_ROZLICZENIA" && unsettledCount > 0 && (
               <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full">
                 {unsettledCount > 99 ? "99+" : unsettledCount}

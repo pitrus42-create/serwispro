@@ -166,6 +166,14 @@ export function DashboardDesktop({
           color="bg-teal-100 text-teal-900"
           href="/orders?type=KONSERWACJA"
         />
+        <StatCard
+          title="Bez terminu"
+          value={d.pendingOrders}
+          icon={ClipboardList}
+          color={d.pendingOrders > 0 ? "bg-blue-100 text-blue-900" : "bg-gray-100 text-gray-700"}
+          href="/orders?pending=true"
+          description="Zlecenia bez daty"
+        />
       </div>
 
       {/* Quick actions */}

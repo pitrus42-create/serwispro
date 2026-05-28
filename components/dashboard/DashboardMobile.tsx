@@ -63,6 +63,7 @@ export function DashboardMobile({
     { value: d.highPriorityOrders,   label: "Pilne",       color: "bg-purple-100 text-purple-800",  href: "/orders?priority=WYSOKI,KRYTYCZNY" },
     { value: d.pendingMaintenance,   label: "Konserwacje", color: "bg-teal-100 text-teal-800",      href: "/orders?type=KONSERWACJA" },
     { value: d.todayOrders.length,   label: "Dziś",        color: "bg-red-100 text-red-900",        href: "/calendar" },
+    { value: d.pendingOrders,        label: "Bez terminu", color: "bg-blue-100 text-blue-800",      href: "/orders?pending=true" },
   ].filter((p) => p.value > 0);
 
   const allClear = pills.length === 0 && d.criticalAlerts === 0;

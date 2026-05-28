@@ -44,6 +44,9 @@ export async function GET(req: NextRequest) {
   const highPriorityOrders = await prisma.order.count({
     where: { ...userFilter, priority: { in: ["WYSOKI", "KRYTYCZNY"] }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } },
   });
+  const pendingOrders = await prisma.order.count({
+    where: { scheduledAt: null, status: { notIn: ["ZAKONCZONE", "ANULOWANE"] } },
+  });
   const pendingMaintenance = admin
     ? await prisma.location.count({
         where: {
@@ -70,6 +73,7 @@ export async function GET(req: NextRequest) {
     todayOrders,
     highPriorityOrders,
     pendingMaintenance,
+    pendingOrders,
     recentActivity,
   });
   } catch (err) {
