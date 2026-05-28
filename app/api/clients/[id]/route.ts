@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const client = await prisma.client.findUnique({
     where: { id },
     include: {
-      locations: { where: { isActive: true }, orderBy: { name: "asc" } },
+      locations: { where: { isActive: true }, orderBy: [{ isDefault: "desc" }, { name: "asc" }] },
       orders: {
         orderBy: { createdAt: "desc" },
         take: 20,

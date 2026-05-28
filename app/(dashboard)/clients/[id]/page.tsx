@@ -64,6 +64,7 @@ interface Location {
   systemType: string | null;
   nextMaintenanceDate: string | null;
   isActive: boolean;
+  isDefault: boolean;
 }
 
 interface Order {
@@ -539,7 +540,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 <div key={loc.id} className="bg-white rounded-lg border p-4">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-medium text-gray-900">{loc.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">{loc.name}</p>
+                        {loc.isDefault && (
+                          <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-normal">
+                            Domyślna
+                          </span>
+                        )}
+                      </div>
                       {locAddress && <p className="text-sm text-gray-500 mt-0.5">{locAddress}</p>}
                       {loc.systemType && (
                         <p className="text-xs text-gray-400 mt-1">{loc.systemType}</p>
