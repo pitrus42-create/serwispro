@@ -62,6 +62,8 @@ interface Location {
   city: string | null;
   postalCode: string | null;
   systemType: string | null;
+  technicalNote: string | null;
+  systemsNote: string | null;
   nextMaintenanceDate: string | null;
   isActive: boolean;
   isDefault: boolean;
@@ -348,6 +350,112 @@ function AddLocationDialog({
   );
 }
 
+// ── Edit Location Dialog ─────────────────────────────────────────────────────
+
+function EditLocationDialog({
+  clientId,
+  location,
+  open,
+  onClose,
+  onSaved,
+}: {
+  clientId: string;
+  location: Location;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: location.name,
+    address: location.address ?? "",
+    city: location.city ?? "",
+    postalCode: location.postalCode ?? "",
+    technicalNote: location.technicalNote ?? "",
+    systemsNote: location.systemsNote ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!form.name.trim()) { toast.error("Nazwa lokalizacji jest wymagana"); return; }
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/clients/${clientId}/locations/${location.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          address: form.address.trim() || null,
+          city: form.city.trim() || null,
+          postalCode: form.postalCode.trim() || null,
+          technicalNote: form.technicalNote.trim() || null,
+          systemsNote: form.systemsNote.trim() || null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu");
+      toast.success("Lokalizacja zaktualizowana");
+      onSaved();
+      onClose();
+    } catch {
+      toast.error("Nie udało się zaktualizować lokalizacji");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edytuj lokalizację</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Nazwa lokalizacji *</Label>
+            <Input value={form.name} onChange={set("name")} placeholder="np. Budynek A, Hala produkcyjna..." />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Ulica / adres</Label>
+            <Input value={form.address} onChange={set("address")} placeholder="ul. Przykładowa 1" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Kod pocztowy</Label>
+              <Input value={form.postalCode} onChange={set("postalCode")} placeholder="00-001" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Miasto</Label>
+              <Input value={form.city} onChange={set("city")} placeholder="Warszawa" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notatka techniczna</Label>
+            <Textarea value={form.technicalNote} onChange={set("technicalNote")} rows={2} placeholder="Informacje techniczne o obiekcie..." />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Zainstalowane systemy</Label>
+            <Textarea value={form.systemsNote} onChange={set("systemsNote")} rows={2} placeholder="np. CCTV, SSWiN, SKD..." />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Anuluj</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Zapisywanie..." : "Zapisz zmiany"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -358,6 +466,21 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [addLocationOpen, setAddLocationOpen] = useState(false);
+  const [editLocationTarget, setEditLocationTarget] = useState<Location | null>(null);
+  const [deleteLocationId, setDeleteLocationId] = useState<string | null>(null);
+
+  const deleteLocationMutation = useMutation({
+    mutationFn: async (locationId: string) => {
+      const r = await fetch(`/api/clients/${id}/locations/${locationId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Błąd usunięcia");
+    },
+    onSuccess: () => {
+      toast.success("Lokalizacja usunięta");
+      setDeleteLocationId(null);
+      queryClient.invalidateQueries({ queryKey: ["client", id] });
+    },
+    onError: () => toast.error("Błąd usunięcia lokalizacji"),
+  });
 
   const canDelete = isAdmin(session?.user);
   const canEdit = session?.user != null;
@@ -538,9 +661,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               const locAddress = [loc.address, loc.postalCode, loc.city].filter(Boolean).join(", ");
               return (
                 <div key={loc.id} className="bg-white rounded-lg border p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-gray-900">{loc.name}</p>
                         {loc.isDefault && (
                           <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-normal">
@@ -553,17 +676,33 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                         <p className="text-xs text-gray-400 mt-1">{loc.systemType}</p>
                       )}
                     </div>
-                    {loc.nextMaintenanceDate && (
-                      <div className={cn("text-right text-xs", isOverdue ? "text-red-600" : "text-gray-500")}>
-                        <p className="flex items-center gap-1 justify-end">
-                          <Clock className="h-3 w-3" />
-                          {isOverdue ? "Przeterminowane!" : "Następny przegląd"}
-                        </p>
-                        <p className="font-medium">
-                          {format(new Date(loc.nextMaintenanceDate), "d MMM yyyy", { locale: pl })}
-                        </p>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {loc.nextMaintenanceDate && (
+                        <div className={cn("text-right text-xs mr-2", isOverdue ? "text-red-600" : "text-gray-500")}>
+                          <p className="flex items-center gap-1 justify-end">
+                            <Clock className="h-3 w-3" />
+                            {isOverdue ? "Przeterminowane!" : "Następny przegląd"}
+                          </p>
+                          <p className="font-medium">
+                            {format(new Date(loc.nextMaintenanceDate), "d MMM yyyy", { locale: pl })}
+                          </p>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setEditLocationTarget(loc)}
+                        className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                        title="Edytuj lokalizację"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteLocationId(loc.id)}
+                        className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Usuń lokalizację"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -640,6 +779,38 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         onClose={() => setAddLocationOpen(false)}
         onSaved={refetch}
       />
+
+      {/* Edit location dialog */}
+      {editLocationTarget && (
+        <EditLocationDialog
+          clientId={id}
+          location={editLocationTarget}
+          open={!!editLocationTarget}
+          onClose={() => setEditLocationTarget(null)}
+          onSaved={refetch}
+        />
+      )}
+
+      {/* Delete location confirmation */}
+      <AlertDialog open={!!deleteLocationId} onOpenChange={(o) => { if (!o) setDeleteLocationId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usuń lokalizację</AlertDialogTitle>
+            <AlertDialogDescription>
+              Czy na pewno chcesz usunąć tę lokalizację? Zlecenia powiązane z tą lokalizacją zachowają historyczne przypisanie.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => deleteLocationId && deleteLocationMutation.mutate(deleteLocationId)}
+            >
+              Usuń lokalizację
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
