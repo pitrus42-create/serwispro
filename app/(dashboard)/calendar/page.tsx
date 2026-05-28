@@ -20,7 +20,7 @@ import {
   isSameMonth,
 } from "date-fns";
 import { pl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -132,6 +132,16 @@ interface CalendarOrder {
 }
 
 interface UserOption { id: string; firstName: string; lastName: string; }
+
+interface SimpleTask {
+  id: string;
+  title: string;
+  description: string | null;
+  date: string | null;
+  assignedUserId: string | null;
+  assignedUser: { id: string; firstName: string; lastName: string } | null;
+  isCompleted: boolean;
+}
 
 // ── Order card (week view) ────────────────────────────────────────────────────
 
@@ -343,6 +353,41 @@ export default function CalendarPage() {
   });
 
   const allOrders: CalendarOrder[] = data?.data ?? [];
+
+  // Simple tasks for current week
+  const { data: simpleTasksData } = useQuery({
+    queryKey: ["simple-tasks-calendar", from, resolvedUserId],
+    queryFn: async () => {
+      const userId = resolvedUserId || session?.user?.id;
+      const weekEnd = addDays(weekStart, 6);
+      const url = `/api/simple-tasks?date=${format(weekStart, "yyyy-MM-dd")}&to=${format(weekEnd, "yyyy-MM-dd")}&userId=${userId ?? ""}`;
+      const r = await fetch(url);
+      return r.json();
+    },
+    enabled: view === "week" && !!session,
+    staleTime: 30_000,
+  });
+  const allSimpleTasks: SimpleTask[] = simpleTasksData?.data ?? [];
+
+  function simpleTasksForDay(day: Date): SimpleTask[] {
+    return allSimpleTasks.filter((t) => t.date && isSameDay(new Date(t.date), day));
+  }
+
+  const completeSimpleTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/simple-tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCompleted: true }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["simple-tasks-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      toast.success("Zadanie wykonane");
+    },
+  });
 
   function ordersForDay(day: Date): CalendarOrder[] {
     return sortOrders(
@@ -595,6 +640,24 @@ export default function CalendarPage() {
                           />
                         ))
                       )}
+                      {/* Simple tasks */}
+                      {simpleTasksForDay(day).map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-600 group"
+                        >
+                          <button
+                            onClick={() => completeSimpleTaskMutation.mutate(task.id)}
+                            className="shrink-0 text-gray-400 hover:text-green-500 transition-colors"
+                          >
+                            <Square className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="flex-1 truncate">{task.title}</span>
+                          {task.assignedUser && (
+                            <span className="text-gray-400 shrink-0">{task.assignedUser.firstName}</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );

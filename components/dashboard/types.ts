@@ -14,6 +14,12 @@ export interface DashboardData {
   highPriorityOrders: number;
   pendingMaintenance: number;
   pendingOrders: number;
+  todaySimpleTasks: {
+    id: string;
+    title: string;
+    description?: string | null;
+    assignedUser?: { id: string; firstName: string; lastName: string } | null;
+  }[];
   recentActivity: {
     id: string;
     action: string;

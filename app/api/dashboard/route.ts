@@ -47,6 +47,20 @@ export async function GET(req: NextRequest) {
   const pendingOrders = await prisma.order.count({
     where: { scheduledAt: null, status: { notIn: ["ZAKONCZONE", "ANULOWANE"] } },
   });
+  const todaySimpleTasks = await prisma.simpleTask.findMany({
+    where: {
+      isCompleted: false,
+      date: { gte: startOfDay(today), lte: endOfDay(today) },
+      OR: [
+        { assignedUserId: session.user.id },
+        { createdById: session.user.id },
+      ],
+    },
+    include: {
+      assignedUser: { select: { id: true, firstName: true, lastName: true } },
+    },
+    orderBy: [{ dayOrder: "asc" }, { createdAt: "asc" }],
+  });
   const pendingMaintenance = admin
     ? await prisma.location.count({
         where: {
@@ -74,6 +88,7 @@ export async function GET(req: NextRequest) {
     highPriorityOrders,
     pendingMaintenance,
     pendingOrders,
+    todaySimpleTasks,
     recentActivity,
   });
   } catch (err) {

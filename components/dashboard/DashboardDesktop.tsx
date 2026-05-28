@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Clock,
@@ -13,6 +15,7 @@ import {
   UserPlus,
   Users,
   ChevronRight,
+  CheckSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,9 +86,27 @@ export function DashboardDesktop({
 }) {
   const d = data;
   const { data: session } = useSession();
+  const qc = useQueryClient();
   const userRoles = (session?.user?.roles as string[]) ?? [];
   const canSeeActivity = isAdmin(session?.user) || userRoles.includes("MENEDZER");
   const [activityFilter, setActivityFilter] = useState<string>("all");
+  const [completingTask, setCompletingTask] = useState<string | null>(null);
+
+  const completeTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/simple-tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCompleted: true }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      setCompletingTask(null);
+    },
+    onError: () => { toast.error("Błąd oznaczenia zadania"); setCompletingTask(null); },
+  });
 
   return (
     <div className="flex gap-6 max-w-7xl mx-auto items-start">
@@ -239,11 +260,36 @@ export function DashboardDesktop({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {d.todayOrders.length === 0 ? (
+            {/* Simple tasks */}
+            {d.todaySimpleTasks.length > 0 && (
+              <ul className="space-y-1 mb-3 pb-3 border-b border-dashed border-gray-200">
+                {d.todaySimpleTasks.map((task) => (
+                  <li key={task.id} className="flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-gray-50">
+                    <button
+                      onClick={() => {
+                        setCompletingTask(task.id);
+                        completeTaskMutation.mutate(task.id);
+                      }}
+                      disabled={completingTask === task.id}
+                      className="shrink-0 w-4 h-4 rounded border-2 border-gray-300 hover:border-green-500 transition-colors flex items-center justify-center"
+                    >
+                      {completingTask === task.id && <CheckSquare className="h-3 w-3 text-green-500" />}
+                    </button>
+                    <span className="flex-1 text-sm text-gray-700 truncate">{task.title}</span>
+                    {task.assignedUser && (
+                      <span className="text-xs text-gray-400 shrink-0">
+                        {task.assignedUser.firstName}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {d.todayOrders.length === 0 && d.todaySimpleTasks.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-6">
                 Brak zaplanowanych zadań na dziś
               </p>
-            ) : (
+            ) : d.todayOrders.length === 0 ? null : (
               <ul className="divide-y divide-gray-100">
                 {d.todayOrders.map((order) => {
                   const typeConfig =
