@@ -87,6 +87,8 @@ export async function POST(req: NextRequest) {
     scheduledAt,
     scheduledEndAt,
     dayOrder,
+    estimatedDuration,
+    difficulty,
     responsibleId,
     helperIds = [],
   } = body;
@@ -110,6 +112,8 @@ export async function POST(req: NextRequest) {
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         scheduledEndAt: scheduledEndAt ? new Date(scheduledEndAt) : null,
         dayOrder: dayOrder ?? null,
+        estimatedDuration: estimatedDuration ?? null,
+        difficulty: difficulty ?? null,
         createdById: session.user.id,
         assignments: {
           create: [

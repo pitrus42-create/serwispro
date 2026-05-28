@@ -60,6 +60,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const {
     type, priority, isCritical, clientId, locationId,
     title, description, internalNotes, scheduledAt, scheduledEndAt, dayOrder,
+    estimatedDuration, difficulty,
     responsibleId,
   } = body;
 
@@ -77,6 +78,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
       ...(scheduledAt !== undefined && { scheduledAt: scheduledAt ? new Date(scheduledAt) : null }),
       ...(scheduledEndAt !== undefined && { scheduledEndAt: scheduledEndAt ? new Date(scheduledEndAt) : null }),
       ...(dayOrder !== undefined && { dayOrder }),
+      ...(estimatedDuration !== undefined && { estimatedDuration: estimatedDuration || null }),
+      ...(difficulty !== undefined && { difficulty: difficulty || null }),
     },
     include: {
       client: { select: { name: true } },

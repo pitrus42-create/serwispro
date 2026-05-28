@@ -223,7 +223,9 @@ model Order {
   internalNotes  String?
   scheduledAt    DateTime?
   scheduledEndAt DateTime?
-  dayOrder       Int?
+  dayOrder           Int?
+  estimatedDuration  String?
+  difficulty         Int?
   completedAt    DateTime?
   isSettled      Boolean            @default(false)
   settledAt      DateTime?

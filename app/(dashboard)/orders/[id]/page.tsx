@@ -31,6 +31,7 @@ import {
   BookOpen,
   Settings2,
   Search,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +100,18 @@ const TYPE_LABELS: Record<string, string> = {
   INNE: "Inne",
 };
 
+const DURATION_LABELS: Record<string, string> = {
+  "30min": "30 min",
+  "1h": "1 godz.",
+  "2h": "2 godz.",
+  halfday: "Pół dnia",
+  fullday: "Cały dzień",
+  "2days": "2 dni",
+  several: "Kilka dni",
+};
+
+const DIFFICULTY_COLORS = ["", "text-green-500", "text-green-500", "text-yellow-500", "text-orange-500", "text-red-500"];
+
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   OCZEKUJACE: ["PRZYJETE", "ANULOWANE"],
   PRZYJETE: ["W_TOKU", "ZAPLANOWANE", "ANULOWANE"],
@@ -151,6 +164,8 @@ interface Order {
   internalNotes: string | null;
   scheduledAt: string | null;
   scheduledEndAt: string | null;
+  estimatedDuration: string | null;
+  difficulty: number | null;
   completedAt: string | null;
   client: { id: string; name: string; phone: string | null; email: string | null } | null;
   location: { id: string; name: string; address: string | null; city: string | null } | null;
@@ -430,6 +445,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     type: "", priority: "", isCritical: false,
     title: "", description: "", internalNotes: "",
     scheduledAt: "", scheduledEndAt: "",
+    estimatedDuration: "" as string | undefined,
+    difficulty: undefined as number | undefined,
     clientId: "" as string | undefined,
     locationId: "" as string | undefined,
     responsibleId: "",
@@ -723,6 +740,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           internalNotes: editForm.internalNotes || null,
           scheduledAt: editForm.scheduledAt || null,
           scheduledEndAt: editForm.scheduledEndAt || null,
+          estimatedDuration: editForm.estimatedDuration || null,
+          difficulty: editForm.difficulty ?? null,
           responsibleId: editForm.responsibleId || null,
         }),
       });
@@ -754,6 +773,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       internalNotes: order.internalNotes ?? "",
       scheduledAt: order.scheduledAt ? new Date(order.scheduledAt).toISOString().slice(0, 16) : "",
       scheduledEndAt: order.scheduledEndAt ? new Date(order.scheduledEndAt).toISOString().slice(0, 16) : "",
+      estimatedDuration: order.estimatedDuration ?? undefined,
+      difficulty: order.difficulty ?? undefined,
       clientId: order.client?.id ?? undefined,
       locationId: order.location?.id ?? undefined,
       responsibleId: lead?.user.id ?? "",
@@ -841,6 +862,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
               {TYPE_LABELS[order.type] ?? order.type}
             </span>
+            {order.estimatedDuration && (
+              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {DURATION_LABELS[order.estimatedDuration] ?? order.estimatedDuration}
+              </span>
+            )}
+            {order.difficulty != null && order.difficulty > 0 && (
+              <span className="flex items-center gap-0.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Star
+                    key={n}
+                    className={cn("h-3.5 w-3.5", n <= order.difficulty! ? DIFFICULTY_COLORS[order.difficulty!] : "text-gray-200")}
+                    fill={n <= order.difficulty! ? "currentColor" : "none"}
+                  />
+                ))}
+              </span>
+            )}
           </div>
         </div>
         {canCreate && (
@@ -997,6 +1035,46 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 onChange={e => setEditForm(p => ({ ...p, scheduledEndAt: e.target.value }))}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Szacowany czas pracy</Label>
+              <Select
+                value={editForm.estimatedDuration || "none"}
+                onValueChange={v => setEditForm(p => ({ ...p, estimatedDuration: v === "none" ? undefined : v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Wybierz..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— nie określono —</SelectItem>
+                  <SelectItem value="30min">30 minut</SelectItem>
+                  <SelectItem value="1h">1 godzina</SelectItem>
+                  <SelectItem value="2h">2 godziny</SelectItem>
+                  <SelectItem value="halfday">Pół dnia</SelectItem>
+                  <SelectItem value="fullday">Cały dzień</SelectItem>
+                  <SelectItem value="2days">2 dni</SelectItem>
+                  <SelectItem value="several">Kilka dni</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Trudność</Label>
+              <div className="flex gap-1 pt-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setEditForm(p => ({ ...p, difficulty: n === p.difficulty ? undefined : n }))}
+                    className="p-0.5 rounded hover:scale-110 transition-transform"
+                  >
+                    <Star
+                      className={cn("h-5 w-5", n <= (editForm.difficulty ?? 0) ? DIFFICULTY_COLORS[editForm.difficulty!] : "text-gray-200")}
+                      fill={n <= (editForm.difficulty ?? 0) ? "currentColor" : "none"}
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

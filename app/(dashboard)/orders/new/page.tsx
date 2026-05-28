@@ -6,7 +6,8 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { ArrowLeft, AlertTriangle, Search, X } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Search, X, Star, Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,13 +32,15 @@ const schema = z.object({
   internalNotes: z.string().optional(),
   scheduledAt: z.string().optional(),
   scheduledEndAt: z.string().optional(),
+  estimatedDuration: z.string().optional(),
+  difficulty: z.number().optional(),
   responsibleId: z.string().optional(),
   helperIds: z.array(z.string()),
 });
 
 type FormData = z.infer<typeof schema>;
 
-interface Client { id: string; name: string | null; alias: string | null; phone: string | null; }
+interface Client { id: string; name: string | null; alias: string | null; phone: string | null; address: string | null; }
 interface Location { id: string; name: string; address: string | null; }
 interface User { id: string; firstName: string; lastName: string; }
 
@@ -150,6 +153,36 @@ function ClientSearch({
   );
 }
 
+// ── Difficulty picker ──────────────────────────────────────────────────────────
+
+const DIFFICULTY_COLORS = ["", "text-green-500", "text-green-500", "text-yellow-500", "text-orange-500", "text-red-500"];
+
+function DifficultyPicker({ value, onChange }: { value: number | undefined; onChange: (v: number | undefined) => void }) {
+  const current = value ?? 0;
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n === current ? undefined : n)}
+          className="p-0.5 rounded hover:scale-110 transition-transform"
+        >
+          <Star
+            className={cn("h-5 w-5", n <= current ? DIFFICULTY_COLORS[current] : "text-gray-200")}
+            fill={n <= current ? "currentColor" : "none"}
+          />
+        </button>
+      ))}
+      {current > 0 && (
+        <span className="ml-1 text-xs text-gray-500 self-center">
+          {["", "Bardzo łatwe", "Łatwe", "Średnie", "Trudne", "Bardzo trudne"][current]}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function NewOrderPage() {
@@ -165,6 +198,9 @@ function NewOrderForm() {
   const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [showEndTime, setShowEndTime] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | undefined>();
+  const [useClientAddress, setUseClientAddress] = useState(false);
 
   const initialDate = searchParams.get("scheduledAt"); // yyyy-MM-dd
   const initialType = searchParams.get("type") ?? undefined;
@@ -200,10 +236,14 @@ function NewOrderForm() {
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
+      const payload = { ...data };
+      if (useClientAddress && selectedClient?.address && !data.locationId) {
+        payload.description = [data.description, `Adres klienta: ${selectedClient.address}`].filter(Boolean).join("\n");
+      }
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         let errMsg = "Błąd tworzenia zlecenia";
@@ -317,10 +357,25 @@ function NewOrderForm() {
             render={({ field }) => (
               <ClientSearch
                 value={field.value}
-                onChange={(clientId, _client) => field.onChange(clientId)}
+                onChange={(clientId, client) => {
+                  field.onChange(clientId);
+                  setSelectedClient(client);
+                  setUseClientAddress(false);
+                }}
               />
             )}
           />
+          {selectedClient?.address && !watch("locationId") && (
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer mt-1">
+              <input
+                type="checkbox"
+                checked={useClientAddress}
+                onChange={(e) => setUseClientAddress(e.target.checked)}
+                className="rounded"
+              />
+              Adres taki sam jak klienta: <span className="font-medium">{selectedClient.address}</span>
+            </label>
+          )}
         </div>
 
         {/* Location */}
@@ -349,14 +404,63 @@ function NewOrderForm() {
         )}
 
         {/* Scheduled date */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
           <div className="space-y-1.5">
             <Label htmlFor="scheduledAt">Data/godzina (od)</Label>
             <Input id="scheduledAt" type="datetime-local" {...register("scheduledAt")} />
           </div>
+          {showEndTime ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="scheduledEndAt">Data/godzina (do)</Label>
+              <Input id="scheduledEndAt" type="datetime-local" {...register("scheduledEndAt")} />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowEndTime(true)}
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              + Dodaj godzinę zakończenia
+            </button>
+          )}
+        </div>
+
+        {/* Estimated duration + difficulty */}
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="scheduledEndAt">Data/godzina (do)</Label>
-            <Input id="scheduledEndAt" type="datetime-local" {...register("scheduledEndAt")} />
+            <Label>Szacowany czas pracy</Label>
+            <Controller
+              name="estimatedDuration"
+              control={control}
+              render={({ field }) => (
+                <Select onValueChange={(v) => field.onChange(v === "none" ? undefined : v)} value={field.value ?? "none"}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Wybierz czas..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— nie określono —</SelectItem>
+                    <SelectItem value="30min">30 minut</SelectItem>
+                    <SelectItem value="1h">1 godzina</SelectItem>
+                    <SelectItem value="2h">2 godziny</SelectItem>
+                    <SelectItem value="halfday">Pół dnia</SelectItem>
+                    <SelectItem value="fullday">Cały dzień</SelectItem>
+                    <SelectItem value="2days">2 dni</SelectItem>
+                    <SelectItem value="several">Kilka dni</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Trudność</Label>
+            <Controller
+              name="difficulty"
+              control={control}
+              render={({ field }) => (
+                <DifficultyPicker value={field.value} onChange={field.onChange} />
+              )}
+            />
           </div>
         </div>
 
