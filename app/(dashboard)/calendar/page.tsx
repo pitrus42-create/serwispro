@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   format,
   startOfWeek,
@@ -21,8 +22,12 @@ import {
 import { pl } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Plus, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { isAdmin, canDo } from "@/lib/permissions";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -57,30 +62,24 @@ const PRIORITY_BORDER: Record<string, string> = {
   KRYTYCZNY: "border-l-red-500",
 };
 
+const USER_COLORS = [
+  "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
+  "#06B6D4", "#F97316", "#14B8A6", "#EC4899", "#84CC16",
+];
+
 const WEEK_DAY_NAMES = ["Pn", "Wt", "Śr", "Cz", "Pt"];
 const MONTH_DAY_NAMES = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface CalendarOrder {
-  id: string;
-  orderNumber: string;
-  title: string;
-  start: string | null;
-  extendedProps: {
-    type: string;
-    status: string;
-    priority: string;
-    isCritical: boolean;
-    clientName: string | null;
-    leadName: string | null;
-    isMyOrder: boolean;
-    dayOrder: number | null;
-    note: string | null;
-  };
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getUserColor(userId: string | null): string | null {
+  if (!userId) return null;
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
+}
 
 function getFirstLine(text: string | null): string | null {
   if (!text) return null;
@@ -110,6 +109,29 @@ function buildMonthGrid(currentDate: Date): Date[] {
   }
   return days;
 }
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface CalendarOrder {
+  id: string;
+  orderNumber: string;
+  title: string;
+  start: string | null;
+  extendedProps: {
+    type: string;
+    status: string;
+    priority: string;
+    isCritical: boolean;
+    clientName: string | null;
+    leadName: string | null;
+    leadUserId: string | null;
+    isMyOrder: boolean;
+    dayOrder: number | null;
+    note: string | null;
+  };
+}
+
+interface UserOption { id: string; firstName: string; lastName: string; }
 
 // ── Order card (week view) ────────────────────────────────────────────────────
 
@@ -154,13 +176,19 @@ function OrderCard({
     router.push(`/orders/${order.id}`);
   }
 
-  const { type, priority, isCritical, clientName, leadName, isMyOrder, note } = order.extendedProps;
+  const { type, priority, isCritical, clientName, leadName, leadUserId, isMyOrder, note } = order.extendedProps;
   const noteLine = getFirstLine(note);
+  const userColor = getUserColor(leadUserId);
 
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", JSON.stringify({ orderId: order.id, scheduledAt: order.start }));
+        e.dataTransfer.effectAllowed = "move";
+      }}
       className={cn(
-        "relative rounded-md border-l-4 bg-white border border-gray-100 px-2.5 py-2 text-xs cursor-pointer select-none transition-all",
+        "relative rounded-md border-l-4 bg-white border border-gray-100 px-2.5 py-2 text-xs cursor-grab select-none transition-all active:cursor-grabbing",
         PRIORITY_BORDER[priority] ?? "border-l-gray-300",
         isReordering && "ring-2 ring-red-800 shadow-md",
         isCritical && "bg-red-50",
@@ -186,8 +214,13 @@ function OrderCard({
       {noteLine && (
         <p className="mt-0.5 text-gray-400 italic truncate pl-0.5">{noteLine}</p>
       )}
-      {leadName && !isMyOrder && (
-        <p className="mt-0.5 text-gray-400 truncate pl-0.5">👤 {leadName}</p>
+      {leadName && (
+        <p className="mt-0.5 text-gray-400 truncate pl-0.5 flex items-center gap-1">
+          {userColor && (
+            <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: userColor }} />
+          )}
+          {!isMyOrder && leadName}
+        </p>
       )}
 
       {isReordering && (
@@ -220,16 +253,39 @@ function OrderCard({
 export default function CalendarPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
 
   const [view, setView] = useState<"week" | "month">("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [reorderingId, setReorderingId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+
+  // Calendar view filter: "mine" | "all" | userId
+  const canManage = isAdmin(session?.user) || canDo(session?.user, "calendar:view_all");
+  const [calendarUserId, setCalendarUserId] = useState<string>("mine");
+
+  const resolvedUserId =
+    calendarUserId === "mine" ? (session?.user?.id ?? "") :
+    calendarUserId === "all" ? "" :
+    calendarUserId;
+
+  // Fetch users for filter select (admin/manager only)
+  const { data: usersData } = useQuery({
+    queryKey: ["users-list"],
+    queryFn: async () => {
+      const r = await fetch("/api/users?limit=100&status=ACTIVE");
+      return r.json();
+    },
+    enabled: canManage,
+    staleTime: 5 * 60 * 1000,
+  });
+  const allUsers: UserOption[] = usersData?.data ?? [];
 
   // Week bounds
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i)); // Mon–Fri
+  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
 
   // Month grid
   const monthGridDays = buildMonthGrid(currentDate);
@@ -240,13 +296,18 @@ export default function CalendarPage() {
   const from = view === "week" ? weekStart.toISOString() : gridStart.toISOString();
   const to = view === "week" ? weekEnd.toISOString() : gridEnd.toISOString();
 
+  const calendarUrl = resolvedUserId
+    ? `/api/calendar?from=${from}&to=${to}&userId=${resolvedUserId}`
+    : `/api/calendar?from=${from}&to=${to}`;
+
   const { data, isLoading } = useQuery({
-    queryKey: ["calendar", view, from],
+    queryKey: ["calendar", view, from, resolvedUserId],
     queryFn: async () => {
-      const r = await fetch(`/api/calendar?from=${from}&to=${to}`);
+      const r = await fetch(calendarUrl);
       return r.json();
     },
     staleTime: 30_000,
+    enabled: !!session,
   });
 
   const dayOrderMutation = useMutation({
@@ -263,12 +324,41 @@ export default function CalendarPage() {
     onError: () => toast.error("Błąd zmiany kolejności"),
   });
 
+  const rescheduleMutation = useMutation({
+    mutationFn: async ({ orderId, scheduledAt }: { orderId: string; scheduledAt: string }) => {
+      const r = await fetch(`/api/orders/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Termin zmieniony");
+    },
+    onError: () => toast.error("Błąd zmiany terminu"),
+  });
+
   const allOrders: CalendarOrder[] = data?.data ?? [];
 
   function ordersForDay(day: Date): CalendarOrder[] {
     return sortOrders(
       allOrders.filter((o) => o.start && isSameDay(new Date(o.start), day))
     );
+  }
+
+  function handleDropToDay(orderId: string, originalScheduledAt: string | null, targetDay: Date) {
+    const newDateTime = new Date(targetDay);
+    if (originalScheduledAt) {
+      const orig = new Date(originalScheduledAt);
+      newDateTime.setHours(orig.getHours(), orig.getMinutes(), 0, 0);
+    } else {
+      newDateTime.setHours(8, 0, 0, 0);
+    }
+    rescheduleMutation.mutate({ orderId, scheduledAt: newDateTime.toISOString() });
   }
 
   const handleMoveOrder = useCallback(
@@ -309,7 +399,7 @@ export default function CalendarPage() {
   return (
     <div className="p-3 md:p-5 h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <button
             onClick={prev}
@@ -333,7 +423,50 @@ export default function CalendarPage() {
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View filter — admin/manager only */}
+          {canManage && (
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+              <button
+                onClick={() => setCalendarUserId("mine")}
+                className={cn(
+                  "px-3 py-1.5 transition-colors",
+                  calendarUserId === "mine" ? "bg-red-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                Moje
+              </button>
+              <button
+                onClick={() => setCalendarUserId("all")}
+                className={cn(
+                  "px-3 py-1.5 transition-colors border-l border-gray-200",
+                  calendarUserId === "all" ? "bg-red-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                Wszyscy
+              </button>
+              {allUsers.length > 0 && (
+                <div className="border-l border-gray-200">
+                  <Select
+                    value={!["mine", "all"].includes(calendarUserId) ? calendarUserId : ""}
+                    onValueChange={(v) => v && setCalendarUserId(v)}
+                  >
+                    <SelectTrigger className="h-full border-0 rounded-none text-xs px-2 w-32 focus:ring-0">
+                      <SelectValue placeholder="Serwisant..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allUsers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.firstName} {u.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* View toggle */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
             <button
@@ -376,9 +509,24 @@ export default function CalendarPage() {
               {weekDays.map((day, i) => {
                 const dayOrders = ordersForDay(day);
                 const today = isToday(day);
+                const dayKey = day.toISOString();
+                const isDragOver = dragOverDay === dayKey;
 
                 return (
-                  <div key={day.toISOString()} className="flex flex-col min-w-0">
+                  <div
+                    key={dayKey}
+                    className="flex flex-col min-w-0"
+                    onDragOver={(e) => { e.preventDefault(); setDragOverDay(dayKey); }}
+                    onDragLeave={() => setDragOverDay(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverDay(null);
+                      try {
+                        const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                        handleDropToDay(data.orderId, data.scheduledAt, day);
+                      } catch {}
+                    }}
+                  >
                     {/* Day header */}
                     <div
                       className={cn(
@@ -407,8 +555,13 @@ export default function CalendarPage() {
                       </span>
                     </div>
 
-                    {/* Orders */}
-                    <div className="flex-1 space-y-1 overflow-y-auto max-h-[calc(100vh-220px)]">
+                    {/* Orders drop zone */}
+                    <div
+                      className={cn(
+                        "flex-1 space-y-1 overflow-y-auto max-h-[calc(100vh-220px)] rounded-lg transition-colors",
+                        isDragOver && "bg-blue-50 ring-2 ring-blue-300 ring-dashed"
+                      )}
+                    >
                       {isLoading ? (
                         <div className="space-y-1">
                           {[1, 2].map((n) => (
@@ -417,7 +570,10 @@ export default function CalendarPage() {
                         </div>
                       ) : dayOrders.length === 0 ? (
                         <div
-                          className="h-16 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-gray-300 transition-colors"
+                          className={cn(
+                            "h-16 rounded-lg border-2 border-dashed flex items-center justify-center cursor-pointer transition-colors",
+                            isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                          )}
                           onClick={() =>
                             router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)
                           }
@@ -460,8 +616,18 @@ export default function CalendarPage() {
             <span className="flex items-center gap-1">
               <span className="h-3 w-1 rounded-full bg-red-500 inline-block" /> Krytyczny
             </span>
+            {/* User color legend */}
+            {calendarUserId === "all" && allUsers.slice(0, 5).map((u) => {
+              const color = getUserColor(u.id);
+              return color ? (
+                <span key={u.id} className="flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                  {u.firstName}
+                </span>
+              ) : null;
+            })}
             <span className="ml-auto italic text-gray-400">
-              Przytrzymaj zlecenie aby zmienić kolejność
+              Przeciągnij zlecenie aby zmienić dzień · przytrzymaj aby zmienić kolejność
             </span>
           </div>
         </>
@@ -518,18 +684,24 @@ export default function CalendarPage() {
                     </div>
                     <div className="space-y-0.5">
                       {!isLoading &&
-                        dayOrders.slice(0, 3).map((order) => (
-                          <div
-                            key={order.id}
-                            onClick={() => router.push(`/orders/${order.id}`)}
-                            className={cn(
-                              "text-[10px] truncate rounded px-1 py-0.5 cursor-pointer hover:opacity-80",
-                              TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
-                            )}
-                          >
-                            {order.title}
-                          </div>
-                        ))}
+                        dayOrders.slice(0, 3).map((order) => {
+                          const color = getUserColor(order.extendedProps.leadUserId);
+                          return (
+                            <div
+                              key={order.id}
+                              onClick={() => router.push(`/orders/${order.id}`)}
+                              className={cn(
+                                "text-[10px] truncate rounded px-1 py-0.5 cursor-pointer hover:opacity-80 flex items-center gap-1",
+                                TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
+                              )}
+                            >
+                              {color && (
+                                <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                              )}
+                              {order.title}
+                            </div>
+                          );
+                        })}
                       {dayOrders.length > 3 && (
                         <div className="text-[10px] text-gray-400 pl-1">
                           +{dayOrders.length - 3} więcej
@@ -585,17 +757,18 @@ export default function CalendarPage() {
                     >
                       {format(day, "d")}
                     </span>
-                    {/* Colored dots per order */}
+                    {/* Colored dots per order (user color) */}
                     <div className="flex flex-wrap gap-0.5 mt-0.5 justify-center max-w-[22px]">
-                      {dayOrders.slice(0, 4).map((o) => (
-                        <span
-                          key={o.id}
-                          className={cn(
-                            "w-1.5 h-1.5 rounded-sm",
-                            TYPE_DOT[o.extendedProps.type] ?? "bg-gray-400"
-                          )}
-                        />
-                      ))}
+                      {dayOrders.slice(0, 4).map((o) => {
+                        const color = getUserColor(o.extendedProps.leadUserId);
+                        return (
+                          <span
+                            key={o.id}
+                            className={cn("w-1.5 h-1.5 rounded-sm", !color && (TYPE_DOT[o.extendedProps.type] ?? "bg-gray-400"))}
+                            style={color ? { backgroundColor: color } : undefined}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -626,32 +799,41 @@ export default function CalendarPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {ordersForDay(selectedDay).map((order) => (
-                      <div
-                        key={order.id}
-                        onClick={() => router.push(`/orders/${order.id}`)}
-                        className={cn(
-                          "rounded-md border-l-4 bg-white border border-gray-100 px-3 py-2 text-xs cursor-pointer",
-                          PRIORITY_BORDER[order.extendedProps.priority] ?? "border-l-gray-300",
-                          order.extendedProps.isCritical && "bg-red-50"
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span
-                            className={cn(
-                              "shrink-0 rounded px-1 py-0.5 font-medium",
-                              TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
-                            )}
-                          >
-                            {TYPE_LABELS[order.extendedProps.type] ?? order.extendedProps.type}
-                          </span>
-                          <span className="font-medium text-gray-900 truncate">{order.title}</span>
+                    {ordersForDay(selectedDay).map((order) => {
+                      const color = getUserColor(order.extendedProps.leadUserId);
+                      return (
+                        <div
+                          key={order.id}
+                          onClick={() => router.push(`/orders/${order.id}`)}
+                          className={cn(
+                            "rounded-md border-l-4 bg-white border border-gray-100 px-3 py-2 text-xs cursor-pointer",
+                            PRIORITY_BORDER[order.extendedProps.priority] ?? "border-l-gray-300",
+                            order.extendedProps.isCritical && "bg-red-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span
+                              className={cn(
+                                "shrink-0 rounded px-1 py-0.5 font-medium",
+                                TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
+                              )}
+                            >
+                              {TYPE_LABELS[order.extendedProps.type] ?? order.extendedProps.type}
+                            </span>
+                            <span className="font-medium text-gray-900 truncate">{order.title}</span>
+                          </div>
+                          {order.extendedProps.clientName && (
+                            <p className="text-gray-500 truncate">{order.extendedProps.clientName}</p>
+                          )}
+                          {order.extendedProps.leadName && (
+                            <p className="text-gray-400 truncate flex items-center gap-1">
+                              {color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />}
+                              {order.extendedProps.leadName}
+                            </p>
+                          )}
                         </div>
-                        {order.extendedProps.clientName && (
-                          <p className="text-gray-500 truncate">{order.extendedProps.clientName}</p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
