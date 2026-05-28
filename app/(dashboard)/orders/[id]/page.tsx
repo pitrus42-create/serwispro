@@ -167,6 +167,11 @@ interface Order {
   estimatedDuration: string | null;
   difficulty: number | null;
   completedAt: string | null;
+  isSettled: boolean;
+  settledAt: string | null;
+  settledCost: number | null;
+  settledProfit: number | null;
+  billingNotes: string | null;
   client: { id: string; name: string; phone: string | null; email: string | null } | null;
   location: { id: string; name: string; address: string | null; city: string | null } | null;
   assignments: Array<{
@@ -1428,6 +1433,41 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </p>
               )}
             </div>
+
+            {/* Billing info */}
+            {order.isSettled && (
+              <div className="bg-green-50 rounded-xl border border-green-200 p-4 space-y-2">
+                <h3 className="font-semibold text-green-800 flex items-center gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Rozliczono {order.settledAt ? format(new Date(order.settledAt), "d MMM yyyy", { locale: pl }) : ""}
+                </h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {order.settledCost != null && (
+                    <div>
+                      <span className="text-green-700 font-medium">Koszt:</span>{" "}
+                      <span className="text-green-900">{order.settledCost.toFixed(2)} zł</span>
+                    </div>
+                  )}
+                  {order.settledProfit != null && (
+                    <div>
+                      <span className="text-green-700 font-medium">Przychód:</span>{" "}
+                      <span className="text-green-900">{order.settledProfit.toFixed(2)} zł</span>
+                    </div>
+                  )}
+                  {order.settledCost != null && order.settledProfit != null && (
+                    <div className="col-span-2">
+                      <span className="text-green-700 font-medium">Zysk:</span>{" "}
+                      <span className={cn("font-semibold", order.settledProfit - order.settledCost >= 0 ? "text-green-900" : "text-red-700")}>
+                        {(order.settledProfit - order.settledCost).toFixed(2)} zł
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {order.billingNotes && (
+                  <p className="text-xs text-green-700 italic">{order.billingNotes}</p>
+                )}
+              </div>
+            )}
 
             {/* Assignees */}
             <div className="bg-white rounded-xl border p-4 space-y-3">

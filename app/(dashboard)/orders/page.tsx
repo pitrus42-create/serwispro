@@ -13,6 +13,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -202,14 +214,30 @@ export default function OrdersPage() {
     onError: () => toast.error("Błąd przyjęcia zlecenia"),
   });
 
+  const [settleDialogOrder, setSettleDialogOrder] = useState<string | null>(null);
+  const [settleCost, setSettleCost] = useState("");
+  const [settleProfit, setSettleProfit] = useState("");
+  const [settleBillingNotes, setSettleBillingNotes] = useState("");
+
   const settleMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const r = await fetch(`/api/orders/${orderId}/settle`, { method: "POST" });
+    mutationFn: async ({ orderId, cost, profit, notes }: { orderId: string; cost: string; profit: string; notes: string }) => {
+      const r = await fetch(`/api/orders/${orderId}/settle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settledCost: cost !== "" ? Number(cost) : undefined,
+          settledProfit: profit !== "" ? Number(profit) : undefined,
+          billingNotes: notes || undefined,
+        }),
+      });
       if (!r.ok) throw new Error("Błąd");
       return r.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders-unsettled-count"] });
+      setSettleDialogOrder(null);
+      setSettleCost(""); setSettleProfit(""); setSettleBillingNotes("");
       toast.success("Zlecenie oznaczone jako rozliczone");
     },
     onError: () => toast.error("Błąd rozliczenia zlecenia"),
@@ -517,8 +545,7 @@ export default function OrdersPage() {
                       <Button
                         size="sm"
                         className="bg-green-600 hover:bg-green-700 text-white gap-1 text-xs"
-                        disabled={settleMutation.isPending}
-                        onClick={(e) => { e.stopPropagation(); settleMutation.mutate(order.id); }}
+                        onClick={(e) => { e.stopPropagation(); setSettleDialogOrder(order.id); setSettleCost(""); setSettleProfit(""); setSettleBillingNotes(""); }}
                       >
                         <CircleDollarSign className="h-3.5 w-3.5" />
                         Rozlicz
@@ -535,6 +562,63 @@ export default function OrdersPage() {
           })}
         </div>
       )}
+
+      {/* Settle dialog */}
+      <AlertDialog open={!!settleDialogOrder} onOpenChange={(open) => { if (!open) setSettleDialogOrder(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rozlicz zlecenie</AlertDialogTitle>
+            <AlertDialogDescription>
+              Opcjonalnie wpisz koszty i zysk, a następnie oznacz zlecenie jako rozliczone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 my-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Koszt (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={settleCost}
+                  onChange={(e) => setSettleCost(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Przychód (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={settleProfit}
+                  onChange={(e) => setSettleProfit(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Uwagi do rozliczenia</Label>
+              <Textarea
+                placeholder="Opcjonalne uwagi..."
+                rows={2}
+                value={settleBillingNotes}
+                onChange={(e) => setSettleBillingNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700"
+              disabled={settleMutation.isPending}
+              onClick={() => settleDialogOrder && settleMutation.mutate({ orderId: settleDialogOrder, cost: settleCost, profit: settleProfit, notes: settleBillingNotes })}
+            >
+              Oznacz jako rozliczone
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Pagination */}
       {totalPages > 1 && (

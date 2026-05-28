@@ -18,9 +18,18 @@ export async function POST(req: NextRequest, { params }: Params) {
   const order = await prisma.order.findUnique({ where: { id } });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const body = await req.json().catch(() => ({}));
+  const { settledCost, settledProfit, billingNotes } = body;
+
   const updated = await prisma.order.update({
     where: { id },
-    data: { isSettled: true, settledAt: new Date() },
+    data: {
+      isSettled: true,
+      settledAt: new Date(),
+      ...(settledCost !== undefined && { settledCost: settledCost !== "" ? Number(settledCost) : null }),
+      ...(settledProfit !== undefined && { settledProfit: settledProfit !== "" ? Number(settledProfit) : null }),
+      ...(billingNotes !== undefined && { billingNotes: billingNotes || null }),
+    },
   });
 
   await prisma.orderActivityLog.create({
