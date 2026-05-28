@@ -6,7 +6,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { ArrowLeft, AlertTriangle, Search, X, Star, Clock } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Search, X, Star, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,8 +40,16 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-interface Client { id: string; name: string | null; alias: string | null; phone: string | null; address: string | null; }
-interface Location { id: string; name: string; address: string | null; }
+interface Client {
+  id: string;
+  name: string | null;
+  alias: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+}
+interface Location { id: string; name: string; address: string | null; city: string | null; }
 interface User { id: string; firstName: string; lastName: string; }
 
 // ── Client autocomplete ────────────────────────────────────────────────────
@@ -49,16 +57,27 @@ interface User { id: string; firstName: string; lastName: string; }
 function ClientSearch({
   value,
   onChange,
+  initialClient,
 }: {
   value: string | undefined;
   onChange: (clientId: string | undefined, client: Client | undefined) => void;
+  initialClient?: Client;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<Client | undefined>();
+  const [selected, setSelected] = useState<Client | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const initialApplied = useRef(false);
+
+  // Apply preloaded client once when it arrives
+  useEffect(() => {
+    if (initialClient && !initialApplied.current) {
+      initialApplied.current = true;
+      setSelected(initialClient);
+    }
+  }, [initialClient]);
 
   useEffect(() => {
     const down = (e: MouseEvent) => {
@@ -198,12 +217,12 @@ function NewOrderForm() {
   const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [showEndTime, setShowEndTime] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | undefined>();
-  const [useClientAddress, setUseClientAddress] = useState(false);
+  const [preloadedClient, setPreloadedClient] = useState<Client | undefined>();
 
-  const initialDate = searchParams.get("scheduledAt"); // yyyy-MM-dd
+  const initialDate = searchParams.get("scheduledAt");
   const initialType = searchParams.get("type") ?? undefined;
+  const initialClientId = searchParams.get("clientId") ?? undefined;
 
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -218,27 +237,74 @@ function NewOrderForm() {
 
   const watchType = watch("type");
   const watchClientId = watch("clientId");
+  const watchLocationId = watch("locationId");
 
   const [users, setUsers] = useState<User[]>([]);
   useEffect(() => {
     fetch("/api/users?status=ACTIVE&limit=100").then((r) => r.json()).then((d) => setUsers(d.data ?? []));
   }, []);
 
+  // Preload client from URL param (e.g. when coming from client detail page)
   useEffect(() => {
-    if (!watchClientId) { setLocations([]); return; }
+    if (!initialClientId) return;
+    fetch(`/api/clients/${initialClientId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const c = d.data;
+        if (!c?.id) return;
+        const clientData: Client = {
+          id: c.id,
+          name: c.name,
+          alias: c.alias,
+          phone: c.phone,
+          address: c.address,
+          city: c.city,
+          postalCode: c.postalCode,
+        };
+        setPreloadedClient(clientData);
+        setSelectedClient(clientData);
+        setValue("clientId", c.id);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClientId]);
+
+  // Fetch locations when client changes; auto-select first if available
+  useEffect(() => {
+    if (!watchClientId) { setLocations([]); setValue("locationId", undefined); return; }
     fetch(`/api/clients/${watchClientId}/locations`)
       .then((r) => r.json())
-      .then((d) => setLocations(d.data ?? []))
-      .catch(() => setLocations([]));
-    setValue("locationId", undefined);
+      .then((d) => {
+        const locs: Location[] = d.data ?? [];
+        setLocations(locs);
+        if (locs.length > 0) {
+          setValue("locationId", locs[0].id);
+        } else {
+          setValue("locationId", undefined);
+        }
+      })
+      .catch(() => { setLocations([]); setValue("locationId", undefined); });
   }, [watchClientId, setValue]);
+
+  function clientAddressLabel(c: Client | undefined): string | null {
+    if (!c?.address) return null;
+    const postCity = [c.postalCode, c.city].filter(Boolean).join(" ");
+    return [c.address, postCity].filter(Boolean).join(", ");
+  }
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
       const payload = { ...data };
-      if (useClientAddress && selectedClient?.address && !data.locationId) {
-        payload.description = [data.description, `Adres klienta: ${selectedClient.address}`].filter(Boolean).join("\n");
+      // If no location but client has address, include it in description automatically
+      if (!data.locationId && selectedClient) {
+        const addr = clientAddressLabel(selectedClient);
+        if (addr) {
+          payload.description = [
+            `Lokalizacja: ${addr}`,
+            data.description,
+          ].filter(Boolean).join("\n");
+        }
       }
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -357,73 +423,59 @@ function NewOrderForm() {
             render={({ field }) => (
               <ClientSearch
                 value={field.value}
+                initialClient={preloadedClient}
                 onChange={(clientId, client) => {
                   field.onChange(clientId);
                   setSelectedClient(client);
-                  setUseClientAddress(false);
                 }}
               />
             )}
           />
-          {selectedClient?.address && !watch("locationId") && (
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer mt-1">
-              <input
-                type="checkbox"
-                checked={useClientAddress}
-                onChange={(e) => setUseClientAddress(e.target.checked)}
-                className="rounded"
-              />
-              Adres taki sam jak klienta: <span className="font-medium">{selectedClient.address}</span>
-            </label>
-          )}
         </div>
 
-        {/* Location */}
-        {watchClientId && locations.length > 0 && (
+        {/* Location — shown only when client is selected */}
+        {watchClientId && (
           <div className="space-y-1.5">
             <Label>Lokalizacja</Label>
-            <Controller
-              name="locationId"
-              control={control}
-              render={({ field }) => (
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Wybierz lokalizację..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.name} {l.address ? `– ${l.address}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
+            {locations.length > 0 ? (
+              <Controller
+                name="locationId"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Wybierz lokalizację..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.name}{l.address ? ` – ${l.address}` : ""}{l.city ? `, ${l.city}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            ) : clientAddressLabel(selectedClient) ? (
+              <div className="flex items-start gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />
+                <div>
+                  <p className="font-medium">{clientAddressLabel(selectedClient)}</p>
+                  <p className="text-xs text-blue-600 mt-0.5">Adres z danych klienta</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">
+                Ten klient nie ma dodanej lokalizacji ani adresu kontaktowego.
+              </p>
+            )}
           </div>
         )}
 
-        {/* Scheduled date */}
-        <div className="space-y-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="scheduledAt">Data/godzina (od)</Label>
-            <Input id="scheduledAt" type="datetime-local" {...register("scheduledAt")} />
-          </div>
-          {showEndTime ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="scheduledEndAt">Data/godzina (do)</Label>
-              <Input id="scheduledEndAt" type="datetime-local" {...register("scheduledEndAt")} />
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowEndTime(true)}
-              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-            >
-              <Clock className="h-3.5 w-3.5" />
-              + Dodaj godzinę zakończenia
-            </button>
-          )}
+        {/* Scheduled date — only start time */}
+        <div className="space-y-1.5">
+          <Label htmlFor="scheduledAt">Data/godzina</Label>
+          <Input id="scheduledAt" type="datetime-local" {...register("scheduledAt")} />
         </div>
 
         {/* Estimated duration + difficulty */}
