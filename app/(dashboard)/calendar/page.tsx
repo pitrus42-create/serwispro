@@ -20,7 +20,7 @@ import {
   isSameMonth,
 } from "date-fns";
 import { pl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -186,9 +186,10 @@ function OrderCard({
     router.push(`/orders/${order.id}`);
   }
 
-  const { type, priority, isCritical, clientName, leadName, leadUserId, isMyOrder, note } = order.extendedProps;
+  const { type, priority, isCritical, clientName, leadName, leadUserId, isMyOrder, note, status } = order.extendedProps;
   const noteLine = getFirstLine(note);
   const userColor = getUserColor(leadUserId);
+  const isOverdue = !!order.start && new Date(order.start) < new Date() && !["ZAKONCZONE", "ANULOWANE"].includes(status);
 
   return (
     <div
@@ -202,6 +203,7 @@ function OrderCard({
         PRIORITY_BORDER[priority] ?? "border-l-gray-300",
         isReordering && "ring-2 ring-red-800 shadow-md",
         isCritical && "bg-red-50",
+        isOverdue && "ring-1 ring-red-400 border-red-200",
         !isMyOrder && "opacity-70"
       )}
       onPointerDown={startPress}
@@ -211,6 +213,7 @@ function OrderCard({
     >
       <div className="flex items-start gap-1.5">
         {isCritical && <AlertTriangle className="h-3 w-3 text-red-500 shrink-0 mt-0.5" />}
+        {isOverdue && !isCritical && <Clock className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />}
         <span className={cn("shrink-0 rounded px-1 py-0.5 font-medium", TYPE_COLORS[type] ?? "bg-gray-100 text-gray-700")}>
           {TYPE_LABELS[type] ?? type}
         </span>

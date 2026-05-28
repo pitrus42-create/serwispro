@@ -514,6 +514,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
   const [acceptDate, setAcceptDate] = useState("");
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+
+  const rescheduleMutation = useMutation({
+    mutationFn: async (scheduledAt: string | null) => {
+      const r = await fetch(`/api/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: scheduledAt || null }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      setRescheduleOpen(false);
+      toast.success("Termin zaktualizowany");
+    },
+    onError: () => toast.error("Błąd aktualizacji terminu"),
+  });
 
   const acceptMutation = useMutation({
     mutationFn: async (scheduledAt: string | null) => {
@@ -837,6 +858,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const canClose = canDo(session?.user, "orders:close") || (isAssignedToMe && !canCreate);
   const canAccept = !canCreate && (isUnassigned || isAssignedToMe) && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isAssignedToMe;
   const hasProtocol = (order.protocols?.length ?? 0) > 0;
+  const isOverdue =
+    !!order.scheduledAt &&
+    new Date(order.scheduledAt) < new Date() &&
+    !["ZAKONCZONE", "ANULOWANE"].includes(order.status);
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
@@ -930,6 +955,65 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
       </div>
+
+      {/* Overdue banner */}
+      {isOverdue && !editingOrder && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
+          <AlertTriangle className="text-red-500 shrink-0 h-5 w-5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-red-800">Zaległe zlecenie</p>
+            <p className="text-sm text-red-600">
+              Planowane na {format(new Date(order.scheduledAt!), "d MMMM yyyy", { locale: pl })} — niezakończone.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-300 text-red-700 hover:bg-red-100"
+              onClick={() => rescheduleMutation.mutate(null)}
+              disabled={rescheduleMutation.isPending}
+            >
+              Przenieś do oczekujących
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => { setRescheduleDate(""); setRescheduleOpen(true); }}
+            >
+              Zmień datę
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule dialog */}
+      <AlertDialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Zmień datę realizacji</AlertDialogTitle>
+            <AlertDialogDescription>
+              Wybierz nowy termin dla tego zlecenia.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            type="datetime-local"
+            value={rescheduleDate}
+            onChange={(e) => setRescheduleDate(e.target.value)}
+            className="my-2"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => rescheduleMutation.mutate(rescheduleDate || null)}
+              disabled={rescheduleMutation.isPending || !rescheduleDate}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Zapisz termin
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Inline edit panel */}
       {editingOrder && (
