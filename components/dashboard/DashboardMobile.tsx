@@ -145,9 +145,12 @@ export function DashboardMobile({
         </div>
 
         {d.todayOrders.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">
-            Brak zaplanowanych zadań na dziś
-          </p>
+          <div className="text-center py-8">
+            <p className="text-sm text-gray-400">Brak zadań na dziś</p>
+            <Link href="/calendar" className="text-xs text-red-800 font-medium mt-1 inline-block">
+              Otwórz kalendarz →
+            </Link>
+          </div>
         ) : (
           <ul className="divide-y divide-gray-100">
             {d.todayOrders.map((order) => {
@@ -166,9 +169,14 @@ export function DashboardMobile({
                       <p className="text-sm font-medium truncate text-gray-900">
                         {order.title ?? order.client?.name ?? order.orderNumber}
                       </p>
+                      {(order.client?.name || order.location?.address) && (
+                        <p className="text-xs text-gray-500 truncate">
+                          {order.client?.name}
+                          {order.location?.address ? ` · ${order.location.address}` : ""}
+                        </p>
+                      )}
                       <p className={`text-xs ${isPastDue ? "text-red-500 font-medium" : "text-gray-400"}`}>
                         {formatDateTime(order.scheduledAt)}
-                        {order.client?.name ? ` · ${order.client.name}` : ""}
                       </p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />

@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     },
     include: {
       client: { select: { name: true } },
+      location: { select: { address: true, city: true } },
       assignments: {
         where: { isLead: true },
         include: { user: { select: { firstName: true, lastName: true } } },
@@ -43,6 +44,26 @@ export async function GET(req: NextRequest) {
   });
   const waitingOrders = await prisma.order.count({
     where: { status: "OCZEKUJACE", scheduledAt: null },
+  });
+  const unsettledOrders = admin
+    ? await prisma.order.count({ where: { status: "ZAKONCZONE", isSettled: false } })
+    : 0;
+  const overdueOrdersList = await prisma.order.findMany({
+    where: {
+      ...userFilter,
+      scheduledAt: { lt: startOfDay(today) },
+      status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] },
+    },
+    include: {
+      client: { select: { name: true } },
+      location: { select: { address: true, city: true } },
+      assignments: {
+        where: { isLead: true },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      },
+    },
+    orderBy: { scheduledAt: "asc" },
+    take: 5,
   });
   const todaySimpleTasks = await prisma.simpleTask.findMany({
     where: {
@@ -84,6 +105,8 @@ export async function GET(req: NextRequest) {
     todayOrders,
     pendingMaintenance,
     waitingOrders,
+    unsettledOrders,
+    overdueOrdersList,
     todaySimpleTasks,
     recentActivity,
   });
