@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const overdue = searchParams.get("overdue");
   const settled = searchParams.get("settled");
   const pending = searchParams.get("pending");
+  const planned = searchParams.get("planned");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const q = searchParams.get("q");
@@ -36,6 +37,8 @@ export async function GET(req: NextRequest) {
       : {}),
     ...(pending === "true"
       ? { scheduledAt: null, status: { notIn: ["ZAKONCZONE", "ANULOWANE"] } }
+      : planned === "true"
+      ? { scheduledAt: { not: null }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU", "ZAPLANOWANE"] } }
       : status?.length ? { status: { in: status } } : {}),
     ...(type?.length ? { type: { in: type } } : {}),
     ...(priority?.length ? { priority: { in: priority } } : {}),

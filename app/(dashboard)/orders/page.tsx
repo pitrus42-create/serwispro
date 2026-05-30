@@ -68,15 +68,13 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 type DatePreset = "all" | "today" | "week" | "month";
-type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA" | "BEZ_TERMINU";
+type TabKey = "all" | "BEZ_TERMINU" | "ZAPLANOWANE_ALL" | "ZAKONCZONE" | "DO_ROZLICZENIA";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "BEZ_TERMINU", label: "Bez terminu" },
-  { key: "OCZEKUJACE", label: "Oczekujące" },
-  { key: "PRZYJETE", label: "Przyjęte" },
-  { key: "W_TOKU", label: "W toku" },
-  { key: "ZAKONCZONE", label: "Zakończone" },
-  { key: "all", label: "Wszystkie" },
+  { key: "BEZ_TERMINU",     label: "Oczekujące" },
+  { key: "ZAPLANOWANE_ALL", label: "Zaplanowane" },
+  { key: "ZAKONCZONE",      label: "Zakończone" },
+  { key: "all",             label: "Wszystkie" },
 ];
 
 function getDateRange(preset: DatePreset): { dateFrom?: string; dateTo?: string } {
@@ -184,6 +182,8 @@ export default function OrdersPage() {
     params.settled = "false";
   } else if (activeTab === "BEZ_TERMINU") {
     params.pending = "true";
+  } else if (activeTab === "ZAPLANOWANE_ALL") {
+    params.planned = "true";
   } else if (activeTab === "all") {
     params.status = "OCZEKUJACE,PRZYJETE,W_TOKU,ZAPLANOWANE,ZAKONCZONE";
   } else {
@@ -282,11 +282,7 @@ export default function OrdersPage() {
   }
 
   const tabs = canSettle
-    ? [
-        ...TABS.slice(0, 4),
-        { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
-        TABS[4], // "Wszystkie" stays last
-      ]
+    ? [TABS[0], TABS[1], { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" }, TABS[2], TABS[3]]
     : TABS;
 
   return (
@@ -458,6 +454,9 @@ export default function OrdersPage() {
             const isMyOrder = order.assignments.some((a) => a.user.id === session?.user?.id);
             const canAccept = !canCreateOrders && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isMyOrder;
             const isUnsettled = order.status === "ZAKONCZONE" && !order.isSettled;
+            const isOverdue = !!order.scheduledAt
+              && new Date(order.scheduledAt) < startOfDay(new Date())
+              && !["ZAKONCZONE", "ANULOWANE"].includes(order.status);
 
             return (
               <div
@@ -465,7 +464,8 @@ export default function OrdersPage() {
                 className={cn(
                   "bg-white rounded-lg border p-4 hover:shadow-md transition-shadow",
                   order.isCritical && "border-red-300 bg-red-50",
-                  isUnsettled && canSettle && "border-amber-300 bg-amber-50"
+                  isUnsettled && canSettle && "border-amber-300 bg-amber-50",
+                  isOverdue && !order.isCritical && "border-l-4 border-l-red-400"
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -519,9 +519,10 @@ export default function OrdersPage() {
                         <span className="truncate">{order.location.address ?? order.location.name}</span>
                       )}
                       {order.scheduledAt && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
+                        <span className={`flex items-center gap-1 ${isOverdue ? "text-red-500 font-medium" : ""}`}>
+                          <Clock className={`h-3.5 w-3.5 ${isOverdue ? "text-red-500" : ""}`} />
                           {format(new Date(order.scheduledAt), "d MMM, HH:mm", { locale: pl })}
+                          {isOverdue && <span className="text-red-500 text-[10px] font-bold">ZALEGŁE</span>}
                         </span>
                       )}
                       {lead && (

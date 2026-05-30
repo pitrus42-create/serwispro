@@ -11,9 +11,8 @@ export interface DashboardData {
     scheduledAt?: string | null;
     assignments: { user: { firstName: string; lastName: string } }[];
   }[];
-  highPriorityOrders: number;
   pendingMaintenance: number;
-  pendingOrders: number;
+  waitingOrders: number;
   todaySimpleTasks: {
     id: string;
     title: string;

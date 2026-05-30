@@ -60,10 +60,9 @@ export function DashboardMobile({
   const pills = [
     { value: d.overdueOrders,        label: "Zaległe",     color: "bg-amber-100 text-amber-800",   href: "/orders?overdue=true" },
     { value: d.openAlerts,           label: "Awarie",      color: "bg-orange-100 text-orange-800",  href: "/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU" },
-    { value: d.highPriorityOrders,   label: "Pilne",       color: "bg-purple-100 text-purple-800",  href: "/orders?priority=WYSOKI,KRYTYCZNY" },
     { value: d.pendingMaintenance,   label: "Konserwacje", color: "bg-teal-100 text-teal-800",      href: "/orders?type=KONSERWACJA" },
     { value: d.todayOrders.length,   label: "Dziś",        color: "bg-red-100 text-red-900",        href: "/calendar" },
-    { value: d.pendingOrders,        label: "Bez terminu", color: "bg-blue-100 text-blue-800",      href: "/orders?pending=true" },
+    { value: d.waitingOrders,        label: "Oczekujące",  color: "bg-blue-100 text-blue-800",      href: "/orders?status=OCZEKUJACE" },
   ].filter((p) => p.value > 0);
 
   const allClear = pills.length === 0 && d.criticalAlerts === 0;
@@ -154,19 +153,20 @@ export function DashboardMobile({
             {d.todayOrders.map((order) => {
               const typeConfig = ORDER_TYPE_CONFIG[order.type as keyof typeof ORDER_TYPE_CONFIG];
               const barColor = TYPE_COLORS[order.type] ?? "bg-gray-400";
+              const isPastDue = !!order.scheduledAt && new Date(order.scheduledAt) < new Date();
               return (
                 <li key={order.id}>
                   <Link
                     href={`/orders/${order.id}`}
                     className="flex items-center gap-3 py-3 min-h-14"
                   >
-                    <span className={`w-1 h-8 rounded-full shrink-0 ${barColor}`} />
+                    <span className={`w-1 h-8 rounded-full shrink-0 ${isPastDue ? "bg-red-500" : barColor}`} />
                     <span className="text-xl shrink-0">{typeConfig?.icon ?? "📋"}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate text-gray-900">
                         {order.title ?? order.client?.name ?? order.orderNumber}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className={`text-xs ${isPastDue ? "text-red-500 font-medium" : "text-gray-400"}`}>
                         {formatDateTime(order.scheduledAt)}
                         {order.client?.name ? ` · ${order.client.name}` : ""}
                       </p>

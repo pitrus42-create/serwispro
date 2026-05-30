@@ -41,11 +41,8 @@ export async function GET(req: NextRequest) {
     orderBy: { scheduledAt: "asc" },
     take: 10,
   });
-  const highPriorityOrders = await prisma.order.count({
-    where: { ...userFilter, priority: { in: ["WYSOKI", "KRYTYCZNY"] }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } },
-  });
-  const pendingOrders = await prisma.order.count({
-    where: { scheduledAt: null, status: { notIn: ["ZAKONCZONE", "ANULOWANE"] } },
+  const waitingOrders = await prisma.order.count({
+    where: { status: "OCZEKUJACE", scheduledAt: null },
   });
   const todaySimpleTasks = await prisma.simpleTask.findMany({
     where: {
@@ -85,9 +82,8 @@ export async function GET(req: NextRequest) {
     openAlerts,
     overdueOrders,
     todayOrders,
-    highPriorityOrders,
     pendingMaintenance,
-    pendingOrders,
+    waitingOrders,
     todaySimpleTasks,
     recentActivity,
   });

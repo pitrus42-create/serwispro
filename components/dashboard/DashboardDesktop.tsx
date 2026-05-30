@@ -24,18 +24,9 @@ import { formatDateTime } from "@/lib/utils";
 import { ORDER_TYPE_CONFIG } from "@/constants/colors";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { isAdmin } from "@/lib/permissions";
 import { PersonalPanel } from "./PersonalPanel";
 import type { DashboardData } from "./types";
 
-const ACTION_LABELS: Record<string, string> = {
-  order_created: "utworzył zlecenie",
-  status_changed: "zmienił status",
-  assignment_added: "przypisał pracownika",
-  note_added: "dodał notatkę",
-  protocol_generated: "wygenerował protokół",
-  checklist_item_checked: "odhaczył punkt checklisty",
-};
 
 function StatCard({
   title,
@@ -87,9 +78,6 @@ export function DashboardDesktop({
   const d = data;
   const { data: session } = useSession();
   const qc = useQueryClient();
-  const userRoles = (session?.user?.roles as string[]) ?? [];
-  const canSeeActivity = isAdmin(session?.user) || userRoles.includes("MENEDZER");
-  const [activityFilter, setActivityFilter] = useState<string>("all");
   const [completingTask, setCompletingTask] = useState<string | null>(null);
 
   const completeTaskMutation = useMutation({
@@ -133,22 +121,7 @@ export function DashboardDesktop({
 
       {/* Stat cards — 3-column grid */}
       <div className="grid grid-cols-3 gap-4">
-        <StatCard
-          title="Awarie krytyczne"
-          value={d.criticalAlerts}
-          icon={AlertTriangle}
-          color={
-            d.criticalAlerts > 0
-              ? "bg-red-100 text-red-900"
-              : "bg-green-100 text-green-900"
-          }
-          href="/orders?critical=true"
-          pulse={d.criticalAlerts > 0}
-          description={
-            d.criticalAlerts === 0 ? "Wszystko OK ✓" : "Wymagają reakcji!"
-          }
-        />
-        <StatCard
+<StatCard
           title="Otwarte awarie"
           value={d.openAlerts}
           icon={Flame}
@@ -174,13 +147,6 @@ export function DashboardDesktop({
           href="/orders?overdue=true"
         />
         <StatCard
-          title="Wysoki priorytet"
-          value={d.highPriorityOrders}
-          icon={Flame}
-          color="bg-purple-100 text-purple-900"
-          href="/orders?priority=WYSOKI,KRYTYCZNY"
-        />
-        <StatCard
           title="Konserwacje do planu"
           value={d.pendingMaintenance}
           icon={Wrench}
@@ -188,12 +154,12 @@ export function DashboardDesktop({
           href="/orders?type=KONSERWACJA"
         />
         <StatCard
-          title="Bez terminu"
-          value={d.pendingOrders}
+          title="Oczekujące"
+          value={d.waitingOrders}
           icon={ClipboardList}
-          color={d.pendingOrders > 0 ? "bg-blue-100 text-blue-900" : "bg-gray-100 text-gray-700"}
-          href="/orders?pending=true"
-          description="Zlecenia bez daty"
+          color={d.waitingOrders > 0 ? "bg-blue-100 text-blue-900" : "bg-gray-100 text-gray-700"}
+          href="/orders?status=OCZEKUJACE"
+          description="Bez daty, czekają na przejęcie"
         />
       </div>
 
@@ -244,10 +210,8 @@ export function DashboardDesktop({
         </CardContent>
       </Card>
 
-      {/* Two-column: tasks + activity (activity only for manager/admin) */}
-      <div className={`grid gap-4 ${canSeeActivity ? "grid-cols-2" : "grid-cols-1"}`}>
-        {/* Today's tasks */}
-        <Card>
+      {/* Today's tasks — full width */}
+      <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center justify-between">
               <span>Zadania na dziś</span>
@@ -297,6 +261,7 @@ export function DashboardDesktop({
                       order.type as keyof typeof ORDER_TYPE_CONFIG
                     ];
                   const lead = order.assignments[0]?.user;
+                  const isPastDue = !!order.scheduledAt && new Date(order.scheduledAt) < new Date();
                   return (
                     <li key={order.id}>
                       <Link
@@ -312,7 +277,7 @@ export function DashboardDesktop({
                               order.client?.name ??
                               order.orderNumber}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className={`text-xs ${isPastDue ? "text-red-500 font-medium" : "text-gray-500"}`}>
                             {formatDateTime(order.scheduledAt)}
                             {lead &&
                               ` · ${lead.firstName} ${lead.lastName}`}
@@ -330,74 +295,6 @@ export function DashboardDesktop({
             )}
           </CardContent>
         </Card>
-
-        {/* Recent activity — manager/admin only, up to 10 items */}
-        {canSeeActivity && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Ostatnia aktywność</span>
-                <select
-                  value={activityFilter}
-                  onChange={(e) => setActivityFilter(e.target.value)}
-                  className="text-xs font-normal text-gray-600 border border-gray-200 rounded px-2 py-0.5 bg-white cursor-pointer"
-                >
-                  <option value="all">Wszystkie</option>
-                  <option value="order_created">Utworzone</option>
-                  <option value="status_changed">Zmiana statusu</option>
-                  <option value="order_settled">Rozliczone</option>
-                  <option value="assignment_added">Przypisania</option>
-                  <option value="note_added">Notatki</option>
-                  <option value="protocol_generated">Protokoły</option>
-                </select>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(() => {
-                const filtered =
-                  activityFilter === "all"
-                    ? d.recentActivity
-                    : d.recentActivity.filter((l) => l.action === activityFilter);
-                return filtered.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-6">
-                    Brak aktywności
-                  </p>
-                ) : (
-                  <ul className="space-y-2.5">
-                    {filtered.map((log) => (
-                      <li key={log.id} className="flex gap-2 text-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-600 mt-1.5 shrink-0" />
-                        <div className="text-gray-600">
-                          <span className="font-medium text-gray-800">
-                            {log.user
-                              ? `${log.user.firstName} ${log.user.lastName}`
-                              : "System"}
-                          </span>{" "}
-                          {ACTION_LABELS[log.action] ?? log.action}
-                          {log.order && (
-                            <>
-                              {" · "}
-                              <Link
-                                href="/orders"
-                                className="text-red-800 hover:underline"
-                              >
-                                {log.order.orderNumber}
-                              </Link>
-                            </>
-                          )}
-                          <span className="text-gray-400 ml-1.5 text-xs">
-                            {formatDateTime(log.createdAt)}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        )}
-      </div>
       </div>
       {/* ── end main content ── */}
 
