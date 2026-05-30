@@ -723,14 +723,29 @@ export default function CalendarPage() {
                 const today = isToday(day);
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6;
 
-                return (
+                const dayKey = day.toISOString();
+              const isDragOver = dragOverDay === dayKey;
+              return (
                   <div
-                    key={day.toISOString()}
+                    key={dayKey}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverDay(dayKey); }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDay(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverDay(null);
+                      try {
+                        const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                        handleDropToDay(data.orderId, data.scheduledAt, day);
+                      } catch {}
+                    }}
                     className={cn(
-                      "min-h-[90px] p-1.5",
+                      "min-h-[90px] p-1.5 transition-colors",
                       isWeekend
                         ? inMonth ? "bg-amber-50" : "bg-amber-100/60"
-                        : inMonth ? "bg-white" : "bg-gray-50"
+                        : inMonth ? "bg-white" : "bg-gray-50",
+                      isDragOver && "bg-blue-50 ring-inset ring-1 ring-blue-300"
                     )}
                   >
                     <div
@@ -755,9 +770,14 @@ export default function CalendarPage() {
                           return (
                             <div
                               key={order.id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", JSON.stringify({ orderId: order.id, scheduledAt: order.start }));
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
                               onClick={() => router.push(`/orders/${order.id}`)}
                               className={cn(
-                                "text-[10px] truncate rounded px-1 py-0.5 cursor-pointer hover:opacity-80 flex items-center gap-1",
+                                "text-[10px] truncate rounded px-1 py-0.5 cursor-grab hover:opacity-80 flex items-center gap-1 select-none",
                                 TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
                               )}
                             >
