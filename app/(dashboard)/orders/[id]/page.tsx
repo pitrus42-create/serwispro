@@ -463,6 +463,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [editBillingCost, setEditBillingCost] = useState("");
   const [editBillingProfit, setEditBillingProfit] = useState("");
   const [editBillingNotes, setEditBillingNotes] = useState("");
+  const [serviceNote, setServiceNote] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -481,6 +482,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.scheduledAt]);
+
+  useEffect(() => {
+    setServiceNote(order?.internalNotes ?? "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.internalNotes]);
 
   useEffect(() => {
     if (!editForm.clientId) { setEditLocations([]); return; }
@@ -722,6 +728,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       toast.success("Plik usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveServiceNoteMutation = useMutation({
+    mutationFn: async (note: string) => {
+      const r = await fetch(`/api/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ internalNotes: note }),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu notatki");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Notatka zapisana");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -1489,6 +1512,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="notes" className="flex items-center gap-1.5">
+            <BookOpen className="h-4 w-4" />
+            <span className="hidden sm:inline">Notatka</span>
+            {order.internalNotes && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+            )}
+          </TabsTrigger>
           <TabsTrigger value="log" className="flex items-center gap-1.5">
             <Activity className="h-4 w-4" />
             <span className="hidden sm:inline">Historia</span>
@@ -1718,13 +1748,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           )}
 
-          {/* Internal notes */}
-          {order.internalNotes && (
-            <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
-              <h3 className="font-semibold text-amber-800 mb-2">Notatki wewnętrzne</h3>
-              <p className="text-sm text-amber-700 whitespace-pre-wrap">{order.internalNotes}</p>
-            </div>
-          )}
         </TabsContent>
 
         {/* Checklists tab */}
@@ -2385,6 +2408,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </TabsContent>
 
         {/* Activity log tab */}
+        {/* Service note tab */}
+        <TabsContent value="notes">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen className="h-4 w-4 text-amber-600" />
+              <h3 className="font-semibold text-gray-700 text-sm">Notatka serwisowa</h3>
+              <span className="text-xs text-gray-400">— widoczna tylko dla zespołu, nie trafia do protokołu</span>
+            </div>
+            <Textarea
+              value={serviceNote}
+              onChange={(e) => setServiceNote(e.target.value)}
+              rows={8}
+              placeholder="Wpisz notatkę dla zespołu... np. kod domofonu, informacje o dostępie, uwagi techniczne..."
+              className="resize-none"
+            />
+            <div className="flex items-center justify-between">
+              {order.internalNotes && (
+                <span className="text-xs text-gray-400">
+                  Ostatnia zmiana: {order.internalNotes !== serviceNote ? "niezapisane zmiany" : "zapisano"}
+                </span>
+              )}
+              <Button
+                size="sm"
+                disabled={saveServiceNoteMutation.isPending || serviceNote === (order.internalNotes ?? "")}
+                onClick={() => saveServiceNoteMutation.mutate(serviceNote)}
+                className="ml-auto"
+              >
+                {saveServiceNoteMutation.isPending ? "Zapisywanie..." : "Zapisz notatkę"}
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
         <TabsContent value="log">
           {order.activityLog.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
