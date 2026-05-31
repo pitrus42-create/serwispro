@@ -478,6 +478,7 @@ function CalendarPage() {
       : format(currentDate, "LLLL yyyy", { locale: pl });
 
   return (
+    <>
     <div className="p-3 md:p-5 h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
@@ -1048,6 +1049,7 @@ function CalendarPage() {
         </div>
       </div>
     )}
+    </>
   );
 }
 
