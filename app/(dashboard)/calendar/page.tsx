@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -263,7 +263,7 @@ function OrderCard({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function CalendarPage() {
+function CalendarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -932,5 +932,13 @@ export default function CalendarPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CalendarPageWrapper() {
+  return (
+    <Suspense>
+      <CalendarPage />
+    </Suspense>
   );
 }
