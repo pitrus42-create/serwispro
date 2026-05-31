@@ -650,18 +650,6 @@ function CalendarPage() {
                             <div key={n} className="h-12 bg-gray-100 rounded animate-pulse" />
                           ))}
                         </div>
-                      ) : dayOrders.length === 0 ? (
-                        <div
-                          className={cn(
-                            "h-16 rounded-lg border-2 border-dashed flex items-center justify-center cursor-pointer transition-colors",
-                            isDragOver ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                          )}
-                          onClick={() =>
-                            router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)
-                          }
-                        >
-                          <Plus className="h-3.5 w-3.5 text-gray-300" />
-                        </div>
                       ) : (
                         dayOrders.map((order, idx) => (
                           <OrderCard
@@ -697,7 +685,7 @@ function CalendarPage() {
                       ))}
 
                       {/* Add buttons inside scroll area */}
-                      {!isLoading && (dayOrders.length > 0 || simpleTasksForDay(day).length > 0) && (
+                      {!isLoading && (
                         <button
                           onClick={() => router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)}
                           className={cn(
