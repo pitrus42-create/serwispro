@@ -110,10 +110,10 @@ export function PersonalPanel() {
   return (
     <div className="space-y-4">
       {/* Notes */}
-      <div className="bg-white rounded-xl border p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-800 p-4">
         <div className="flex items-center gap-2 mb-3">
           <StickyNote className="h-4 w-4 text-amber-500" />
-          <h3 className="text-sm font-semibold text-gray-700">Notatki</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Notatki</h3>
           {notes.length > 0 && (
             <span className="ml-auto text-xs text-gray-400">{notes.length}</span>
           )}
@@ -130,7 +130,7 @@ export function PersonalPanel() {
             value={noteInput}
             onChange={(e) => setNoteInput(e.target.value)}
             placeholder="Dodaj notatkę..."
-            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
+            className="flex-1 min-w-0 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
           />
           <button
             type="submit"
@@ -166,10 +166,10 @@ export function PersonalPanel() {
       </div>
 
       {/* Tasks / Checklist */}
-      <div className="bg-white rounded-xl border p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-800 p-4">
         <div className="flex items-center gap-2 mb-3">
-          <ListChecks className="h-4 w-4 text-red-800" />
-          <h3 className="text-sm font-semibold text-gray-700">Zadania</h3>
+          <ListChecks className="h-4 w-4 text-red-800 dark:text-red-500" />
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Zadania</h3>
           {tasks.length > 0 && (
             <span className="ml-auto text-xs text-gray-400">{tasks.length}</span>
           )}
@@ -186,7 +186,7 @@ export function PersonalPanel() {
             value={taskInput}
             onChange={(e) => setTaskInput(e.target.value)}
             placeholder="Nowe zadanie..."
-            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
+            className="flex-1 min-w-0 text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
           />
           <button
             type="submit"
@@ -208,7 +208,7 @@ export function PersonalPanel() {
                   key={task.id}
                   className={cn(
                     "flex items-start gap-2.5 rounded-lg px-3 py-2 transition-all duration-500",
-                    isCompleting ? "bg-green-50" : "bg-gray-50"
+                    isCompleting ? "bg-green-50 dark:bg-green-950/30" : "bg-gray-50 dark:bg-gray-800"
                   )}
                 >
                   <button
@@ -218,7 +218,7 @@ export function PersonalPanel() {
                       "shrink-0 w-4 h-4 mt-0.5 rounded border-2 transition-all duration-300 flex items-center justify-center",
                       isCompleting
                         ? "bg-green-500 border-green-500"
-                        : "border-gray-300 hover:border-red-800 bg-white"
+                        : "border-gray-300 dark:border-gray-600 hover:border-red-800 bg-white dark:bg-gray-700"
                     )}
                   >
                     {isCompleting && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
@@ -227,8 +227,8 @@ export function PersonalPanel() {
                     className={cn(
                       "flex-1 text-sm leading-snug transition-all duration-500",
                       isCompleting
-                        ? "line-through text-green-600 opacity-70"
-                        : "text-gray-700"
+                        ? "line-through text-green-600 dark:text-green-400 opacity-70"
+                        : "text-gray-700 dark:text-gray-300"
                     )}
                   >
                     {task.content}

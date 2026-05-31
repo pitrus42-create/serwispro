@@ -31,8 +31,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pl" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="h-full bg-gray-50">
+    <html lang="pl" className={`${geistSans.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="h-full">
         <Providers>{children}</Providers>
       </body>
     </html>

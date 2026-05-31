@@ -135,42 +135,42 @@ export function DashboardDesktop({
           title="Otwarte awarie"
           value={d.openAlerts}
           icon={Flame}
-          color={d.openAlerts > 0 ? "bg-orange-100 text-orange-900" : "bg-gray-100 text-gray-600"}
+          color={d.openAlerts > 0 ? "bg-orange-100 text-orange-900 dark:bg-orange-900/20 dark:text-orange-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU"
         />
         <StatCard
           title="Zadania dziś"
           value={d.todayOrders.length}
           icon={ClipboardList}
-          color={d.todayOrders.length > 0 ? "bg-red-100 text-red-950" : "bg-gray-100 text-gray-600"}
+          color={d.todayOrders.length > 0 ? "bg-red-100 text-red-950 dark:bg-red-900/20 dark:text-red-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/calendar"
         />
         <StatCard
           title="Zaległe"
           value={d.overdueOrders}
           icon={Clock}
-          color={d.overdueOrders > 0 ? "bg-amber-100 text-amber-900" : "bg-gray-100 text-gray-600"}
+          color={d.overdueOrders > 0 ? "bg-amber-100 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders?overdue=true"
         />
         <StatCard
           title="Oczekujące"
           value={d.waitingOrders}
           icon={ClipboardList}
-          color={d.waitingOrders > 0 ? "bg-blue-100 text-blue-900" : "bg-gray-100 text-gray-600"}
+          color={d.waitingOrders > 0 ? "bg-blue-100 text-blue-900 dark:bg-blue-900/20 dark:text-blue-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders"
         />
         <StatCard
           title="Do rozliczenia"
           value={d.unsettledOrders}
           icon={CircleDollarSign}
-          color={d.unsettledOrders > 0 ? "bg-purple-100 text-purple-900" : "bg-gray-100 text-gray-600"}
+          color={d.unsettledOrders > 0 ? "bg-purple-100 text-purple-900 dark:bg-purple-900/20 dark:text-purple-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders"
         />
         <StatCard
           title="Konserwacje do planu"
           value={d.pendingMaintenance}
           icon={Wrench}
-          color={d.pendingMaintenance > 0 ? "bg-teal-100 text-teal-900" : "bg-gray-100 text-gray-600"}
+          color={d.pendingMaintenance > 0 ? "bg-teal-100 text-teal-900 dark:bg-teal-900/20 dark:text-teal-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders?type=KONSERWACJA"
         />
       </div>
@@ -178,7 +178,7 @@ export function DashboardDesktop({
       {/* Quick actions */}
       <Card>
         <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Szybkie akcje</CardTitle>
+          <CardTitle className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Szybkie akcje</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <div className="grid grid-cols-3 gap-2">
@@ -229,12 +229,12 @@ export function DashboardDesktop({
             <span className="flex items-center gap-2">
               Zadania na dziś
               {(d.todayOrders.length + d.todaySimpleTasks.length) > 0 && (
-                <span className="text-xs font-normal bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                <span className="text-xs font-normal bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">
                   {d.todayOrders.length + d.todaySimpleTasks.length}
                 </span>
               )}
             </span>
-            <Link href="/calendar" className="text-xs text-red-800 font-normal">
+            <Link href="/calendar" className="text-xs text-red-800 dark:text-red-400 font-normal">
               Kalendarz →
             </Link>
           </CardTitle>

@@ -23,7 +23,7 @@ export function Header({ title }: { title?: string }) {
 
   return (
     <>
-      <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 sticky top-0 z-20">
+      <header className="h-14 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-4 sticky top-0 z-20">
         {/* Mobile: Logo */}
         <div className="md:hidden flex items-center gap-2">
           <div className="w-7 h-7 bg-red-800 rounded-md flex items-center justify-center">
@@ -31,7 +31,7 @@ export function Header({ title }: { title?: string }) {
           </div>
         </div>
 
-        <h1 className="text-base font-semibold text-gray-900 flex-1 truncate md:block hidden">
+        <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-1 truncate md:block hidden">
           {title}
         </h1>
         <div className="flex-1 md:hidden" />
