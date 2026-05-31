@@ -277,6 +277,9 @@ function CalendarPage() {
   const [reorderingId, setReorderingId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  const [taskModalDay, setTaskModalDay] = useState<Date | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskNote, setTaskNote] = useState("");
 
   // Calendar view filter: "mine" | "all" | userId
   const canManage = isAdmin(session?.user) || canDo(session?.user, "calendar:view_all");
@@ -394,6 +397,32 @@ function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Zadanie wykonane");
     },
+  });
+
+  const createSimpleTaskMutation = useMutation({
+    mutationFn: async ({ title, note, day }: { title: string; note: string; day: Date }) => {
+      const r = await fetch("/api/simple-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description: note || null,
+          date: day.toISOString(),
+          assignedUserId: resolvedUserId || null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd dodawania zadania");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["simple-tasks-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setTaskModalDay(null);
+      setTaskTitle("");
+      setTaskNote("");
+      toast.success("Zadanie dodane");
+    },
+    onError: () => toast.error("Błąd dodawania zadania"),
   });
 
   function ordersForDay(day: Date): CalendarOrder[] {
@@ -651,7 +680,7 @@ function CalendarPage() {
                       {simpleTasksForDay(day).map((task) => (
                         <div
                           key={task.id}
-                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-600 group"
+                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-600 dark:text-gray-400 group"
                         >
                           <button
                             onClick={() => completeSimpleTaskMutation.mutate(task.id)}
@@ -666,6 +695,30 @@ function CalendarPage() {
                         </div>
                       ))}
                     </div>
+
+                    {/* Bottom action buttons */}
+                    {!isLoading && (
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {dayOrders.length > 0 && (
+                          <button
+                            onClick={() => router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)}
+                            className="flex items-center gap-0.5 text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Zlecenie
+                          </button>
+                        )}
+                        {resolvedUserId && (
+                          <button
+                            onClick={() => { setTaskModalDay(day); setTaskTitle(""); setTaskNote(""); }}
+                            className="flex items-center gap-0.5 text-[10px] text-blue-400 dark:text-blue-500 hover:text-blue-600 dark:hover:text-blue-300 px-1.5 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Zadanie
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -932,6 +985,69 @@ function CalendarPage() {
         </div>
       )}
     </div>
+
+    {/* Quick task modal */}
+    {taskModalDay && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        onClick={() => setTaskModalDay(null)}
+      >
+        <div
+          className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 p-5 w-full max-w-sm mx-4 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Szybkie zadanie — {format(taskModalDay, "EEEE, d MMM", { locale: pl })}
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                Tytuł *
+              </label>
+              <input
+                autoFocus
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && taskTitle.trim()) {
+                    createSimpleTaskMutation.mutate({ title: taskTitle.trim(), note: taskNote, day: taskModalDay });
+                  }
+                }}
+                placeholder="np. odebrać zamówienie, zawieźć dokumenty..."
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-800"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                Notatka (opcjonalnie)
+              </label>
+              <textarea
+                value={taskNote}
+                onChange={(e) => setTaskNote(e.target.value)}
+                rows={2}
+                placeholder="Dodatkowe informacje..."
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-800 resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={() => setTaskModalDay(null)}
+              className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Anuluj
+            </button>
+            <button
+              disabled={!taskTitle.trim() || createSimpleTaskMutation.isPending}
+              onClick={() => createSimpleTaskMutation.mutate({ title: taskTitle.trim(), note: taskNote, day: taskModalDay })}
+              className="flex-1 px-3 py-2 text-sm bg-red-800 text-white rounded-lg hover:bg-red-900 disabled:opacity-40 transition-colors"
+            >
+              {createSimpleTaskMutation.isPending ? "Dodawanie..." : "Dodaj zadanie"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   );
 }
 
