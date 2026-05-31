@@ -130,7 +130,7 @@ export function PersonalPanel() {
             value={noteInput}
             onChange={(e) => setNoteInput(e.target.value)}
             placeholder="Dodaj notatkę..."
-            className="flex-1 text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
+            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
           />
           <button
             type="submit"
@@ -186,7 +186,7 @@ export function PersonalPanel() {
             value={taskInput}
             onChange={(e) => setTaskInput(e.target.value)}
             placeholder="Nowe zadanie..."
-            className="flex-1 text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
+            className="flex-1 min-w-0 text-sm border border-gray-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-800 focus:border-red-800"
           />
           <button
             type="submit"

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   AlertTriangle,
   ClipboardList,
@@ -10,8 +9,6 @@ import {
   Calendar,
   Users,
   UserPlus,
-  StickyNote,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/utils";
@@ -20,6 +17,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { canDo } from "@/lib/permissions";
 import { PersonalPanel } from "./PersonalPanel";
+import { MiniCalendar } from "./MiniCalendar";
 import type { DashboardData } from "./types";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -55,7 +53,6 @@ export function DashboardMobile({
   const { data: session } = useSession();
   const canCreateOrders = canDo(session?.user, "orders:create");
   const d = data;
-  const [panelOpen, setPanelOpen] = useState(false);
 
   const pills = [
     { value: d.overdueOrders,        label: "Zaległe",     color: "bg-amber-100 text-amber-800",   href: "/orders?overdue=true" },
@@ -69,19 +66,10 @@ export function DashboardMobile({
 
   return (
     <div className="space-y-5 max-w-2xl mx-auto">
-      {/* Greeting + notes button */}
+      {/* Greeting */}
       <div className="flex items-center justify-between -mt-1">
         <p className="text-base font-semibold text-gray-900">{getGreeting(firstName)}</p>
-        <div className="flex items-center gap-3">
-          <p className="text-xs text-gray-400 capitalize">{formatShortDate()}</p>
-          <button
-            onClick={() => setPanelOpen(true)}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-            title="Notatki i zadania"
-          >
-            <StickyNote className="w-5 h-5" />
-          </button>
-        </div>
+        <p className="text-xs text-gray-400 capitalize">{formatShortDate()}</p>
       </div>
 
       {/* Critical alert banner */}
@@ -216,38 +204,11 @@ export function DashboardMobile({
         </Button>
       </div>
 
-      {/* Bottom sheet — notes & tasks */}
-      {panelOpen && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40 bg-black/40"
-            onClick={() => setPanelOpen(false)}
-          />
-          {/* Sheet */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[80vh]">
-            {/* Handle + header */}
-            <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
-              <div className="flex items-center gap-2">
-                <StickyNote className="h-4 w-4 text-amber-500" />
-                <h2 className="text-sm font-semibold text-gray-800">Notatki i zadania</h2>
-              </div>
-              <button
-                onClick={() => setPanelOpen(false)}
-                className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {/* Drag handle visual */}
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-gray-200" />
-            {/* Scrollable content */}
-            <div className="overflow-y-auto px-4 pb-6 pt-1">
-              <PersonalPanel />
-            </div>
-          </div>
-        </>
-      )}
+      {/* Mini calendar + notatki + zadania — inline pod główną treścią */}
+      <div className="space-y-4 pb-6">
+        <MiniCalendar />
+        <PersonalPanel />
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   format,
@@ -265,11 +265,15 @@ function OrderCard({
 
 export default function CalendarPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
 
   const [view, setView] = useState<"week" | "month">("week");
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => {
+    const d = searchParams.get("date");
+    return d ? new Date(d) : new Date();
+  });
   const [reorderingId, setReorderingId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);

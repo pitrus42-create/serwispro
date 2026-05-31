@@ -26,6 +26,7 @@ import { ORDER_TYPE_CONFIG } from "@/constants/colors";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { PersonalPanel } from "./PersonalPanel";
+import { MiniCalendar } from "./MiniCalendar";
 import type { DashboardData } from "./types";
 
 const DURATION_LABELS: Record<string, string> = {
@@ -357,7 +358,8 @@ export function DashboardDesktop({
 
       {/* ── Personal sidebar ──────────────────────────────────────────── */}
       <div className="w-64 shrink-0">
-        <div className="sticky top-4 max-h-[calc(100vh-120px)] overflow-y-auto">
+        <div className="sticky top-4 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden space-y-4">
+          <MiniCalendar />
           <PersonalPanel />
         </div>
       </div>
