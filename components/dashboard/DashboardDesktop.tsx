@@ -157,7 +157,6 @@ export function DashboardDesktop({
           icon={ClipboardList}
           color={d.waitingOrders > 0 ? "bg-blue-100 text-blue-900" : "bg-gray-100 text-gray-600"}
           href="/orders"
-          description="Bez daty, czekają na przejęcie"
         />
         <StatCard
           title="Do rozliczenia"

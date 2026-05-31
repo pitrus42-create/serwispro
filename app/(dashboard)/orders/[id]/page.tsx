@@ -458,6 +458,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   });
   const [editLocations, setEditLocations] = useState<Array<{ id: string; name: string; address: string | null }>>([]);
   const [editClient, setEditClient] = useState<{ id: string; name: string | null; alias: string | null; phone: string | null } | undefined>();
+  const [editBillingOpen, setEditBillingOpen] = useState(false);
+  const [editBillingCost, setEditBillingCost] = useState("");
+  const [editBillingProfit, setEditBillingProfit] = useState("");
+  const [editBillingNotes, setEditBillingNotes] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -793,6 +797,36 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updateBillingMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}/settle`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settledCost: editBillingCost !== "" ? editBillingCost : null,
+          settledProfit: editBillingProfit !== "" ? editBillingProfit : null,
+          billingNotes: editBillingNotes || null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd aktualizacji rozliczenia");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setEditBillingOpen(false);
+      toast.success("Rozliczenie zaktualizowane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function openEditBilling() {
+    if (!order) return;
+    setEditBillingCost(order.settledCost != null ? String(order.settledCost) : "");
+    setEditBillingProfit(order.settledProfit != null ? String(order.settledProfit) : "");
+    setEditBillingNotes(order.billingNotes ?? "");
+    setEditBillingOpen(true);
+  }
+
   function startEditing() {
     if (!order) return;
     const lead = order.assignments.find(a => a.isLead);
@@ -857,6 +891,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const nextStatuses = STATUS_TRANSITIONS[order.status] ?? [];
   const canCreate = canDo(session?.user, "orders:create");
   const canDeleteProtocol = isAdmin(session?.user);
+  const userRoles = (session?.user?.roles as string[]) ?? [];
+  const canSettle = isAdmin(session?.user) || userRoles.includes("MENEDZER");
   const isAssignedToMe = order.assignments.some((a) => a.user.id === session?.user?.id);
   const isUnassigned = order.assignments.length === 0;
   // Can close: roles with orders:close permission OR serwisant assigned to this order
@@ -993,6 +1029,63 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* Reschedule dialog */}
+      {/* Edit billing dialog */}
+      <AlertDialog open={editBillingOpen} onOpenChange={setEditBillingOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edytuj rozliczenie</AlertDialogTitle>
+            <AlertDialogDescription>
+              Zmień kwoty lub uwagi do rozliczenia tego zlecenia.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 my-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Koszt (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={editBillingCost}
+                  onChange={(e) => setEditBillingCost(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Przychód (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={editBillingProfit}
+                  onChange={(e) => setEditBillingProfit(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Uwagi do rozliczenia</Label>
+              <Textarea
+                placeholder="Opcjonalne uwagi..."
+                rows={2}
+                value={editBillingNotes}
+                onChange={(e) => setEditBillingNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700"
+              disabled={updateBillingMutation.isPending}
+              onClick={() => updateBillingMutation.mutate()}
+            >
+              Zapisz
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1440,6 +1533,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <h3 className="font-semibold text-green-800 flex items-center gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4" />
                   Rozliczono {order.settledAt ? format(new Date(order.settledAt), "d MMM yyyy", { locale: pl }) : ""}
+                  {canSettle && (
+                    <button
+                      onClick={openEditBilling}
+                      className="ml-auto p-1 rounded hover:bg-green-200 transition-colors text-green-700"
+                      title="Edytuj kwoty rozliczenia"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </h3>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   {order.settledCost != null && (
