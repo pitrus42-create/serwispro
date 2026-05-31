@@ -695,31 +695,36 @@ function CalendarPage() {
                           )}
                         </div>
                       ))}
+
+                      {/* Add buttons inside scroll area */}
+                      {!isLoading && (dayOrders.length > 0 || simpleTasksForDay(day).length > 0) && (
+                        <button
+                          onClick={() => router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border-2 border-dashed text-[11px] font-medium transition-colors",
+                            "border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-600 hover:bg-red-50",
+                            "dark:border-gray-700 dark:text-gray-600 dark:hover:border-red-800 dark:hover:text-red-400 dark:hover:bg-red-950/20"
+                          )}
+                        >
+                          <Plus className="h-3 w-3" />
+                          Zlecenie
+                        </button>
+                      )}
+                      {!isLoading && resolvedUserId && (
+                        <button
+                          onClick={() => { setTaskModalDay(day); setTaskTitle(""); setTaskNote(""); }}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border-2 border-dashed text-[11px] font-medium transition-colors",
+                            "border-gray-200 text-gray-400 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50",
+                            "dark:border-gray-700 dark:text-gray-600 dark:hover:border-blue-700 dark:hover:text-blue-400 dark:hover:bg-blue-950/20"
+                          )}
+                        >
+                          <CheckSquare className="h-3 w-3" />
+                          Zadanie
+                        </button>
+                      )}
                     </div>
 
-                    {/* Bottom action buttons */}
-                    {!isLoading && (
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {dayOrders.length > 0 && (
-                          <button
-                            onClick={() => router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)}
-                            className="flex items-center gap-0.5 text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Zlecenie
-                          </button>
-                        )}
-                        {resolvedUserId && (
-                          <button
-                            onClick={() => { setTaskModalDay(day); setTaskTitle(""); setTaskNote(""); }}
-                            className="flex items-center gap-0.5 text-[10px] text-blue-400 dark:text-blue-500 hover:text-blue-600 dark:hover:text-blue-300 px-1.5 py-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Zadanie
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 );
               })}
