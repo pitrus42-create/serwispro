@@ -21,6 +21,7 @@ import {
   Download,
   FilePlus,
   ImageIcon,
+  Upload,
   X,
   CheckCircle2,
   UserPlus,
@@ -188,7 +189,7 @@ interface Order {
     notes: string | null;
     stockItem: { name: string; unit: string } | null;
   }>;
-  attachments: Array<{ id: string; fileName: string; fileUrl: string; uploadedAt: string }>;
+  attachments: Array<{ id: string; fileName: string | null; fileUrl: string; mimeType: string | null; uploadedAt: string }>;
   activityLog: ActivityLog[];
   protocols: Protocol[];
 }
@@ -690,6 +691,37 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       toast.success("Materiał usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const uploadAttachmentsMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const formData = new FormData();
+      for (const file of files) {
+        const compressed = file.type.startsWith("image/") ? await compressImage(file) : file;
+        formData.append("files", compressed);
+      }
+      const r = await fetch(`/api/orders/${id}/attachments`, { method: "POST", body: formData });
+      if (!r.ok) throw new Error("Błąd wgrywania plików");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Pliki wgrane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (attId: string) => {
+      const r = await fetch(`/api/orders/${id}/attachments/${attId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Błąd usuwania pliku");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Plik usunięty");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -1860,30 +1892,79 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
         {/* Attachments tab */}
         <TabsContent value="attachments">
+          {/* Upload bar */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm text-gray-500">
+              {order.attachments.length > 0 ? `${order.attachments.length} plików` : "Brak załączników"}
+            </span>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                multiple
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                className="hidden"
+                disabled={uploadAttachmentsMutation.isPending}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length) await uploadAttachmentsMutation.mutateAsync(files);
+                  e.target.value = "";
+                }}
+              />
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                uploadAttachmentsMutation.isPending
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 cursor-pointer"
+              }`}>
+                <Upload className="h-3.5 w-3.5" />
+                {uploadAttachmentsMutation.isPending ? "Wgrywanie..." : "Dodaj zdjęcia / pliki"}
+              </span>
+            </label>
+          </div>
+
           {order.attachments.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
               <Paperclip className="h-10 w-10 mx-auto mb-2 opacity-30" />
-              <p>Brak załączników</p>
+              <p className="text-sm">Brak załączników</p>
+              <p className="text-xs mt-1 opacity-70">Kliknij „Dodaj zdjęcia / pliki" powyżej</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {order.attachments.map((att) => (
-                <a
-                  key={att.id}
-                  href={att.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 bg-white rounded-xl border p-3 hover:bg-gray-50 transition-colors"
-                >
-                  <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{att.fileName}</p>
-                    <p className="text-xs text-gray-400">
-                      {format(new Date(att.uploadedAt), "d MMM yyyy", { locale: pl })}
-                    </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {order.attachments.map((att) => {
+                const isImage = att.mimeType?.startsWith("image/");
+                return (
+                  <div key={att.id} className="relative group rounded-xl border overflow-hidden bg-white">
+                    {isImage ? (
+                      <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={att.fileUrl}
+                          alt={att.fileName ?? "zdjęcie"}
+                          className="w-full h-32 object-cover"
+                        />
+                      </a>
+                    ) : (
+                      <a
+                        href={att.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center justify-center h-32 p-3 hover:bg-gray-50 transition-colors"
+                      >
+                        <Paperclip className="h-8 w-8 text-gray-300 mb-2" />
+                        <p className="text-xs text-gray-600 truncate w-full text-center">{att.fileName}</p>
+                      </a>
+                    )}
+                    <button
+                      onClick={() => deleteAttachmentMutation.mutate(att.id)}
+                      disabled={deleteAttachmentMutation.isPending}
+                      className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                      title="Usuń plik"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <p className="text-[10px] text-gray-400 px-2 pb-2 truncate">{att.fileName}</p>
                   </div>
-                </a>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>

@@ -8,7 +8,7 @@ import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, end
 import { pl } from "date-fns/locale";
 import {
   Plus, Search, Filter, AlertTriangle, Clock, ChevronRight, X, SlidersHorizontal,
-  UserPlus, CheckCircle, Banknote, CircleDollarSign,
+  UserPlus, CheckCircle, Banknote, CircleDollarSign, StickyNote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,6 +105,7 @@ interface Order {
   isSettled: boolean;
   title: string | null;
   scheduledAt: string | null;
+  internalNotes: string | null;
   client: { name: string | null } | null;
   location: { name: string; address: string | null } | null;
   assignments: OrderAssignment[];
@@ -507,6 +508,15 @@ export default function OrdersPage() {
                         <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
                           <CheckCircle className="h-3 w-3" />
                           Rozliczone
+                        </span>
+                      )}
+                      {order.internalNotes && (
+                        <span
+                          title={order.internalNotes}
+                          className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium"
+                        >
+                          <StickyNote className="h-3 w-3" />
+                          Notatka
                         </span>
                       )}
                     </div>
