@@ -56,12 +56,13 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 type DatePreset = "all" | "today" | "week" | "month";
-type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA";
+type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAPLANOWANE" | "ZAKONCZONE" | "DO_ROZLICZENIA";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "OCZEKUJACE", label: "Oczekujące" },
   { key: "PRZYJETE", label: "Przyjęte" },
   { key: "W_TOKU", label: "W toku" },
+  { key: "ZAPLANOWANE", label: "Zaplanowane" },
   { key: "ZAKONCZONE", label: "Zakończone" },
   { key: "all", label: "Wszystkie" },
 ];
