@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { pl } from "date-fns/locale";
@@ -137,6 +137,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 
 export default function OrdersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const canCreateOrders = canDo(session?.user, "orders:create");
@@ -147,9 +148,22 @@ export default function OrdersPage() {
     (session.user as { role?: string }).role === "ADMIN"
   );
 
-  const [activeTab, setActiveTab] = useState<TabKey>("OCZEKUJACE");
+  const urlType = searchParams.get("type") ?? "all";
+  const urlStatuses = (searchParams.get("status") ?? "").split(",").filter(Boolean);
+  const urlTab: TabKey =
+    urlStatuses.length === 1 && (urlStatuses[0] as TabKey) in STATUS_LABELS
+      ? (urlStatuses[0] as TabKey)
+      : urlStatuses.length > 1
+      ? "all"
+      : "OCZEKUJACE";
+
+  const [activeTab, setActiveTab] = useState<TabKey>(urlTab);
+  // multi-status filter from URL, cleared when user manually picks a tab
+  const [statusesFromUrl, setStatusesFromUrl] = useState<string[]>(
+    urlStatuses.length > 1 ? urlStatuses : []
+  );
   const [search, setSearch] = useState("");
-  const [type, setType] = useState("all");
+  const [type, setType] = useState(urlType);
   const [priority, setPriority] = useState("all");
   const [userId, setUserId] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -171,6 +185,8 @@ export default function OrdersPage() {
     params.settled = "false";
   } else if (activeTab !== "all") {
     params.status = activeTab;
+  } else if (statusesFromUrl.length > 0) {
+    params.status = statusesFromUrl.join(",");
   }
   if (type !== "all") params.type = type;
   if (priority !== "all") params.priority = priority;
@@ -237,7 +253,7 @@ export default function OrdersPage() {
 
   function clearAll() {
     setSearch(""); setType("all"); setPriority("all");
-    setUserId("all"); setDatePreset("all"); setPage(1);
+    setUserId("all"); setDatePreset("all"); setStatusesFromUrl([]); setPage(1);
   }
 
   const tabs = canSettle
@@ -269,7 +285,7 @@ export default function OrdersPage() {
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setPage(1); }}
+            onClick={() => { setActiveTab(tab.key); setStatusesFromUrl([]); setPage(1); }}
             className={cn(
               "relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
               activeTab === tab.key
