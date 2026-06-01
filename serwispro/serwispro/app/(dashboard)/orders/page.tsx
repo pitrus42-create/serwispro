@@ -167,7 +167,8 @@ export default function OrdersPage() {
   const [type, setType] = useState(urlType);
   const [priority, setPriority] = useState("all");
   const [userId, setUserId] = useState("all");
-  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const urlDatePreset = (searchParams.get("datePreset") as DatePreset | null) ?? "all";
+  const [datePreset, setDatePreset] = useState<DatePreset>(urlDatePreset);
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
