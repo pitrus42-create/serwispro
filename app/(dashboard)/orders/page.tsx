@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { pl } from "date-fns/locale";
@@ -147,8 +147,9 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function OrdersPage() {
+function OrdersPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const canCreateOrders = canDo(session?.user, "orders:create");
@@ -159,9 +160,20 @@ export default function OrdersPage() {
     (session.user as { role?: string }).role === "ADMIN"
   );
 
-  const [activeTab, setActiveTab] = useState<TabKey>("BEZ_TERMINU");
+  // Derive initial state from URL params (links from Dashboard cards)
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    if (searchParams.get("overdue") === "true") return "all";
+    if (searchParams.get("critical") === "true") return "all";
+    const statusParam = searchParams.get("status");
+    if (statusParam && statusParam.includes(",")) return "all"; // multiple statuses → show all
+    if (statusParam === "ZAKONCZONE") return "ZAKONCZONE";
+    if (searchParams.get("settled") === "false") return "DO_ROZLICZENIA";
+    if (searchParams.get("pending") === "true") return "BEZ_TERMINU";
+    if (searchParams.get("planned") === "true") return "ZAPLANOWANE_ALL";
+    return "BEZ_TERMINU";
+  });
   const [search, setSearch] = useState("");
-  const [type, setType] = useState("all");
+  const [type, setType] = useState(() => searchParams.get("type") ?? "all");
   const [priority, setPriority] = useState("all");
   const [userId, setUserId] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -646,5 +658,13 @@ export default function OrdersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense>
+      <OrdersPageContent />
+    </Suspense>
   );
 }
