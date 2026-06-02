@@ -170,6 +170,8 @@ function OrdersContent() {
   );
 
   // Filters derived directly from URL — always in sync, no useState/useEffect needed
+  const type = searchParams.get("type") ?? "all";
+  const datePreset = (searchParams.get("datePreset") as DatePreset) ?? "all";
   const tabParam = searchParams.get("tab") as TabKey | null;
   const urlStatuses = (searchParams.get("status") ?? "").split(",").filter(Boolean);
   const activeTab: TabKey =
@@ -180,8 +182,6 @@ function OrdersContent() {
       : type === "AWARIA"
       ? "ZAPLANOWANE"
       : "OCZEKUJACE";
-  const type = searchParams.get("type") ?? "all";
-  const datePreset = (searchParams.get("datePreset") as DatePreset) ?? "all";
 
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState("all");
