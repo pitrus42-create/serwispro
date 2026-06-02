@@ -272,3 +272,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   secret: process.env.NEXTAUTH_SECRET,
 });
+
+// Alias for route handlers — NextAuth v5 uses auth() universally
+export const getAuth = auth;
