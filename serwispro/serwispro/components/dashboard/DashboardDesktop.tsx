@@ -132,7 +132,7 @@ export function DashboardDesktop({
           value={d.openAlerts}
           icon={Flame}
           color="bg-orange-100 text-orange-900"
-          href="/orders?type=AWARIA&status=ZAPLANOWANE&datePreset=week"
+          href="/orders?type=AWARIA&tab=ZAPLANOWANE&datePreset=week"
         />
         <StatCard
           title="Zadania dziś"

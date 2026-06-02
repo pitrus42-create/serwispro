@@ -170,12 +170,13 @@ function OrdersContent() {
   );
 
   // Filters derived directly from URL — always in sync, no useState/useEffect needed
+  const tabParam = searchParams.get("tab") as TabKey | null;
   const urlStatuses = (searchParams.get("status") ?? "").split(",").filter(Boolean);
   const activeTab: TabKey =
-    urlStatuses.length === 1 && (urlStatuses[0] as TabKey) in STATUS_LABELS
+    tabParam && (tabParam in STATUS_LABELS || tabParam === "all" || tabParam === "DO_ROZLICZENIA")
+      ? tabParam
+      : urlStatuses.length === 1 && (urlStatuses[0] as TabKey) in STATUS_LABELS
       ? (urlStatuses[0] as TabKey)
-      : urlStatuses.length > 1
-      ? "all"
       : "OCZEKUJACE";
   const type = searchParams.get("type") ?? "all";
   const datePreset = (searchParams.get("datePreset") as DatePreset) ?? "all";
@@ -275,7 +276,7 @@ function OrdersContent() {
 
   function clearAll() {
     setSearch(""); setPriority("all"); setUserId("all"); setPage(1);
-    updateFilters({ type: null, status: null, settled: null, datePreset: null });
+    updateFilters({ tab: null, type: null, status: null, settled: null, datePreset: null });
   }
 
   const tabs = canSettle
@@ -313,9 +314,12 @@ function OrdersContent() {
             key={tab.key}
             onClick={() => {
               setPage(1);
-              if (tab.key === "all") updateFilters({ status: null, settled: null });
-              else if (tab.key === "DO_ROZLICZENIA") updateFilters({ status: null, settled: "false" });
-              else updateFilters({ status: tab.key, settled: null });
+              if (tab.key === "all")
+                updateFilters({ tab: "all", status: null, settled: null });
+              else if (tab.key === "DO_ROZLICZENIA")
+                updateFilters({ tab: "DO_ROZLICZENIA", status: null, settled: "false" });
+              else
+                updateFilters({ tab: tab.key, status: tab.key, settled: null });
             }}
             className={cn(
               "relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
