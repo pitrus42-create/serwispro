@@ -278,9 +278,13 @@ export default function OrdersPage() {
 
   const tabs = canSettle
     ? [
-        ...TABS.slice(0, 4),
+        { key: "OCZEKUJACE" as TabKey, label: "Oczekujące" },
+        { key: "PRZYJETE" as TabKey, label: "Przyjęte" },
+        { key: "W_TOKU" as TabKey, label: "W toku" },
+        { key: "ZAPLANOWANE" as TabKey, label: "Zaplanowane" },
         { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
-        TABS[4], // "Wszystkie" stays last
+        { key: "ZAKONCZONE" as TabKey, label: "Zakończone" },
+        { key: "all" as TabKey, label: "Wszystkie" },
       ]
     : TABS;
 
