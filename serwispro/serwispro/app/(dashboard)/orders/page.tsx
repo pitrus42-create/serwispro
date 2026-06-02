@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -172,6 +172,24 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Sync state when searchParams change (soft navigation from dashboard)
+  useEffect(() => {
+    const newType = searchParams.get("type") ?? "all";
+    const newStatuses = (searchParams.get("status") ?? "").split(",").filter(Boolean);
+    const newTab: TabKey =
+      newStatuses.length === 1 && (newStatuses[0] as TabKey) in STATUS_LABELS
+        ? (newStatuses[0] as TabKey)
+        : newStatuses.length > 1
+        ? "all"
+        : "OCZEKUJACE";
+    const newDatePreset = (searchParams.get("datePreset") as DatePreset | null) ?? "all";
+    setActiveTab(newTab);
+    setStatusesFromUrl(newStatuses.length > 1 ? newStatuses : []);
+    setType(newType);
+    setDatePreset(newDatePreset);
+    setPage(1);
+  }, [searchParams]);
+
   const { data: usersData } = useQuery({
     queryKey: ["users-list"],
     queryFn: fetchUsers,
@@ -283,7 +301,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto scrollbar-none">
+      <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-none">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -408,12 +426,12 @@ export default function OrdersPage() {
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
+            <div key={i} className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />
           ))}
         </div>
       ) : orders.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <Filter className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
+          <Filter className="h-10 w-10 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
           <p className="font-medium">Brak zleceń</p>
           <p className="text-sm mt-1">Zmień filtry lub utwórz nowe zlecenie</p>
           {activeFilters.length > 0 && (
@@ -435,9 +453,9 @@ export default function OrdersPage() {
               <div
                 key={order.id}
                 className={cn(
-                  "bg-white rounded-lg border p-4 hover:shadow-md transition-shadow",
-                  order.isCritical && "border-red-300 bg-red-50",
-                  isUnsettled && canSettle && "border-amber-300 bg-amber-50"
+                  "bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow",
+                  order.isCritical && "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/60",
+                  isUnsettled && canSettle && "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60"
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -449,14 +467,14 @@ export default function OrdersPage() {
                     onClick={() => router.push(`/orders/${order.id}`)}
                   >
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="text-xs font-mono text-gray-400">{order.orderNumber}</span>
+                      <span className="text-xs font-mono text-gray-400 dark:text-gray-500">{order.orderNumber}</span>
                       <Badge className={cn("text-xs", STATUS_COLORS[order.status])}>
                         {STATUS_LABELS[order.status]}
                       </Badge>
                       <Badge className={cn("text-xs", PRIORITY_COLORS[order.priority])}>
                         {order.priority}
                       </Badge>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">
                         {TYPE_LABELS[order.type] ?? order.type}
                       </span>
                       {isUnassigned && (
@@ -482,10 +500,10 @@ export default function OrdersPage() {
                         </span>
                       )}
                     </div>
-                    <p className="font-medium text-gray-900 truncate">
+                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
                       {order.title ?? order.client?.name ?? `Zlecenie ${order.orderNumber}`}
                     </p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500 dark:text-gray-400">
                       {order.client && <span>{order.client.name}</span>}
                       {order.location && (
                         <span className="truncate">{order.location.address ?? order.location.name}</span>
