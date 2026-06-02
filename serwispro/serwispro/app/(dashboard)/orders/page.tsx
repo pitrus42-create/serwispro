@@ -177,6 +177,8 @@ function OrdersContent() {
       ? tabParam
       : urlStatuses.length === 1 && (urlStatuses[0] as TabKey) in STATUS_LABELS
       ? (urlStatuses[0] as TabKey)
+      : type === "AWARIA"
+      ? "ZAPLANOWANE"
       : "OCZEKUJACE";
   const type = searchParams.get("type") ?? "all";
   const datePreset = (searchParams.get("datePreset") as DatePreset) ?? "all";
@@ -279,24 +281,31 @@ function OrdersContent() {
     updateFilters({ tab: null, type: null, status: null, settled: null, datePreset: null });
   }
 
-  const tabs = canSettle
-    ? [
-        { key: "OCZEKUJACE" as TabKey, label: "Oczekujące" },
-        { key: "PRZYJETE" as TabKey, label: "Przyjęte" },
-        { key: "W_TOKU" as TabKey, label: "W toku" },
-        { key: "ZAPLANOWANE" as TabKey, label: "Zaplanowane" },
-        { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
-        { key: "ZAKONCZONE" as TabKey, label: "Zakończone" },
-        { key: "all" as TabKey, label: "Wszystkie" },
-      ]
-    : TABS;
+  const tabs =
+    type === "AWARIA"
+      ? [
+          { key: "OCZEKUJACE" as TabKey, label: "Oczekujące" },
+          { key: "ZAPLANOWANE" as TabKey, label: "Zaplanowane" },
+          { key: "ZAKONCZONE" as TabKey, label: "Zakończone" },
+        ]
+      : canSettle
+      ? [
+          { key: "OCZEKUJACE" as TabKey, label: "Oczekujące" },
+          { key: "PRZYJETE" as TabKey, label: "Przyjęte" },
+          { key: "W_TOKU" as TabKey, label: "W toku" },
+          { key: "ZAPLANOWANE" as TabKey, label: "Zaplanowane" },
+          { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
+          { key: "ZAKONCZONE" as TabKey, label: "Zakończone" },
+          { key: "all" as TabKey, label: "Wszystkie" },
+        ]
+      : TABS;
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Zlecenia</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{type === "AWARIA" ? "Awarie" : "Zlecenia"}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{total} zleceń</p>
         </div>
         {canCreateOrders && (

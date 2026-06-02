@@ -128,11 +128,11 @@ export function DashboardDesktop({
           }
         />
         <StatCard
-          title="Otwarte awarie"
+          title="Awarie"
           value={d.openAlerts}
           icon={Flame}
           color="bg-orange-100 text-orange-900"
-          href="/orders?type=AWARIA&tab=ZAPLANOWANE&datePreset=week"
+          href="/orders?type=AWARIA"
         />
         <StatCard
           title="Zadania dziś"
