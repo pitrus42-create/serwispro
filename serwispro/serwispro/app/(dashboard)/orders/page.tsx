@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -136,7 +136,27 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+function OrdersLoading() {
+  return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
+      <div className="h-8 w-48 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
+      <div className="h-10 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div key={i} className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
 export default function OrdersPage() {
+  return (
+    <Suspense fallback={<OrdersLoading />}>
+      <OrdersContent />
+    </Suspense>
+  );
+}
+
+function OrdersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
