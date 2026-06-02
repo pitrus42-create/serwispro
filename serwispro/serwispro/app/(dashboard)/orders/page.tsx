@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -149,46 +149,28 @@ export default function OrdersPage() {
     (session.user as { role?: string }).role === "ADMIN"
   );
 
-  const urlType = searchParams.get("type") ?? "all";
+  // Filters derived directly from URL — always in sync, no useState/useEffect needed
   const urlStatuses = (searchParams.get("status") ?? "").split(",").filter(Boolean);
-  const urlTab: TabKey =
+  const activeTab: TabKey =
     urlStatuses.length === 1 && (urlStatuses[0] as TabKey) in STATUS_LABELS
       ? (urlStatuses[0] as TabKey)
       : urlStatuses.length > 1
       ? "all"
       : "OCZEKUJACE";
+  const type = searchParams.get("type") ?? "all";
+  const datePreset = (searchParams.get("datePreset") as DatePreset) ?? "all";
 
-  const [activeTab, setActiveTab] = useState<TabKey>(urlTab);
-  // multi-status filter from URL, cleared when user manually picks a tab
-  const [statusesFromUrl, setStatusesFromUrl] = useState<string[]>(
-    urlStatuses.length > 1 ? urlStatuses : []
-  );
   const [search, setSearch] = useState("");
-  const [type, setType] = useState(urlType);
   const [priority, setPriority] = useState("all");
   const [userId, setUserId] = useState("all");
-  const urlDatePreset = (searchParams.get("datePreset") as DatePreset | null) ?? "all";
-  const [datePreset, setDatePreset] = useState<DatePreset>(urlDatePreset);
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Sync state when searchParams change (soft navigation from dashboard)
-  useEffect(() => {
-    const newType = searchParams.get("type") ?? "all";
-    const newStatuses = (searchParams.get("status") ?? "").split(",").filter(Boolean);
-    const newTab: TabKey =
-      newStatuses.length === 1 && (newStatuses[0] as TabKey) in STATUS_LABELS
-        ? (newStatuses[0] as TabKey)
-        : newStatuses.length > 1
-        ? "all"
-        : "OCZEKUJACE";
-    const newDatePreset = (searchParams.get("datePreset") as DatePreset | null) ?? "all";
-    setActiveTab(newTab);
-    setStatusesFromUrl(newStatuses.length > 1 ? newStatuses : []);
-    setType(newType);
-    setDatePreset(newDatePreset);
-    setPage(1);
-  }, [searchParams]);
+  function updateFilters(updates: Record<string, string | null>) {
+    const p = new URLSearchParams(searchParams.toString());
+    Object.entries(updates).forEach(([k, v]) => v === null ? p.delete(k) : p.set(k, v));
+    router.replace(`/orders?${p.toString()}`);
+  }
 
   const { data: usersData } = useQuery({
     queryKey: ["users-list"],
@@ -205,8 +187,8 @@ export default function OrdersPage() {
     params.settled = "false";
   } else if (activeTab !== "all") {
     params.status = activeTab;
-  } else if (statusesFromUrl.length > 0) {
-    params.status = statusesFromUrl.join(",");
+  } else if (urlStatuses.length > 0) {
+    params.status = urlStatuses.join(",");
   }
   if (type !== "all") params.type = type;
   if (priority !== "all") params.priority = priority;
@@ -260,7 +242,7 @@ export default function OrdersPage() {
   const unsettledCount: number = unsettledData?.total ?? 0;
 
   const activeFilters: { label: string; clear: () => void }[] = [];
-  if (type !== "all") activeFilters.push({ label: TYPE_LABELS[type] ?? type, clear: () => { setType("all"); setPage(1); } });
+  if (type !== "all") activeFilters.push({ label: TYPE_LABELS[type] ?? type, clear: () => { updateFilters({ type: null }); setPage(1); } });
   if (priority !== "all") activeFilters.push({ label: priority, clear: () => { setPriority("all"); setPage(1); } });
   if (userId !== "all") {
     const u = users.find((u) => u.id === userId);
@@ -268,12 +250,12 @@ export default function OrdersPage() {
   }
   if (datePreset !== "all") {
     const labels: Record<DatePreset, string> = { all: "", today: "Dziś", week: "Ten tydzień", month: "Ten miesiąc" };
-    activeFilters.push({ label: labels[datePreset], clear: () => { setDatePreset("all"); setPage(1); } });
+    activeFilters.push({ label: labels[datePreset], clear: () => { updateFilters({ datePreset: null }); setPage(1); } });
   }
 
   function clearAll() {
-    setSearch(""); setType("all"); setPriority("all");
-    setUserId("all"); setDatePreset("all"); setStatusesFromUrl([]); setPage(1);
+    setSearch(""); setPriority("all"); setUserId("all"); setPage(1);
+    updateFilters({ type: null, status: null, settled: null, datePreset: null });
   }
 
   const tabs = canSettle
@@ -309,7 +291,12 @@ export default function OrdersPage() {
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setStatusesFromUrl([]); setPage(1); }}
+            onClick={() => {
+              setPage(1);
+              if (tab.key === "all") updateFilters({ status: null, settled: null });
+              else if (tab.key === "DO_ROZLICZENIA") updateFilters({ status: null, settled: "false" });
+              else updateFilters({ status: tab.key, settled: null });
+            }}
             className={cn(
               "relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
               activeTab === tab.key
@@ -359,7 +346,7 @@ export default function OrdersPage() {
         "md:flex flex-col sm:flex-row gap-3 mb-3",
         filtersOpen ? "flex" : "hidden"
       )}>
-        <Select value={type} onValueChange={(v) => { setType(v); setPage(1); }}>
+        <Select value={type} onValueChange={(v) => { updateFilters({ type: v === "all" ? null : v }); setPage(1); }}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Typ" />
           </SelectTrigger>
@@ -398,7 +385,7 @@ export default function OrdersPage() {
           </SelectContent>
         </Select>
 
-        <Select value={datePreset} onValueChange={(v) => { setDatePreset(v as DatePreset); setPage(1); }}>
+        <Select value={datePreset} onValueChange={(v) => { updateFilters({ datePreset: v === "all" ? null : v }); setPage(1); }}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Data" />
           </SelectTrigger>
