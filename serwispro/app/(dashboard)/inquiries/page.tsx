@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
   Plus, Search, FileText, Phone, Mail, Image, CheckCircle2, Clock, X,
+  ChevronDown, Copy, ExternalLink, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,6 +158,11 @@ export default function InquiriesPage() {
         </div>
       </div>
 
+      {/* Link do formularza */}
+      <div className="px-4 md:px-6 py-3 border-b border-gray-100">
+        <ClientFormLinkBanner />
+      </div>
+
       {/* Filters */}
       <div className="px-4 md:px-6 py-3 border-b border-gray-100 bg-gray-50">
         <div className="flex gap-2 flex-wrap">
@@ -246,6 +252,78 @@ export default function InquiriesPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── ClientFormLinkBanner ──────────────────────────────────────────────────────
+
+function ClientFormLinkBanner() {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const url = typeof window !== "undefined"
+    ? `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/quote/inquiry`
+    : `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/quote/inquiry`;
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="border border-blue-200 rounded-xl bg-blue-50 overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left"
+      >
+        <span className="text-sm font-medium text-blue-900">
+          📋 Link do formularza dla klienta
+        </span>
+        <ChevronDown className={cn("w-4 h-4 text-blue-600 transition-transform duration-200", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 border-t border-blue-100 pt-3 flex flex-col sm:flex-row gap-4">
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}&bgcolor=eff6ff&color=1e3a5f`}
+            alt="QR kod formularza"
+            className="w-36 h-36 rounded-lg border border-blue-200 shrink-0 mx-auto sm:mx-0"
+          />
+          <div className="flex-1 space-y-2.5">
+            <p className="text-xs text-blue-700">
+              Wyślij ten link klientowi — może wypełnić formularz zapytania bez logowania:
+            </p>
+            <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-3 py-2">
+              <span className="text-xs text-gray-700 truncate flex-1 font-mono">{url}</span>
+              <button
+                onClick={copy}
+                className="shrink-0 text-xs font-medium text-blue-700 hover:text-blue-900 transition-colors"
+              >
+                {copied ? "✓ Skopiowano" : "Kopiuj"}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={copy} className="flex-1 border-blue-200 text-blue-800 hover:bg-blue-100">
+                {copied
+                  ? <><Check className="w-3.5 h-3.5 mr-1.5" />Skopiowano!</>
+                  : <><Copy className="w-3.5 h-3.5 mr-1.5" />Kopiuj link</>
+                }
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 border-blue-200 text-blue-800 hover:bg-blue-100"
+                onClick={() => window.open(url, "_blank")}
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                Otwórz formularz
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
