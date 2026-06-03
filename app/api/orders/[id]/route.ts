@@ -60,6 +60,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   const {
     type, priority, isCritical, clientId, locationId,
     title, description, internalNotes, scheduledAt, scheduledEndAt, dayOrder,
+    estimatedDuration, difficulty,
+    responsibleId,
   } = body;
 
   const updated = await prisma.order.update({
@@ -69,13 +71,15 @@ export async function PUT(req: NextRequest, { params }: Params) {
       ...(priority !== undefined && { priority }),
       ...(isCritical !== undefined && { isCritical }),
       ...(clientId !== undefined && { clientId }),
-      ...(locationId !== undefined && { locationId }),
+      ...(locationId !== undefined && { locationId: locationId || null }),
       ...(title !== undefined && { title }),
       ...(description !== undefined && { description }),
       ...(internalNotes !== undefined && { internalNotes }),
       ...(scheduledAt !== undefined && { scheduledAt: scheduledAt ? new Date(scheduledAt) : null }),
       ...(scheduledEndAt !== undefined && { scheduledEndAt: scheduledEndAt ? new Date(scheduledEndAt) : null }),
       ...(dayOrder !== undefined && { dayOrder }),
+      ...(estimatedDuration !== undefined && { estimatedDuration: estimatedDuration || null }),
+      ...(difficulty !== undefined && { difficulty: difficulty || null }),
     },
     include: {
       client: { select: { name: true } },
@@ -83,14 +87,58 @@ export async function PUT(req: NextRequest, { params }: Params) {
     },
   });
 
+  // Update lead assignment when responsibleId is explicitly provided
+  if (responsibleId !== undefined) {
+    await prisma.orderAssignment.updateMany({
+      where: { orderId: id, isLead: true },
+      data: { isLead: false },
+    });
+    if (responsibleId) {
+      const existing = await prisma.orderAssignment.findUnique({
+        where: { orderId_userId: { orderId: id, userId: responsibleId } },
+      });
+      if (existing) {
+        await prisma.orderAssignment.update({
+          where: { orderId_userId: { orderId: id, userId: responsibleId } },
+          data: { isLead: true },
+        });
+      } else {
+        await prisma.orderAssignment.create({
+          data: { orderId: id, userId: responsibleId, isLead: true },
+        });
+      }
+    }
+  }
+
+  const changedFields = Object.keys(body).filter((k) => k !== "responsibleId");
+  const details: Record<string, unknown> = { fields: changedFields };
+  if (responsibleId !== undefined) details.responsibleId = responsibleId;
+
   await prisma.orderActivityLog.create({
     data: {
       orderId: id,
       userId: session.user.id,
       action: "order_updated",
-      details: JSON.stringify({ fields: Object.keys(body) }),
+      details: JSON.stringify(details),
     },
   });
 
   return NextResponse.json({ data: updated });
+}
+
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const session = await getAuth(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  if (!isAdmin(session.user)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await prisma.order.delete({ where: { id } });
+
+  return NextResponse.json({ success: true });
 }

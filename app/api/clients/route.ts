@@ -62,5 +62,22 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Auto-create default location from client address if provided
+  const trimmedAddress = address?.trim();
+  if (trimmedAddress) {
+    const locationName = name?.trim() || "Adres główny";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma.location.create as any)({
+      data: {
+        clientId: client.id,
+        name: locationName,
+        address: trimmedAddress,
+        city: city?.trim() || null,
+        postalCode: postalCode?.trim() || null,
+        isDefault: true,
+      },
+    });
+  }
+
   return NextResponse.json({ data: client }, { status: 201 });
 }

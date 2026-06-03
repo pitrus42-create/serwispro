@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     where: { ...userFilter, isCritical: true, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } },
   });
   const openAlerts = await prisma.order.count({
-    where: { ...userFilter, type: "AWARIA", status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } },
+    where: { ...userFilter, type: "AWARIA", status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU", "ZAPLANOWANE"] } },
   });
   const overdueOrders = await prisma.order.count({
     where: { ...userFilter, scheduledAt: { lt: startOfDay(today) }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } },

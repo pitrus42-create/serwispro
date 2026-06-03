@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     },
     include: {
       client: { select: { name: true } },
+      location: { select: { address: true, city: true } },
       assignments: {
         where: { isLead: true },
         include: { user: { select: { firstName: true, lastName: true } } },
@@ -41,8 +42,42 @@ export async function GET(req: NextRequest) {
     orderBy: { scheduledAt: "asc" },
     take: 10,
   });
-  const highPriorityOrders = await prisma.order.count({
-    where: { ...userFilter, priority: { in: ["WYSOKI", "KRYTYCZNY"] }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] } },
+  const waitingOrders = await prisma.order.count({
+    where: { status: "OCZEKUJACE", scheduledAt: null },
+  });
+  const unsettledOrders = admin
+    ? await prisma.order.count({ where: { status: "ZAKONCZONE", isSettled: false } })
+    : 0;
+  const overdueOrdersList = await prisma.order.findMany({
+    where: {
+      ...userFilter,
+      scheduledAt: { lt: startOfDay(today) },
+      status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU"] },
+    },
+    include: {
+      client: { select: { name: true } },
+      location: { select: { address: true, city: true } },
+      assignments: {
+        where: { isLead: true },
+        include: { user: { select: { firstName: true, lastName: true } } },
+      },
+    },
+    orderBy: { scheduledAt: "asc" },
+    take: 5,
+  });
+  const todaySimpleTasks = await prisma.simpleTask.findMany({
+    where: {
+      isCompleted: false,
+      date: { gte: startOfDay(today), lte: endOfDay(today) },
+      OR: [
+        { assignedUserId: session.user.id },
+        { createdById: session.user.id },
+      ],
+    },
+    include: {
+      assignedUser: { select: { id: true, firstName: true, lastName: true } },
+    },
+    orderBy: [{ dayOrder: "asc" }, { createdAt: "asc" }],
   });
   const pendingMaintenance = admin
     ? await prisma.location.count({
@@ -68,8 +103,11 @@ export async function GET(req: NextRequest) {
     openAlerts,
     overdueOrders,
     todayOrders,
-    highPriorityOrders,
     pendingMaintenance,
+    waitingOrders,
+    unsettledOrders,
+    overdueOrdersList,
+    todaySimpleTasks,
     recentActivity,
   });
   } catch (err) {

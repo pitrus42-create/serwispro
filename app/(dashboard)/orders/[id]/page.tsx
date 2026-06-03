@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useState, useEffect } from "react";
+import React, { use, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -21,6 +21,7 @@ import {
   Download,
   FilePlus,
   ImageIcon,
+  Upload,
   X,
   CheckCircle2,
   UserPlus,
@@ -30,6 +31,8 @@ import {
   List,
   BookOpen,
   Settings2,
+  Search,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +43,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -97,6 +101,18 @@ const TYPE_LABELS: Record<string, string> = {
   INNE: "Inne",
 };
 
+const DURATION_LABELS: Record<string, string> = {
+  "30min": "30 min",
+  "1h": "1 godz.",
+  "2h": "2 godz.",
+  halfday: "Pół dnia",
+  fullday: "Cały dzień",
+  "2days": "2 dni",
+  several: "Kilka dni",
+};
+
+const DIFFICULTY_COLORS = ["", "text-green-500", "text-green-500", "text-yellow-500", "text-orange-500", "text-red-500"];
+
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   OCZEKUJACE: ["PRZYJETE", "ANULOWANE"],
   PRZYJETE: ["W_TOKU", "ZAPLANOWANE", "ANULOWANE"],
@@ -149,7 +165,14 @@ interface Order {
   internalNotes: string | null;
   scheduledAt: string | null;
   scheduledEndAt: string | null;
+  estimatedDuration: string | null;
+  difficulty: number | null;
   completedAt: string | null;
+  isSettled: boolean;
+  settledAt: string | null;
+  settledCost: number | null;
+  settledProfit: number | null;
+  billingNotes: string | null;
   client: { id: string; name: string; phone: string | null; email: string | null } | null;
   location: { id: string; name: string; address: string | null; city: string | null } | null;
   assignments: Array<{
@@ -166,7 +189,7 @@ interface Order {
     notes: string | null;
     stockItem: { name: string; unit: string } | null;
   }>;
-  attachments: Array<{ id: string; fileName: string; fileUrl: string; uploadedAt: string }>;
+  attachments: Array<{ id: string; fileName: string | null; fileUrl: string; mimeType: string | null; uploadedAt: string }>;
   activityLog: ActivityLog[];
   protocols: Protocol[];
 }
@@ -258,6 +281,121 @@ function RichTextarea({
   );
 }
 
+interface EditClient { id: string; name: string | null; alias: string | null; phone: string | null; }
+
+function EditClientSearch({
+  value,
+  onChange,
+  initialClient,
+}: {
+  value: string | undefined;
+  onChange: (clientId: string | undefined, client: EditClient | undefined) => void;
+  initialClient?: EditClient;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<EditClient[]>([]);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<EditClient | undefined>(initialClient);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSelected(initialClient);
+  }, [initialClient]);
+
+  useEffect(() => {
+    const down = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", down);
+    return () => document.removeEventListener("mousedown", down);
+  }, []);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); setOpen(false); return; }
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/clients?q=${encodeURIComponent(query)}&limit=8`);
+        const d = await r.json();
+        setResults(d.data ?? []);
+        setOpen(true);
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function select(c: EditClient) {
+    setSelected(c);
+    setQuery("");
+    setOpen(false);
+    onChange(c.id, c);
+  }
+
+  function clear() {
+    setSelected(undefined);
+    setQuery("");
+    onChange(undefined, undefined);
+  }
+
+  function clientLabel(c: EditClient) {
+    const parts = [c.name, c.alias].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "Klient bez nazwy";
+  }
+
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-gray-50">
+        <div>
+          <p className="text-sm font-medium text-gray-900">{clientLabel(selected)}</p>
+          {selected.phone && <p className="text-xs text-gray-500">{selected.phone}</p>}
+        </div>
+        <button type="button" onClick={clear} className="text-gray-400 hover:text-gray-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="Szukaj po nazwie, telefonie, pseudonimie..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="pl-9"
+          autoComplete="off"
+        />
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {loading ? (
+            <div className="px-3 py-2 text-sm text-gray-500">Szukam...</div>
+          ) : results.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">Brak wyników</div>
+          ) : (
+            results.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => select(c)}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-sm font-medium text-gray-900">{clientLabel(c)}</p>
+                {c.phone && <p className="text-xs text-gray-500">{c.phone}</p>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -307,6 +445,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [assignEditing, setAssignEditing] = useState(false);
   const [assignAddId, setAssignAddId] = useState("none");
   const [assignAddLead, setAssignAddLead] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editForm, setEditForm] = useState({
+    type: "", priority: "", isCritical: false,
+    title: "", description: "", internalNotes: "",
+    scheduledAt: "", scheduledEndAt: "",
+    estimatedDuration: "" as string | undefined,
+    difficulty: undefined as number | undefined,
+    clientId: "" as string | undefined,
+    locationId: "" as string | undefined,
+    responsibleId: "",
+  });
+  const [editLocations, setEditLocations] = useState<Array<{ id: string; name: string; address: string | null }>>([]);
+  const [editClient, setEditClient] = useState<{ id: string; name: string | null; alias: string | null; phone: string | null } | undefined>();
+  const [editBillingOpen, setEditBillingOpen] = useState(false);
+  const [editBillingCost, setEditBillingCost] = useState("");
+  const [editBillingProfit, setEditBillingProfit] = useState("");
+  const [editBillingNotes, setEditBillingNotes] = useState("");
+  const [serviceNote, setServiceNote] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["order", id],
@@ -326,6 +483,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.scheduledAt]);
 
+  useEffect(() => {
+    setServiceNote(order?.internalNotes ?? "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.internalNotes]);
+
+  useEffect(() => {
+    if (!editForm.clientId) { setEditLocations([]); return; }
+    fetch(`/api/clients/${editForm.clientId}/locations`)
+      .then(r => r.json())
+      .then(d => setEditLocations(d.data ?? []))
+      .catch(() => setEditLocations([]));
+  }, [editForm.clientId]);
+
   const statusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
       const r = await fetch(`/api/orders/${id}/status`, {
@@ -339,6 +509,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: (_, newStatus) => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
       toast.success(`Status zmieniony na: ${STATUS_LABELS[newStatus]}`);
     },
     onError: () => toast.error("Błąd zmiany statusu"),
@@ -357,11 +528,36 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["order", id] }),
   });
 
+  const [acceptDialogOpen, setAcceptDialogOpen] = useState(false);
+  const [acceptDate, setAcceptDate] = useState("");
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+
+  const rescheduleMutation = useMutation({
+    mutationFn: async (scheduledAt: string | null) => {
+      const r = await fetch(`/api/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: scheduledAt || null }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      setRescheduleOpen(false);
+      toast.success("Termin zaktualizowany");
+    },
+    onError: () => toast.error("Błąd aktualizacji terminu"),
+  });
+
   const acceptMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (scheduledAt: string | null) => {
       const r = await fetch(`/api/orders/${id}/accept`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt: scheduledAt || null }),
       });
       if (!r.ok) throw new Error("Błąd przyjęcia zlecenia");
       return r.json();
@@ -369,6 +565,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      setAcceptDialogOpen(false);
       toast.success("Zlecenie przyjęte — jesteś teraz przypisanym serwisantem");
     },
     onError: () => toast.error("Błąd przyjęcia zlecenia"),
@@ -503,6 +701,54 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const uploadAttachmentsMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const formData = new FormData();
+      for (const file of files) {
+        const compressed = file.type.startsWith("image/") ? await compressImage(file) : file;
+        formData.append("files", compressed);
+      }
+      const r = await fetch(`/api/orders/${id}/attachments`, { method: "POST", body: formData });
+      if (!r.ok) throw new Error("Błąd wgrywania plików");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Pliki wgrane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: async (attId: string) => {
+      const r = await fetch(`/api/orders/${id}/attachments/${attId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Błąd usuwania pliku");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Plik usunięty");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveServiceNoteMutation = useMutation({
+    mutationFn: async (note: string) => {
+      const r = await fetch(`/api/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ internalNotes: note }),
+      });
+      if (!r.ok) throw new Error("Błąd zapisu notatki");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      toast.success("Notatka zapisana");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const { data: usersData } = useQuery({
     queryKey: ["users-list"],
     queryFn: async () => {
@@ -552,6 +798,116 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteOrderMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}`, { method: "DELETE" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error ?? "Błąd usuwania zlecenia");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Zlecenie usunięte");
+      router.push("/orders");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveEditMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editForm.type,
+          priority: editForm.priority,
+          isCritical: editForm.isCritical,
+          clientId: editForm.clientId || null,
+          locationId: editForm.locationId || null,
+          title: editForm.title || null,
+          description: editForm.description || null,
+          internalNotes: editForm.internalNotes || null,
+          scheduledAt: editForm.scheduledAt || null,
+          scheduledEndAt: editForm.scheduledEndAt || null,
+          estimatedDuration: editForm.estimatedDuration || null,
+          difficulty: editForm.difficulty ?? null,
+          responsibleId: editForm.responsibleId || null,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error ?? "Błąd zapisywania");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      setEditingOrder(false);
+      toast.success("Zlecenie zaktualizowane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateBillingMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/orders/${id}/settle`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settledCost: editBillingCost !== "" ? editBillingCost : null,
+          settledProfit: editBillingProfit !== "" ? editBillingProfit : null,
+          billingNotes: editBillingNotes || null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd aktualizacji rozliczenia");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setEditBillingOpen(false);
+      toast.success("Rozliczenie zaktualizowane");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  function openEditBilling() {
+    if (!order) return;
+    setEditBillingCost(order.settledCost != null ? String(order.settledCost) : "");
+    setEditBillingProfit(order.settledProfit != null ? String(order.settledProfit) : "");
+    setEditBillingNotes(order.billingNotes ?? "");
+    setEditBillingOpen(true);
+  }
+
+  function startEditing() {
+    if (!order) return;
+    const lead = order.assignments.find(a => a.isLead);
+    setEditForm({
+      type: order.type,
+      priority: order.priority,
+      isCritical: order.isCritical,
+      title: order.title ?? "",
+      description: order.description ?? "",
+      internalNotes: order.internalNotes ?? "",
+      scheduledAt: order.scheduledAt ? new Date(order.scheduledAt).toISOString().slice(0, 16) : "",
+      scheduledEndAt: order.scheduledEndAt ? new Date(order.scheduledEndAt).toISOString().slice(0, 16) : "",
+      estimatedDuration: order.estimatedDuration ?? undefined,
+      difficulty: order.difficulty ?? undefined,
+      clientId: order.client?.id ?? undefined,
+      locationId: order.location?.id ?? undefined,
+      responsibleId: lead?.user.id ?? "",
+    });
+    if (order.client) {
+      setEditClient({ id: order.client.id, name: order.client.name, alias: null, phone: order.client.phone });
+    } else {
+      setEditClient(undefined);
+    }
+    setEditingOrder(true);
+  }
+
   function handleApplyTemplate(text: string, checklist: ChecklistItem[], notes: string) {
     const data: WorkDescriptionData = {
       type: "workDescription",
@@ -590,12 +946,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const nextStatuses = STATUS_TRANSITIONS[order.status] ?? [];
   const canCreate = canDo(session?.user, "orders:create");
   const canDeleteProtocol = isAdmin(session?.user);
+  const userRoles = (session?.user?.roles as string[]) ?? [];
+  const canSettle = isAdmin(session?.user) || userRoles.includes("MENEDZER");
   const isAssignedToMe = order.assignments.some((a) => a.user.id === session?.user?.id);
   const isUnassigned = order.assignments.length === 0;
   // Can close: roles with orders:close permission OR serwisant assigned to this order
   const canClose = canDo(session?.user, "orders:close") || (isAssignedToMe && !canCreate);
   const canAccept = !canCreate && (isUnassigned || isAssignedToMe) && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isAssignedToMe;
   const hasProtocol = (order.protocols?.length ?? 0) > 0;
+  const isOverdue =
+    !!order.scheduledAt &&
+    new Date(order.scheduledAt) < new Date() &&
+    !["ZAKONCZONE", "ANULOWANE"].includes(order.status);
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
@@ -627,9 +989,428 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
               {TYPE_LABELS[order.type] ?? order.type}
             </span>
+            {order.estimatedDuration && (
+              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {DURATION_LABELS[order.estimatedDuration] ?? order.estimatedDuration}
+              </span>
+            )}
+            {order.difficulty != null && order.difficulty > 0 && (
+              <span className="flex items-center gap-0.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Star
+                    key={n}
+                    className={cn("h-3.5 w-3.5", n <= order.difficulty! ? DIFFICULTY_COLORS[order.difficulty!] : "text-gray-200")}
+                    fill={n <= order.difficulty! ? "currentColor" : "none"}
+                  />
+                ))}
+              </span>
+            )}
           </div>
         </div>
+        {canCreate && (
+          <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            {order.status !== "ANULOWANE" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={startEditing}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edytuj
+              </Button>
+            )}
+            {isAdmin(session?.user) && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" title="Usuń zlecenie" className="text-gray-400 hover:text-red-500">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Usuń zlecenie?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Ta operacja jest nieodwracalna. Zlecenie {order.orderNumber} oraz wszystkie powiązane dane (materiały, checklist, załączniki) zostaną permanentnie usunięte.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Anuluj</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-red-600 hover:bg-red-700"
+                      onClick={() => deleteOrderMutation.mutate()}
+                      disabled={deleteOrderMutation.isPending}
+                    >
+                      Usuń zlecenie
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Overdue banner */}
+      {isOverdue && !editingOrder && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
+          <AlertTriangle className="text-red-500 shrink-0 h-5 w-5" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-red-800">Zaległe zlecenie</p>
+            <p className="text-sm text-red-600">
+              Planowane na {format(new Date(order.scheduledAt!), "d MMMM yyyy", { locale: pl })} — niezakończone.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-300 text-red-700 hover:bg-red-100"
+              onClick={() => rescheduleMutation.mutate(null)}
+              disabled={rescheduleMutation.isPending}
+            >
+              Przenieś do oczekujących
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => { setRescheduleDate(""); setRescheduleOpen(true); }}
+            >
+              Zmień datę
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule dialog */}
+      {/* Edit billing dialog */}
+      <AlertDialog open={editBillingOpen} onOpenChange={setEditBillingOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edytuj rozliczenie</AlertDialogTitle>
+            <AlertDialogDescription>
+              Zmień kwoty lub uwagi do rozliczenia tego zlecenia.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 my-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Koszt (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={editBillingCost}
+                  onChange={(e) => setEditBillingCost(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Przychód (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={editBillingProfit}
+                  onChange={(e) => setEditBillingProfit(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Uwagi do rozliczenia</Label>
+              <Textarea
+                placeholder="Opcjonalne uwagi..."
+                rows={2}
+                value={editBillingNotes}
+                onChange={(e) => setEditBillingNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700"
+              disabled={updateBillingMutation.isPending}
+              onClick={() => updateBillingMutation.mutate()}
+            >
+              Zapisz
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Zmień datę realizacji</AlertDialogTitle>
+            <AlertDialogDescription>
+              Wybierz nowy termin dla tego zlecenia.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            type="datetime-local"
+            value={rescheduleDate}
+            onChange={(e) => setRescheduleDate(e.target.value)}
+            className="my-2"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => rescheduleMutation.mutate(rescheduleDate || null)}
+              disabled={rescheduleMutation.isPending || !rescheduleDate}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Zapisz termin
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Inline edit panel */}
+      {editingOrder && (
+        <div className="bg-gray-50 border rounded-xl p-5 mb-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">Edytuj zlecenie</h3>
+            <Button size="sm" variant="ghost" onClick={() => setEditingOrder(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Typ zlecenia</Label>
+              <Select value={editForm.type} onValueChange={v => setEditForm(p => ({ ...p, type: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AWARIA">Awaria</SelectItem>
+                  <SelectItem value="KONSERWACJA">Konserwacja</SelectItem>
+                  <SelectItem value="MONTAZ">Montaż</SelectItem>
+                  <SelectItem value="MODERNIZACJA">Modernizacja</SelectItem>
+                  <SelectItem value="INNE">Inne</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Priorytet</Label>
+              <Select value={editForm.priority} onValueChange={v => setEditForm(p => ({ ...p, priority: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NISKI">Niski</SelectItem>
+                  <SelectItem value="NORMALNY">Normalny</SelectItem>
+                  <SelectItem value="WYSOKI">Wysoki</SelectItem>
+                  <SelectItem value="KRYTYCZNY">Krytyczny</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {editForm.type === "AWARIA" && (
+            <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+                <p className="text-sm font-medium text-red-900">Awaria krytyczna</p>
+              </div>
+              <Switch
+                checked={editForm.isCritical}
+                onCheckedChange={v => setEditForm(p => ({ ...p, isCritical: v }))}
+              />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label>Tytuł</Label>
+            <Input
+              value={editForm.title}
+              onChange={e => setEditForm(p => ({ ...p, title: e.target.value }))}
+              placeholder="Krótki opis zlecenia..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Klient</Label>
+            <EditClientSearch
+              value={editForm.clientId}
+              initialClient={editClient}
+              onChange={(clientId, client) => {
+                setEditForm(p => ({ ...p, clientId: clientId ?? undefined, locationId: undefined }));
+                setEditClient(client ?? undefined);
+              }}
+            />
+          </div>
+
+          {editForm.clientId && (
+            <div className="space-y-1.5">
+              <Label>Lokalizacja</Label>
+              <Select
+                value={editForm.locationId ?? "none"}
+                onValueChange={v => setEditForm(p => ({ ...p, locationId: v === "none" ? undefined : v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Wybierz lokalizację..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— brak —</SelectItem>
+                  {editLocations.map(l => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}{l.address ? ` – ${l.address}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Data od</Label>
+              <input
+                type="datetime-local"
+                value={editForm.scheduledAt}
+                onChange={e => setEditForm(p => ({ ...p, scheduledAt: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Data do</Label>
+              <input
+                type="datetime-local"
+                value={editForm.scheduledEndAt}
+                onChange={e => setEditForm(p => ({ ...p, scheduledEndAt: e.target.value }))}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Szacowany czas pracy</Label>
+              <Select
+                value={editForm.estimatedDuration || "none"}
+                onValueChange={v => setEditForm(p => ({ ...p, estimatedDuration: v === "none" ? undefined : v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Wybierz..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— nie określono —</SelectItem>
+                  <SelectItem value="30min">30 minut</SelectItem>
+                  <SelectItem value="1h">1 godzina</SelectItem>
+                  <SelectItem value="2h">2 godziny</SelectItem>
+                  <SelectItem value="halfday">Pół dnia</SelectItem>
+                  <SelectItem value="fullday">Cały dzień</SelectItem>
+                  <SelectItem value="2days">2 dni</SelectItem>
+                  <SelectItem value="several">Kilka dni</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Trudność</Label>
+              <div className="flex gap-1 pt-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setEditForm(p => ({ ...p, difficulty: n === p.difficulty ? undefined : n }))}
+                    className="p-0.5 rounded hover:scale-110 transition-transform"
+                  >
+                    <Star
+                      className={cn("h-5 w-5", n <= (editForm.difficulty ?? 0) ? DIFFICULTY_COLORS[editForm.difficulty!] : "text-gray-200")}
+                      fill={n <= (editForm.difficulty ?? 0) ? "currentColor" : "none"}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Odpowiedzialny serwisant</Label>
+            <Select
+              value={editForm.responsibleId || "none"}
+              onValueChange={v => setEditForm(p => ({ ...p, responsibleId: v === "none" ? "" : v }))}
+            >
+              <SelectTrigger><SelectValue placeholder="Wybierz..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— nieprzypisany —</SelectItem>
+                {allUsers.map(u => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.firstName} {u.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Opis</Label>
+            <Textarea
+              value={editForm.description}
+              onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+              rows={3}
+              placeholder="Dokładny opis zlecenia..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notatki wewnętrzne</Label>
+            <Textarea
+              value={editForm.internalNotes}
+              onChange={e => setEditForm(p => ({ ...p, internalNotes: e.target.value }))}
+              rows={2}
+              placeholder="Widoczne tylko dla zespołu..."
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <Button onClick={() => saveEditMutation.mutate()} disabled={saveEditMutation.isPending}>
+              {saveEditMutation.isPending ? "Zapisywanie..." : "Zapisz zmiany"}
+            </Button>
+            <Button variant="outline" onClick={() => setEditingOrder(false)}>Anuluj</Button>
+          </div>
+        </div>
+      )}
+
+      {/* ANULOWANE banner */}
+      {order.status === "ANULOWANE" && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-red-800">Zlecenie anulowane</p>
+            <p className="text-sm text-red-600 mt-0.5">To zlecenie zostało anulowane i nie jest widoczne w aktywnym kalendarzu.</p>
+          </div>
+          {isAdmin(session?.user) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate("OCZEKUJACE")}
+            >
+              Przywróć zlecenie
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Cancel confirmation dialog */}
+      <AlertDialog open={pendingStatus === "ANULOWANE"} onOpenChange={(open) => { if (!open) setPendingStatus(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Anulować zlecenie?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Czy na pewno chcesz anulować to zlecenie? Zlecenie pozostanie w historii, ale nie będzie widoczne jako aktywne w kalendarzu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingStatus(null)}>Nie, wróć</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={statusMutation.isPending}
+              onClick={() => { statusMutation.mutate("ANULOWANE"); setPendingStatus(null); }}
+            >
+              Tak, anuluj zlecenie
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Accept button for serwisant — unassigned orders */}
       {canAccept && (
@@ -637,7 +1418,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <Button
             className="bg-green-600 hover:bg-green-700 gap-2"
             disabled={acceptMutation.isPending}
-            onClick={() => acceptMutation.mutate()}
+            onClick={() => { setAcceptDate(""); setAcceptDialogOpen(true); }}
           >
             <UserPlus className="h-4 w-4" />
             Przyjmij zlecenie
@@ -645,6 +1426,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <p className="text-xs text-gray-400 mt-1">Zostaniesz przypisany jako serwisant odpowiedzialny</p>
         </div>
       )}
+
+      {/* Accept dialog */}
+      <AlertDialog open={acceptDialogOpen} onOpenChange={setAcceptDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Przyjmij zlecenie</AlertDialogTitle>
+            <AlertDialogDescription>
+              Możesz od razu wybrać datę realizacji, aby zlecenie pojawiło się w kalendarzu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2 space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Data realizacji (opcjonalnie)</label>
+            <input
+              type="date"
+              value={acceptDate}
+              onChange={(e) => setAcceptDate(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+            />
+            <p className="text-xs text-gray-400">Jeżeli nie znasz daty, możesz ją ustawić później.</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700"
+              disabled={acceptMutation.isPending}
+              onClick={() => acceptMutation.mutate(acceptDate || null)}
+            >
+              {acceptMutation.isPending ? "Przyjmowanie..." : "Przyjmij zlecenie"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Status change — show to all except "Zakończone" which serwisant does via protocol */}
       {nextStatuses.length > 0 && (
@@ -657,7 +1470,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 size="sm"
                 variant={s === "ZAKONCZONE" ? "default" : s === "ANULOWANE" ? "destructive" : "outline"}
                 disabled={statusMutation.isPending}
-                onClick={() => statusMutation.mutate(s)}
+                onClick={() => s === "ANULOWANE" ? setPendingStatus("ANULOWANE") : statusMutation.mutate(s)}
               >
                 → {STATUS_LABELS[s]}
               </Button>
@@ -697,6 +1510,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <span className="text-xs bg-red-100 text-red-900 rounded-full px-1.5">
                 {order.protocols.length}
               </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="notes" className="flex items-center gap-1.5">
+            <BookOpen className="h-4 w-4" />
+            <span className="hidden sm:inline">Notatka</span>
+            {order.internalNotes && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
             )}
           </TabsTrigger>
           <TabsTrigger value="log" className="flex items-center gap-1.5">
@@ -768,6 +1588,50 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </p>
               )}
             </div>
+
+            {/* Billing info */}
+            {order.isSettled && (
+              <div className="bg-green-50 rounded-xl border border-green-200 p-4 space-y-2">
+                <h3 className="font-semibold text-green-800 flex items-center gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Rozliczono {order.settledAt ? format(new Date(order.settledAt), "d MMM yyyy", { locale: pl }) : ""}
+                  {canSettle && (
+                    <button
+                      onClick={openEditBilling}
+                      className="ml-auto p-1 rounded hover:bg-green-200 transition-colors text-green-700"
+                      title="Edytuj kwoty rozliczenia"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {order.settledCost != null && (
+                    <div>
+                      <span className="text-green-700 font-medium">Koszt:</span>{" "}
+                      <span className="text-green-900">{order.settledCost.toFixed(2)} zł</span>
+                    </div>
+                  )}
+                  {order.settledProfit != null && (
+                    <div>
+                      <span className="text-green-700 font-medium">Przychód:</span>{" "}
+                      <span className="text-green-900">{order.settledProfit.toFixed(2)} zł</span>
+                    </div>
+                  )}
+                  {order.settledCost != null && order.settledProfit != null && (
+                    <div className="col-span-2">
+                      <span className="text-green-700 font-medium">Zysk:</span>{" "}
+                      <span className={cn("font-semibold", order.settledProfit - order.settledCost >= 0 ? "text-green-900" : "text-red-700")}>
+                        {(order.settledProfit - order.settledCost).toFixed(2)} zł
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {order.billingNotes && (
+                  <p className="text-xs text-green-700 italic">{order.billingNotes}</p>
+                )}
+              </div>
+            )}
 
             {/* Assignees */}
             <div className="bg-white rounded-xl border p-4 space-y-3">
@@ -884,13 +1748,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           )}
 
-          {/* Internal notes */}
-          {order.internalNotes && (
-            <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
-              <h3 className="font-semibold text-amber-800 mb-2">Notatki wewnętrzne</h3>
-              <p className="text-sm text-amber-700 whitespace-pre-wrap">{order.internalNotes}</p>
-            </div>
-          )}
         </TabsContent>
 
         {/* Checklists tab */}
@@ -1058,30 +1915,79 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
         {/* Attachments tab */}
         <TabsContent value="attachments">
+          {/* Upload bar */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm text-gray-500">
+              {order.attachments.length > 0 ? `${order.attachments.length} plików` : "Brak załączników"}
+            </span>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                multiple
+                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                className="hidden"
+                disabled={uploadAttachmentsMutation.isPending}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length) await uploadAttachmentsMutation.mutateAsync(files);
+                  e.target.value = "";
+                }}
+              />
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                uploadAttachmentsMutation.isPending
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 cursor-pointer"
+              }`}>
+                <Upload className="h-3.5 w-3.5" />
+                {uploadAttachmentsMutation.isPending ? "Wgrywanie..." : "Dodaj zdjęcia / pliki"}
+              </span>
+            </label>
+          </div>
+
           {order.attachments.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
               <Paperclip className="h-10 w-10 mx-auto mb-2 opacity-30" />
-              <p>Brak załączników</p>
+              <p className="text-sm">Brak załączników</p>
+              <p className="text-xs mt-1 opacity-70">Kliknij „Dodaj zdjęcia / pliki" powyżej</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {order.attachments.map((att) => (
-                <a
-                  key={att.id}
-                  href={att.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 bg-white rounded-xl border p-3 hover:bg-gray-50 transition-colors"
-                >
-                  <Paperclip className="h-5 w-5 text-gray-400 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{att.fileName}</p>
-                    <p className="text-xs text-gray-400">
-                      {format(new Date(att.uploadedAt), "d MMM yyyy", { locale: pl })}
-                    </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {order.attachments.map((att) => {
+                const isImage = att.mimeType?.startsWith("image/");
+                return (
+                  <div key={att.id} className="relative group rounded-xl border overflow-hidden bg-white">
+                    {isImage ? (
+                      <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={att.fileUrl}
+                          alt={att.fileName ?? "zdjęcie"}
+                          className="w-full h-32 object-cover"
+                        />
+                      </a>
+                    ) : (
+                      <a
+                        href={att.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center justify-center h-32 p-3 hover:bg-gray-50 transition-colors"
+                      >
+                        <Paperclip className="h-8 w-8 text-gray-300 mb-2" />
+                        <p className="text-xs text-gray-600 truncate w-full text-center">{att.fileName}</p>
+                      </a>
+                    )}
+                    <button
+                      onClick={() => deleteAttachmentMutation.mutate(att.id)}
+                      disabled={deleteAttachmentMutation.isPending}
+                      className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                      title="Usuń plik"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <p className="text-[10px] text-gray-400 px-2 pb-2 truncate">{att.fileName}</p>
                   </div>
-                </a>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -1502,6 +2408,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </TabsContent>
 
         {/* Activity log tab */}
+        {/* Service note tab */}
+        <TabsContent value="notes">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen className="h-4 w-4 text-amber-600" />
+              <h3 className="font-semibold text-gray-700 text-sm">Notatka serwisowa</h3>
+              <span className="text-xs text-gray-400">— widoczna tylko dla zespołu, nie trafia do protokołu</span>
+            </div>
+            <Textarea
+              value={serviceNote}
+              onChange={(e) => setServiceNote(e.target.value)}
+              rows={8}
+              placeholder="Wpisz notatkę dla zespołu... np. kod domofonu, informacje o dostępie, uwagi techniczne..."
+              className="resize-none"
+            />
+            <div className="flex items-center justify-between">
+              {order.internalNotes && (
+                <span className="text-xs text-gray-400">
+                  Ostatnia zmiana: {order.internalNotes !== serviceNote ? "niezapisane zmiany" : "zapisano"}
+                </span>
+              )}
+              <Button
+                size="sm"
+                disabled={saveServiceNoteMutation.isPending || serviceNote === (order.internalNotes ?? "")}
+                onClick={() => saveServiceNoteMutation.mutate(serviceNote)}
+                className="ml-auto"
+              >
+                {saveServiceNoteMutation.isPending ? "Zapisywanie..." : "Zapisz notatkę"}
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+
         <TabsContent value="log">
           {order.activityLog.length === 0 ? (
             <div className="text-center py-12 text-gray-400">

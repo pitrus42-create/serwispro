@@ -1,18 +1,30 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
   Plus, Search, Filter, AlertTriangle, Clock, ChevronRight, X, SlidersHorizontal,
-  UserPlus, CheckCircle, Banknote, CircleDollarSign,
+  UserPlus, CheckCircle, Banknote, CircleDollarSign, StickyNote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -56,14 +68,13 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 type DatePreset = "all" | "today" | "week" | "month";
-type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA";
+type TabKey = "all" | "BEZ_TERMINU" | "ZAPLANOWANE_ALL" | "ZAKONCZONE" | "DO_ROZLICZENIA";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "OCZEKUJACE", label: "Oczekujące" },
-  { key: "PRZYJETE", label: "Przyjęte" },
-  { key: "W_TOKU", label: "W toku" },
-  { key: "ZAKONCZONE", label: "Zakończone" },
-  { key: "all", label: "Wszystkie" },
+  { key: "BEZ_TERMINU",     label: "Oczekujące" },
+  { key: "ZAPLANOWANE_ALL", label: "Zaplanowane" },
+  { key: "ZAKONCZONE",      label: "Zakończone" },
+  { key: "all",             label: "Wszystkie" },
 ];
 
 function getDateRange(preset: DatePreset): { dateFrom?: string; dateTo?: string } {
@@ -94,6 +105,7 @@ interface Order {
   isSettled: boolean;
   title: string | null;
   scheduledAt: string | null;
+  internalNotes: string | null;
   client: { name: string | null } | null;
   location: { name: string; address: string | null } | null;
   assignments: OrderAssignment[];
@@ -135,8 +147,9 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function OrdersPage() {
+function OrdersPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const canCreateOrders = canDo(session?.user, "orders:create");
@@ -147,9 +160,20 @@ export default function OrdersPage() {
     (session.user as { role?: string }).role === "ADMIN"
   );
 
-  const [activeTab, setActiveTab] = useState<TabKey>("OCZEKUJACE");
+  // Derive initial state from URL params (links from Dashboard cards)
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    if (searchParams.get("overdue") === "true") return "all";
+    if (searchParams.get("critical") === "true") return "all";
+    const statusParam = searchParams.get("status");
+    if (statusParam && statusParam.includes(",")) return "all"; // multiple statuses → show all
+    if (statusParam === "ZAKONCZONE") return "ZAKONCZONE";
+    if (searchParams.get("settled") === "false") return "DO_ROZLICZENIA";
+    if (searchParams.get("pending") === "true") return "BEZ_TERMINU";
+    if (searchParams.get("planned") === "true") return "ZAPLANOWANE_ALL";
+    return "BEZ_TERMINU";
+  });
   const [search, setSearch] = useState("");
-  const [type, setType] = useState("all");
+  const [type, setType] = useState(() => searchParams.get("type") ?? "all");
   const [priority, setPriority] = useState("all");
   const [userId, setUserId] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -169,6 +193,10 @@ export default function OrdersPage() {
   if (search) params.q = search;
   if (activeTab === "DO_ROZLICZENIA") {
     params.settled = "false";
+  } else if (activeTab === "BEZ_TERMINU") {
+    params.pending = "true";
+  } else if (activeTab === "ZAPLANOWANE_ALL") {
+    params.planned = "true";
   } else if (activeTab === "all") {
     params.status = "OCZEKUJACE,PRZYJETE,W_TOKU,ZAPLANOWANE,ZAKONCZONE";
   } else {
@@ -199,14 +227,30 @@ export default function OrdersPage() {
     onError: () => toast.error("Błąd przyjęcia zlecenia"),
   });
 
+  const [settleDialogOrder, setSettleDialogOrder] = useState<string | null>(null);
+  const [settleCost, setSettleCost] = useState("");
+  const [settleProfit, setSettleProfit] = useState("");
+  const [settleBillingNotes, setSettleBillingNotes] = useState("");
+
   const settleMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const r = await fetch(`/api/orders/${orderId}/settle`, { method: "POST" });
+    mutationFn: async ({ orderId, cost, profit, notes }: { orderId: string; cost: string; profit: string; notes: string }) => {
+      const r = await fetch(`/api/orders/${orderId}/settle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settledCost: cost !== "" ? Number(cost) : undefined,
+          settledProfit: profit !== "" ? Number(profit) : undefined,
+          billingNotes: notes || undefined,
+        }),
+      });
       if (!r.ok) throw new Error("Błąd");
       return r.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders-unsettled-count"] });
+      setSettleDialogOrder(null);
+      setSettleCost(""); setSettleProfit(""); setSettleBillingNotes("");
       toast.success("Zlecenie oznaczone jako rozliczone");
     },
     onError: () => toast.error("Błąd rozliczenia zlecenia"),
@@ -224,6 +268,14 @@ export default function OrdersPage() {
     refetchInterval: 30_000,
   });
   const unsettledCount: number = unsettledData?.total ?? 0;
+
+  // Count orders without date for badge
+  const { data: pendingCountData } = useQuery({
+    queryKey: ["orders-pending-count"],
+    queryFn: () => fetchOrders({ pending: "true", limit: "1" }),
+    refetchInterval: 30_000,
+  });
+  const pendingCount: number = pendingCountData?.total ?? 0;
 
   const activeFilters: { label: string; clear: () => void }[] = [];
   if (type !== "all") activeFilters.push({ label: TYPE_LABELS[type] ?? type, clear: () => { setType("all"); setPage(1); } });
@@ -243,11 +295,7 @@ export default function OrdersPage() {
   }
 
   const tabs = canSettle
-    ? [
-        ...TABS.slice(0, 4),
-        { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
-        TABS[4], // "Wszystkie" stays last
-      ]
+    ? [TABS[0], TABS[1], { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" }, TABS[2], TABS[3]]
     : TABS;
 
   return (
@@ -280,6 +328,11 @@ export default function OrdersPage() {
             )}
           >
             {tab.label}
+            {tab.key === "BEZ_TERMINU" && pendingCount > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-blue-500 text-white rounded-full">
+                {pendingCount > 99 ? "99+" : pendingCount}
+              </span>
+            )}
             {tab.key === "DO_ROZLICZENIA" && unsettledCount > 0 && (
               <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-amber-400 text-amber-900 rounded-full">
                 {unsettledCount > 99 ? "99+" : unsettledCount}
@@ -414,6 +467,9 @@ export default function OrdersPage() {
             const isMyOrder = order.assignments.some((a) => a.user.id === session?.user?.id);
             const canAccept = !canCreateOrders && ["OCZEKUJACE", "PRZYJETE"].includes(order.status) && !isMyOrder;
             const isUnsettled = order.status === "ZAKONCZONE" && !order.isSettled;
+            const isOverdue = !!order.scheduledAt
+              && new Date(order.scheduledAt) < startOfDay(new Date())
+              && !["ZAKONCZONE", "ANULOWANE"].includes(order.status);
 
             return (
               <div
@@ -421,7 +477,8 @@ export default function OrdersPage() {
                 className={cn(
                   "bg-white rounded-lg border p-4 hover:shadow-md transition-shadow",
                   order.isCritical && "border-red-300 bg-red-50",
-                  isUnsettled && canSettle && "border-amber-300 bg-amber-50"
+                  isUnsettled && canSettle && "border-amber-300 bg-amber-50",
+                  isOverdue && !order.isCritical && "border-l-4 border-l-red-400"
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -465,6 +522,15 @@ export default function OrdersPage() {
                           Rozliczone
                         </span>
                       )}
+                      {order.internalNotes && (
+                        <span
+                          title={order.internalNotes}
+                          className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium"
+                        >
+                          <StickyNote className="h-3 w-3" />
+                          Notatka
+                        </span>
+                      )}
                     </div>
                     <p className="font-medium text-gray-900 truncate">
                       {order.title ?? order.client?.name ?? `Zlecenie ${order.orderNumber}`}
@@ -475,9 +541,10 @@ export default function OrdersPage() {
                         <span className="truncate">{order.location.address ?? order.location.name}</span>
                       )}
                       {order.scheduledAt && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
+                        <span className={`flex items-center gap-1 ${isOverdue ? "text-red-500 font-medium" : ""}`}>
+                          <Clock className={`h-3.5 w-3.5 ${isOverdue ? "text-red-500" : ""}`} />
                           {format(new Date(order.scheduledAt), "d MMM, HH:mm", { locale: pl })}
+                          {isOverdue && <span className="text-red-500 text-[10px] font-bold">ZALEGŁE</span>}
                         </span>
                       )}
                       {lead && (
@@ -501,8 +568,7 @@ export default function OrdersPage() {
                       <Button
                         size="sm"
                         className="bg-green-600 hover:bg-green-700 text-white gap-1 text-xs"
-                        disabled={settleMutation.isPending}
-                        onClick={(e) => { e.stopPropagation(); settleMutation.mutate(order.id); }}
+                        onClick={(e) => { e.stopPropagation(); setSettleDialogOrder(order.id); setSettleCost(""); setSettleProfit(""); setSettleBillingNotes(""); }}
                       >
                         <CircleDollarSign className="h-3.5 w-3.5" />
                         Rozlicz
@@ -520,6 +586,63 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* Settle dialog */}
+      <AlertDialog open={!!settleDialogOrder} onOpenChange={(open) => { if (!open) setSettleDialogOrder(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rozlicz zlecenie</AlertDialogTitle>
+            <AlertDialogDescription>
+              Opcjonalnie wpisz koszty i zysk, a następnie oznacz zlecenie jako rozliczone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 my-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Koszt (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={settleCost}
+                  onChange={(e) => setSettleCost(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Przychód (zł)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={settleProfit}
+                  onChange={(e) => setSettleProfit(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Uwagi do rozliczenia</Label>
+              <Textarea
+                placeholder="Opcjonalne uwagi..."
+                rows={2}
+                value={settleBillingNotes}
+                onChange={(e) => setSettleBillingNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700"
+              disabled={settleMutation.isPending}
+              onClick={() => settleDialogOrder && settleMutation.mutate({ orderId: settleDialogOrder, cost: settleCost, profit: settleProfit, notes: settleBillingNotes })}
+            >
+              Oznacz jako rozliczone
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center gap-2 mt-6">
@@ -535,5 +658,13 @@ export default function OrdersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense>
+      <OrdersPageContent />
+    </Suspense>
   );
 }

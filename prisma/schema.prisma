@@ -36,6 +36,8 @@ model User {
   personalNotes       UserNote[]
   personalTasks       UserTask[]
   ordersCreated       Order[]                  @relation("OrderCreatedBy")
+  simpleTasksCreated  SimpleTask[]             @relation("SimpleTaskCreated")
+  simpleTasksAssigned SimpleTask[]             @relation("SimpleTaskAssigned")
   activityLogs        OrderActivityLog[]
   orderAssignments    OrderAssignment[]
   attachmentsUploaded OrderAttachment[]
@@ -167,6 +169,22 @@ model UserSettings {
   user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model SimpleTask {
+  id             String    @id @default(uuid())
+  title          String
+  description    String?
+  date           DateTime?
+  assignedUserId String?
+  assignedUser   User?     @relation("SimpleTaskAssigned", fields: [assignedUserId], references: [id])
+  createdById    String
+  createdBy      User      @relation("SimpleTaskCreated", fields: [createdById], references: [id])
+  isCompleted    Boolean   @default(false)
+  completedAt    DateTime?
+  dayOrder       Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
 model Client {
   id          String             @id @default(uuid())
   type        String             @default("company")
@@ -202,6 +220,7 @@ model Location {
   nextMaintenanceDate DateTime?
   lastMaintenanceDate DateTime?
   isActive            Boolean    @default(true)
+  isDefault           Boolean    @default(false)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   client              Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -223,10 +242,15 @@ model Order {
   internalNotes  String?
   scheduledAt    DateTime?
   scheduledEndAt DateTime?
-  dayOrder       Int?
+  dayOrder           Int?
+  estimatedDuration  String?
+  difficulty         Int?
   completedAt    DateTime?
   isSettled      Boolean            @default(false)
   settledAt      DateTime?
+  settledCost    Float?
+  settledProfit  Float?
+  billingNotes   String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   createdById    String
