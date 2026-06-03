@@ -342,7 +342,7 @@ export default function InquiryDetailPage({
 
             {/* ── Wyceny ──────────────────────────────────────────────────── */}
             <TabsContent value="quotes" className="m-0 p-4 md:p-6">
-              <QuotesTab inquiryId={id} quotes={inquiry.quotes} />
+              <QuotesTab inquiryId={id} quotes={inquiry.quotes} onUpdate={() => qc.invalidateQueries({ queryKey: ["inquiry", id] })} />
             </TabsContent>
 
             {/* ── Zlecenia ────────────────────────────────────────────────── */}
@@ -959,7 +959,10 @@ function ContactTab({
 
 // ── Tab: Wyceny ───────────────────────────────────────────────────────────────
 
-function QuotesTab({ inquiryId, quotes }: { inquiryId: string; quotes: Quote[] }) {
+function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes: Quote[]; onUpdate: () => void }) {
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+
   const QUOTE_STATUS_LABELS: Record<string, string> = {
     ROBOCZA: "Robocza",
     GOTOWA: "Gotowa",
@@ -970,15 +973,48 @@ function QuotesTab({ inquiryId, quotes }: { inquiryId: string; quotes: Quote[] }
     WYGASLA: "Wygasła",
   };
 
+  const QUOTE_STATUS_COLORS: Record<string, string> = {
+    ROBOCZA: "bg-gray-100 text-gray-700",
+    GOTOWA: "bg-blue-100 text-blue-800",
+    WYSLANA: "bg-indigo-100 text-indigo-800",
+    ZAAKCEPTOWANA_TEL: "bg-green-100 text-green-800",
+    ZAAKCEPTOWANA_MAIL: "bg-green-100 text-green-800",
+    ODRZUCONA: "bg-red-100 text-red-800",
+    WYGASLA: "bg-gray-100 text-gray-500",
+  };
+
+  const createQuote = async () => {
+    setCreating(true);
+    try {
+      const res = await fetch(`/api/inquiries/${inquiryId}/quotes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error();
+      const quote = await res.json();
+      onUpdate();
+      router.push(`/quotes/${quote.id}`);
+    } catch {
+      toast.error("Nie udało się utworzyć wyceny");
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-600">
-          {quotes.length === 0 ? "Brak wycen" : `${quotes.length} wycen(a)`}
+          {quotes.length === 0 ? "Brak wycen" : `${quotes.length === 1 ? "1 wycena" : `${quotes.length} wyceny`}`}
         </p>
-        <Button size="sm" variant="outline" disabled title="Dostępne w Etapie 3">
+        <Button
+          size="sm"
+          className="bg-red-800 hover:bg-red-900 text-white"
+          onClick={createQuote}
+          disabled={creating}
+        >
           <Plus className="w-4 h-4 mr-1" />
-          Utwórz wycenę
+          {creating ? "Tworzenie..." : "Utwórz wycenę"}
         </Button>
       </div>
 
@@ -986,16 +1022,20 @@ function QuotesTab({ inquiryId, quotes }: { inquiryId: string; quotes: Quote[] }
         <div className="text-center py-10 text-gray-400">
           <Receipt className="w-10 h-10 mx-auto mb-2 opacity-40" />
           <p className="text-sm">Brak wycen</p>
-          <p className="text-xs mt-1">Tworzenie wycen — Etap 3</p>
+          <p className="text-xs mt-1">Kliknij „Utwórz wycenę" aby przygotować ofertę z 3 pakietami</p>
         </div>
       ) : (
         <div className="space-y-3">
           {quotes.map((q) => (
-            <div key={q.id} className="bg-white border border-gray-200 rounded-xl p-3">
-              <div className="flex items-center justify-between">
+            <button
+              key={q.id}
+              onClick={() => router.push(`/quotes/${q.id}`)}
+              className="w-full text-left bg-white border border-gray-200 rounded-xl p-3 hover:border-red-200 hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-medium">{q.quoteNumber}</span>
-                  <Badge variant="outline" className="text-xs">
+                  <span className="font-mono text-sm font-bold">{q.quoteNumber}</span>
+                  <Badge className={cn("text-xs", QUOTE_STATUS_COLORS[q.status] ?? "bg-gray-100")}>
                     {QUOTE_STATUS_LABELS[q.status] ?? q.status}
                   </Badge>
                 </div>
@@ -1003,12 +1043,26 @@ function QuotesTab({ inquiryId, quotes }: { inquiryId: string; quotes: Quote[] }
                   {format(new Date(q.createdAt), "d MMM yyyy", { locale: pl })}
                 </span>
               </div>
+              {q.packages && q.packages.length > 0 && (
+                <div className="flex gap-2">
+                  {q.packages.map((pkg: { packageType: string; grossTotal: number; isRecommended?: boolean }) => (
+                    <div key={pkg.packageType} className={cn(
+                      "text-xs px-2 py-1 rounded-lg",
+                      pkg.packageType === "MINIMUM" ? "bg-gray-100 text-gray-700" :
+                      pkg.packageType === "STANDARD" ? "bg-blue-100 text-blue-800" :
+                      "bg-amber-100 text-amber-800"
+                    )}>
+                      {pkg.packageType}: {pkg.grossTotal.toFixed(0)} zł
+                    </div>
+                  ))}
+                </div>
+              )}
               {q.acceptance && (
-                <p className="text-xs text-green-700 mt-1">
-                  ✓ Zaakceptowany pakiet: {q.acceptance.acceptedPackage}
+                <p className="text-xs text-green-700 mt-1.5">
+                  ✓ Zaakceptowany: {q.acceptance.acceptedPackage}
                 </p>
               )}
-            </div>
+            </button>
           ))}
         </div>
       )}
