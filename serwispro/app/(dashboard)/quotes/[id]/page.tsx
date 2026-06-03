@@ -8,7 +8,7 @@ import { pl } from "date-fns/locale";
 import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Trash2, Edit2, Save, X, Check, Star, ChevronDown,
-  ChevronUp, Receipt, FileText, ExternalLink, Mail, CheckCircle2,
+  ChevronUp, Receipt, FileText, ExternalLink, Mail, CheckCircle2, Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,6 +187,7 @@ export default function QuoteEditorPage({
   }
 
   const isAccepted = quote.status.startsWith("ZAAKCEPTOWANA");
+  const [createOrderDialog, setCreateOrderDialog] = useState(false);
   const packagesOrdered = ["MINIMUM", "STANDARD", "PRO"]
     .map((t) => quote.packages.find((p) => p.packageType === t))
     .filter(Boolean) as QuotePackage[];
@@ -239,6 +240,18 @@ export default function QuoteEditorPage({
               <Button variant="outline" size="sm" onClick={markSent}>
                 <Mail className="w-3.5 h-3.5 mr-1.5" />
                 Oznacz wysłaną
+              </Button>
+            )}
+
+            {/* Utwórz zlecenie */}
+            {isAccepted && (
+              <Button
+                size="sm"
+                className="bg-red-800 hover:bg-red-900 text-white"
+                onClick={() => setCreateOrderDialog(true)}
+              >
+                <Wrench className="w-3.5 h-3.5 mr-1.5" />
+                Utwórz zlecenie
               </Button>
             )}
 
@@ -306,6 +319,18 @@ export default function QuoteEditorPage({
           <InternalNotesSection quote={quote} onSave={(data) => updateQuote.mutate(data)} />
         </div>
       </div>
+
+      {/* Create order dialog */}
+      <CreateOrderDialog
+        open={createOrderDialog}
+        onClose={() => setCreateOrderDialog(false)}
+        quoteId={id}
+        defaultOrderType={quote.inquiry?.serviceType
+          ? ({ CCTV:"MONTAZ", ALARM:"MONTAZ", BRAMA:"MONTAZ", DOMOFON:"MONTAZ",
+                SIEC:"MONTAZ", AWARIA:"AWARIA", KONSERWACJA:"KONSERWACJA",
+                MODERNIZACJA:"MODERNIZACJA" } as Record<string,string>)[quote.inquiry.serviceType] ?? "MONTAZ"
+          : "MONTAZ"}
+      />
 
       {/* Acceptance dialog */}
       <AcceptanceDialog
@@ -967,7 +992,8 @@ function ItemFormFields({
   );
 }
 
-// ── Internal Notes ────────────────────────────────────────────────────────────
+// ── Internal Notes ─────────────────────────────────────────────────────────────
+
 
 function InternalNotesSection({ quote, onSave }: { quote: Quote; onSave: (d: Partial<Quote>) => void }) {
   const [editing, setEditing] = useState(false);
@@ -1005,5 +1031,100 @@ function InternalNotesSection({ quote, onSave }: { quote: Quote; onSave: (d: Par
         </p>
       )}
     </div>
+  );
+}
+
+// ── Create Order Dialog ───────────────────────────────────────────────────────
+
+const ORDER_TYPES = [
+  { value: "MONTAZ",       label: "Montaż systemu" },
+  { value: "AWARIA",       label: "Awaria / naprawa" },
+  { value: "KONSERWACJA",  label: "Konserwacja" },
+  { value: "MODERNIZACJA", label: "Modernizacja" },
+  { value: "INNE",         label: "Inne" },
+];
+
+function CreateOrderDialog({
+  open, onClose, quoteId, defaultOrderType,
+}: {
+  open: boolean;
+  onClose: () => void;
+  quoteId: string;
+  defaultOrderType: string;
+}) {
+  const router = useRouter();
+  const [form, setForm] = useState({
+    orderType: defaultOrderType,
+    scheduledAt: "",
+    title: "",
+    note: "",
+  });
+  const [creating, setCreating] = useState(false);
+
+  const create = async () => {
+    setCreating(true);
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderType: form.orderType,
+          scheduledAt: form.scheduledAt || undefined,
+          title: form.title || undefined,
+          note: form.note || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      toast.success(`Zlecenie ${data.orderNumber} zostało utworzone`);
+      onClose();
+      router.push(`/orders/${data.orderId}`);
+    } catch {
+      toast.error("Nie udało się utworzyć zlecenia");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">Utwórz zlecenie z wyceny</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Typ zlecenia</Label>
+            <Select value={form.orderType} onValueChange={(v) => setForm(p => ({...p, orderType: v}))}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ORDER_TYPES.map(t => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Tytuł (opcjonalnie)</Label>
+            <Input value={form.title} onChange={(e) => setForm(p => ({...p, title: e.target.value}))} placeholder="Zostanie uzupełniony automatycznie" className="h-9 text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Planowana data montażu</Label>
+            <Input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm(p => ({...p, scheduledAt: e.target.value}))} className="h-9 text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Notatka dla serwisanta</Label>
+            <Textarea value={form.note} onChange={(e) => setForm(p => ({...p, note: e.target.value}))} rows={2} className="text-sm" placeholder="Dodatkowe instrukcje..." />
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>Anuluj</Button>
+          <Button size="sm" className="bg-red-800 hover:bg-red-900 text-white" onClick={create} disabled={creating}>
+            <Wrench className="w-3.5 h-3.5 mr-1.5" />
+            {creating ? "Tworzenie..." : "Utwórz zlecenie"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

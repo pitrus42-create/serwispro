@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Phone, Mail, MapPin, Building2, FileText, Edit2, Check, X,
   Camera, History, MessageSquare, Receipt, Wrench, Plus, Trash2, Save,
-  Star, ChevronDown,
+  Star, ChevronDown, UserPlus, Link2, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +135,7 @@ interface Inquiry {
   budgetRange: string | null;
   internalNotes: string | null;
   convertedToClient: boolean;
+  clientId: string | null;
   createdAt: string;
   updatedAt: string;
   photos: InquiryPhoto[];
@@ -504,6 +505,11 @@ function SummaryTab({ inquiry, onUpdate }: { inquiry: Inquiry; onUpdate: () => v
           <p className="text-green-700">✓ Powiązano z klientem: {inquiry.client.name}</p>
         )}
       </div>
+
+      {/* Konwersja */}
+      {!inquiry.convertedToClient && (
+        <ConvertToClientSection inquiryId={inquiry.id} onConverted={onUpdate} />
+      )}
     </div>
   );
 }
@@ -1067,5 +1073,149 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
         </div>
       )}
     </div>
+  );
+}
+
+// ── ConvertToClientSection ────────────────────────────────────────────────────
+
+function ConvertToClientSection({
+  inquiryId,
+  onConverted,
+}: {
+  inquiryId: string;
+  onConverted: () => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [duplicates, setDuplicates] = useState<{ id: string; name: string | null; email: string | null; phone: string | null }[]>([]);
+  const [step, setStep] = useState<"idle" | "duplicates" | "confirm">("idle");
+  const [converting, setConverting] = useState(false);
+
+  const startConvert = async () => {
+    setChecking(true);
+    try {
+      const res = await fetch(`/api/inquiries/${inquiryId}/convert`);
+      const data = await res.json();
+      if (data.alreadyConverted) {
+        toast.info("Zapytanie już zostało przekształcone w klienta");
+        onConverted();
+        return;
+      }
+      if (data.hasDuplicates) {
+        setDuplicates(data.duplicates);
+        setStep("duplicates");
+      } else {
+        setStep("confirm");
+      }
+      setOpen(true);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const convert = async (opts: { existingClientId?: string; force?: boolean }) => {
+    setConverting(true);
+    try {
+      const res = await fetch(`/api/inquiries/${inquiryId}/convert`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(opts),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      toast.success("Klient dodany do bazy");
+      setOpen(false);
+      onConverted();
+      if (data.clientId) router.push(`/clients/${data.clientId}`);
+    } catch {
+      toast.error("Nie udało się przekształcić w klienta");
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full border-dashed"
+        onClick={startConvert}
+        disabled={checking}
+      >
+        <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+        {checking ? "Sprawdzanie..." : "Dodaj do bazy klientów"}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {step === "duplicates" ? "Znaleziono podobnych klientów" : "Dodaj do bazy klientów"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {step === "duplicates" && (
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p>W bazie istnieje już klient o podobnych danych. Wybierz jak postąpić:</p>
+              </div>
+
+              <div className="space-y-2">
+                {duplicates.map(dup => (
+                  <div key={dup.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{dup.name ?? "—"}</p>
+                      <p className="text-xs text-gray-500">{[dup.email, dup.phone].filter(Boolean).join(" · ")}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => convert({ existingClientId: dup.id })}
+                      disabled={converting}
+                    >
+                      <Link2 className="w-3.5 h-3.5 mr-1" />
+                      Połącz
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-gray-100 pt-3 flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 bg-red-800 hover:bg-red-900 text-white"
+                  onClick={() => convert({ force: true })}
+                  disabled={converting}
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1" />
+                  Utwórz nowego mimo to
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Anuluj</Button>
+              </div>
+            </div>
+          )}
+
+          {step === "confirm" && (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">Brak podobnych klientów w bazie. Utworzymy nowy rekord klienta na podstawie danych z zapytania.</p>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 bg-red-800 hover:bg-red-900 text-white"
+                  onClick={() => convert({ force: false })}
+                  disabled={converting}
+                >
+                  <Check className="w-4 h-4 mr-1.5" />
+                  {converting ? "Tworzenie..." : "Utwórz klienta"}
+                </Button>
+                <Button variant="ghost" onClick={() => setOpen(false)}>Anuluj</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
