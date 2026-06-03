@@ -860,6 +860,34 @@ function AddItemForm({
 }) {
   const [form, setForm] = useState<ItemFormData>(emptyItemForm);
   const [saving, setSaving] = useState(false);
+  const [catalogQ, setCatalogQ] = useState("");
+  const [showCatalog, setShowCatalog] = useState(false);
+
+  const { data: catalogItems = [] } = useQuery({
+    queryKey: ["catalog-search", catalogQ],
+    queryFn: async () => {
+      if (!catalogQ) return [];
+      const res = await fetch(`/api/product-catalog?q=${encodeURIComponent(catalogQ)}`);
+      return res.json() as Promise<{ id: string; name: string; modelName: string | null; itemType: string; unit: string; defaultNetPrice: number; vatRate: number }[]>;
+    },
+    enabled: catalogQ.length > 1,
+  });
+
+  const pickFromCatalog = (item: typeof catalogItems[0]) => {
+    setForm({
+      name: item.name,
+      description: "",
+      itemType: item.itemType,
+      quantity: "1",
+      unit: item.unit,
+      netPrice: String(item.defaultNetPrice),
+      vatRate: String(item.vatRate),
+      isVisibleToClient: true,
+      modelName: item.modelName ?? "",
+    });
+    setShowCatalog(false);
+    setCatalogQ("");
+  };
 
   const save = async () => {
     if (!form.name) return;
@@ -873,7 +901,34 @@ function AddItemForm({
     onDone();
   };
 
-  return <ItemFormFields form={form} setForm={setForm} onSave={save} onCancel={onCancel} saving={saving} />;
+  return (
+    <div className="space-y-2">
+      {/* Catalog search */}
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="🔍 Szukaj w katalogu produktów..."
+          value={catalogQ}
+          onChange={(e) => { setCatalogQ(e.target.value); setShowCatalog(true); }}
+          onFocus={() => setShowCatalog(true)}
+          className="w-full h-7 text-xs border border-gray-200 rounded-md px-2 bg-blue-50"
+        />
+        {showCatalog && catalogItems.length > 0 && (
+          <div className="absolute top-8 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-40 overflow-y-auto">
+            {catalogItems.map(item => (
+              <button key={item.id} onClick={() => pickFromCatalog(item)}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-100 last:border-0">
+                <span className="font-medium">{item.name}</span>
+                {item.modelName && <span className="text-gray-400 ml-1">({item.modelName})</span>}
+                <span className="text-gray-400 ml-2">{item.defaultNetPrice.toFixed(2)} zł netto</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <ItemFormFields form={form} setForm={setForm} onSave={save} onCancel={onCancel} saving={saving} />
+    </div>
+  );
 }
 
 function EditItemForm({
