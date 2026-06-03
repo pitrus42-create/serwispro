@@ -17,6 +17,7 @@ import {
   FileText,
   Bell,
   BarChart3,
+  FileSearch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/calendar", icon: Calendar, label: "Kalendarz" },
   { href: "/orders", icon: ClipboardList, label: "Zlecenia" },
+  { href: "/inquiries", icon: FileSearch, label: "Zapytania ofertowe" },
   { href: "/clients", icon: Users, label: "Klienci" },
   { href: "/templates/checklists", icon: FileText, label: "Checklisty" },
   { href: "/templates/protocols", icon: FileText, label: "Szablony protokołów" },

@@ -187,6 +187,7 @@ model Client {
   locations   Location[]
   orders      Order[]
   protocols   Protocol[]
+  inquiries   Inquiry[]
 }
 
 model Location {
@@ -460,6 +461,161 @@ model CompanySettings {
   nip       String?
   logoUrl   String?
   updatedAt DateTime @updatedAt
+}
+
+model InquiryCounter {
+  id    Int @id @default(autoincrement())
+  year  Int
+  count Int @default(0)
+}
+
+model QuoteCounter {
+  id    Int @id @default(autoincrement())
+  year  Int
+  count Int @default(0)
+}
+
+model Inquiry {
+  id                String   @id @default(uuid())
+  inquiryNumber     String   @unique
+  status            String   @default("NOWE")
+  serviceType       String
+  source            String   @default("FORMULARZ")
+  contactName       String
+  contactPhone      String?
+  contactEmail      String?
+  companyName       String?
+  nip               String?
+  investmentAddress String?
+  investmentCity    String?
+  investmentPostal  String?
+  formAnswers       String   @default("{}")
+  aestheticsScale   Int?
+  priorities        String   @default("[]")
+  expectedDate      String?
+  budgetRange       String?
+  internalNotes     String?
+  publicToken       String?  @unique
+  convertedToClient Boolean  @default(false)
+  clientId          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  photos            InquiryPhoto[]
+  changeLogs        InquiryChangeLog[]
+  contactLogs       InquiryContactLog[]
+  quotes            Quote[]
+  client            Client?  @relation(fields: [clientId], references: [id])
+}
+
+model InquiryPhoto {
+  id          String   @id @default(uuid())
+  inquiryId   String
+  fileUrl     String
+  fileName    String?
+  fileSize    Int?
+  mimeType    String?
+  category    String?
+  description String?
+  addedBy     String?
+  addedAt     DateTime @default(now())
+  inquiry     Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+}
+
+model InquiryChangeLog {
+  id          String   @id @default(uuid())
+  inquiryId   String
+  userId      String?
+  actorLabel  String
+  changeType  String
+  description String
+  fieldName   String?
+  oldValue    String?
+  newValue    String?
+  createdAt   DateTime @default(now())
+  inquiry     Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+}
+
+model InquiryContactLog {
+  id            String   @id @default(uuid())
+  inquiryId     String
+  userId        String?
+  contactType   String
+  contactDate   DateTime @default(now())
+  contactPerson String?
+  note          String?
+  outcome       String?
+  isAboutQuote  Boolean  @default(false)
+  inquiry       Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+}
+
+model Quote {
+  id                String          @id @default(uuid())
+  quoteNumber       String          @unique
+  inquiryId         String?
+  status            String          @default("ROBOCZA")
+  validUntil        DateTime?
+  internalNotes     String?
+  summary           String?
+  conditions        String?
+  createdBy         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  clientName        String?
+  clientPhone       String?
+  clientEmail       String?
+  clientCompany     String?
+  clientNip         String?
+  investmentAddress String?
+  serviceType       String?
+  inquiry           Inquiry?        @relation(fields: [inquiryId], references: [id])
+  packages          QuotePackage[]
+  acceptance        QuoteAcceptance?
+}
+
+model QuotePackage {
+  id            String      @id @default(uuid())
+  quoteId       String
+  packageType   String
+  name          String
+  description   String?
+  isRecommended Boolean     @default(false)
+  netTotal      Float       @default(0)
+  vatRate       Float       @default(23)
+  grossTotal    Float       @default(0)
+  discount      Float?
+  includes      String?
+  excludes      String?
+  quote         Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  items         QuoteItem[]
+}
+
+model QuoteItem {
+  id                String       @id @default(uuid())
+  packageId         String
+  name              String
+  description       String?
+  itemType          String       @default("SPRZET")
+  quantity          Float        @default(1)
+  unit              String       @default("szt")
+  netPrice          Float        @default(0)
+  vatRate           Float        @default(23)
+  grossPrice        Float        @default(0)
+  isVisibleToClient Boolean      @default(true)
+  photoUrl          String?
+  modelName         String?
+  package           QuotePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+}
+
+model QuoteAcceptance {
+  id              String   @id @default(uuid())
+  quoteId         String   @unique
+  acceptedPackage String
+  acceptanceType  String
+  acceptedAt      DateTime @default(now())
+  recordedBy      String?
+  note            String?
+  attachmentUrl   String?
+  quote           Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
 }
 
 model QuoteForm {
