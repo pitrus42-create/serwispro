@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
@@ -109,10 +109,15 @@ function safeJson<T>(str: string, fallback: T): T {
 
 export default function InquiriesPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const initialTab = (searchParams.get("tab") as TabKey) ?? "AKTYWNE";
-  const [tab, setTab] = useState<TabKey>(initialTab);
+  const [tab, setTab] = useState<TabKey>("AKTYWNE");
   const [q, setQ] = useState("");
+
+  // Odczyt ?tab= z URL po stronie klienta (bez useSearchParams — wymaga Suspense)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab") as TabKey | null;
+    if (t && TABS.find((tb) => tb.key === t)) setTab(t);
+  }, []);
   const [serviceType, setServiceType] = useState("__ALL__");
   const [page, setPage] = useState(1);
 
