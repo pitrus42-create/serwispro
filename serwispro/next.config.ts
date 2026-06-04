@@ -4,7 +4,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", "@libsql/client", "@prisma/adapter-libsql"],
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Force .prisma/client modules as external to prevent WASM bundling issues
       const existingExternals = Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean);
       config.externals = [
         ...existingExternals,
