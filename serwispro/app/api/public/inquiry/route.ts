@@ -1,9 +1,8 @@
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { generateInquiryNumber } from "@/lib/order-number";
 import { notifyAdmins } from "@/lib/notifications";
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -34,36 +33,36 @@ export async function POST(req: NextRequest) {
 
   const inquiryNumber = await generateInquiryNumber();
   const publicToken = randomBytes(32).toString("hex");
-  const id = uuidv4();
-  const changeLogId = uuidv4();
-  const now = new Date().toISOString();
 
-  await db.batch([
-    {
-      sql: `INSERT INTO "Inquiry" (
-        id, inquiryNumber, publicToken, status, serviceType, source,
-        contactName, contactPhone, contactEmail, companyName, nip,
-        investmentAddress, investmentCity, investmentPostal,
-        formAnswers, aestheticsScale, priorities,
-        expectedDate, budgetRange, convertedToClient, createdAt, updatedAt
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
-      args: [
-        id, inquiryNumber, publicToken, "NOWE", serviceType, source,
-        contactName, contactPhone, contactEmail ?? null, companyName ?? null, nip ?? null,
-        investmentAddress ?? null, investmentCity ?? null, investmentPostal ?? null,
-        formAnswers ? JSON.stringify(formAnswers) : "{}",
-        aestheticsScale ? parseInt(aestheticsScale) : null,
-        priorities ? JSON.stringify(priorities) : "[]",
-        expectedDate ?? null, budgetRange ?? null,
-        now, now,
-      ],
+  const inquiry = await prisma.inquiry.create({
+    data: {
+      inquiryNumber,
+      publicToken,
+      serviceType,
+      source,
+      contactName,
+      contactPhone,
+      contactEmail: contactEmail ?? null,
+      companyName: companyName ?? null,
+      nip: nip ?? null,
+      investmentAddress: investmentAddress ?? null,
+      investmentCity: investmentCity ?? null,
+      investmentPostal: investmentPostal ?? null,
+      formAnswers: formAnswers ? JSON.stringify(formAnswers) : "{}",
+      aestheticsScale: aestheticsScale ? parseInt(aestheticsScale) : null,
+      priorities: priorities ? JSON.stringify(priorities) : "[]",
+      expectedDate: expectedDate ?? null,
+      budgetRange: budgetRange ?? null,
+      changeLogs: {
+        create: {
+          actorLabel: contactName,
+          changeType: "CREATED",
+          description: `Zapytanie złożone przez klienta przez formularz www`,
+        },
+      },
     },
-    {
-      sql: `INSERT INTO "InquiryChangeLog" (id, inquiryId, actorLabel, changeType, description, createdAt)
-            VALUES (?,?,?,?,?,?)`,
-      args: [changeLogId, id, contactName, "CREATED", "Zapytanie złożone przez klienta przez formularz www", now],
-    },
-  ]);
+  });
+
   try {
     const SERVICE_LABELS: Record<string, string> = {
       CCTV: "Monitoring CCTV", ALARM: "Alarm", BRAMA: "Automatyka bramowa",
@@ -75,16 +74,16 @@ export async function POST(req: NextRequest) {
       priority: 2,
       title: `Nowe zapytanie: ${SERVICE_LABELS[serviceType] ?? serviceType}`,
       message: `${contactName}${investmentCity ? ` — ${investmentCity}` : ""} — ${inquiryNumber}`,
-      link: `/inquiries/${id}`,
+      link: `/inquiries/${inquiry.id}`,
       relatedEntityType: "inquiry",
-      relatedEntityId: id,
+      relatedEntityId: inquiry.id,
     });
   } catch {
     // Powiadomienie nie jest krytyczne
   }
 
   return NextResponse.json(
-    { id, inquiryNumber, publicToken },
+    { id: inquiry.id, inquiryNumber: inquiry.inquiryNumber, publicToken: inquiry.publicToken },
     { status: 201 }
   );
 }
