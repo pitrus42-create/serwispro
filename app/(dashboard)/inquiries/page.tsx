@@ -90,6 +90,8 @@ interface InquiryRow {
   contactPhone: string | null;
   contactEmail: string | null;
   companyName: string | null;
+  tags: string;
+  autoAnalysis: string;
   createdAt: string;
   _count: { photos: number; quotes: number };
 }
@@ -369,6 +371,25 @@ function ClientFormLinkBanner() {
   );
 }
 
+// ── Tag colors ────────────────────────────────────────────────────────────────
+
+const TAG_COLORS: Record<string, string> = {
+  "Budżetowy system":           "bg-gray-100 text-gray-600",
+  "Klient premium":             "bg-amber-100 text-amber-700",
+  "Wysoki potencjał":           "bg-green-100 text-green-700",
+  "Pilny termin":               "bg-red-100 text-red-700",
+  "Możliwa dopłata ekspresowa": "bg-orange-100 text-orange-700",
+  "Brakuje zdjęć":             "bg-yellow-100 text-yellow-700",
+  "Brakuje informacji":         "bg-yellow-100 text-yellow-700",
+  "Wymaga wizji lokalnej":      "bg-purple-100 text-purple-700",
+  "Nowa instalacja":            "bg-blue-100 text-blue-700",
+  "Modernizacja":               "bg-teal-100 text-teal-700",
+  "Awaria":                     "bg-red-100 text-red-800",
+};
+
+const PRIORITY_TAGS = ["Pilny termin", "Możliwa dopłata ekspresowa", "Wysoki potencjał",
+  "Klient premium", "Budżetowy system", "Awaria"];
+
 // ── InquiryCard ───────────────────────────────────────────────────────────────
 
 function InquiryCard({
@@ -381,6 +402,19 @@ function InquiryCard({
   onDelete: () => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const tags: string[] = (() => { try { return JSON.parse(inquiry.tags ?? "[]") as string[]; } catch { return []; } })();
+  const analysis: { clientType?: string; suggestedOffer?: string; score?: string } = (() => {
+    try { return JSON.parse(inquiry.autoAnalysis ?? "{}"); } catch { return {}; }
+  })();
+
+  // Pokaż maks 4 tagi: najpierw priorytetowe
+  const sortedTags = [...tags].sort((a, b) => {
+    const ai = PRIORITY_TAGS.indexOf(a);
+    const bi = PRIORITY_TAGS.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+  const visibleTags = sortedTags.slice(0, 4);
 
   return (
     <>
@@ -422,6 +456,33 @@ function InquiryCard({
                   </span>
                 )}
               </div>
+
+              {/* Tagi analizy */}
+              {visibleTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {visibleTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className={cn(
+                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                        TAG_COLORS[tag] ?? "bg-gray-100 text-gray-600"
+                      )}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  {tags.length > 4 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                      +{tags.length - 4}
+                    </span>
+                  )}
+                  {analysis.suggestedOffer && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                      → {analysis.suggestedOffer}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col items-end gap-1.5 shrink-0">

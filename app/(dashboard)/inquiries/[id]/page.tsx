@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Phone, Mail, MapPin, Building2, FileText, Edit2, Check, X,
   Camera, History, MessageSquare, Receipt, Wrench, Plus, Trash2, Save,
-  Star, ChevronDown, UserPlus, Link2, AlertTriangle,
+  Star, ChevronDown, UserPlus, Link2, AlertTriangle, BarChart2, RefreshCw,
+  TrendingUp, Clock, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -134,6 +135,8 @@ interface Inquiry {
   expectedDate: string | null;
   budgetRange: string | null;
   internalNotes: string | null;
+  tags: string;
+  autoAnalysis: string;
   convertedToClient: boolean;
   clientId: string | null;
   createdAt: string;
@@ -461,6 +464,9 @@ function SummaryTab({ inquiry, onUpdate }: { inquiry: Inquiry; onUpdate: () => v
         </div>
       )}
 
+      {/* Analiza zapytania */}
+      <AnalysisCard inquiry={inquiry} onRefresh={onUpdate} />
+
       {/* Notatki wewnętrzne */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between">
@@ -521,6 +527,159 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
       <div className="flex-1 min-w-0">
         <span className="text-xs text-gray-500">{label}: </span>
         <span className="text-sm text-gray-900">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Analysis Card ─────────────────────────────────────────────────────────────
+
+const TAG_COLORS: Record<string, string> = {
+  "Budżetowy system":          "bg-gray-100 text-gray-700",
+  "Klient premium":            "bg-amber-100 text-amber-800",
+  "Wysoki potencjał":          "bg-green-100 text-green-800",
+  "Pilny termin":              "bg-red-100 text-red-700",
+  "Możliwa dopłata ekspresowa":"bg-orange-100 text-orange-800",
+  "Brakuje zdjęć":            "bg-yellow-100 text-yellow-800",
+  "Brakuje informacji":        "bg-yellow-100 text-yellow-800",
+  "Wymaga wizji lokalnej":     "bg-purple-100 text-purple-800",
+  "Nowa instalacja":           "bg-blue-100 text-blue-800",
+  "Modernizacja":              "bg-teal-100 text-teal-800",
+  "Awaria":                    "bg-red-100 text-red-800",
+};
+
+const CLIENT_TYPE_CONFIG = {
+  budget:   { label: "Klient budżetowy",  className: "bg-gray-100 text-gray-700" },
+  standard: { label: "Klient standardowy",className: "bg-blue-100 text-blue-800" },
+  premium:  { label: "Klient premium",    className: "bg-amber-100 text-amber-800" },
+};
+
+const SCORE_CONFIG = {
+  LOW:    { label: "Niski potencjał",   className: "text-gray-500" },
+  MEDIUM: { label: "Średni potencjał",  className: "text-blue-600" },
+  HIGH:   { label: "Wysoki potencjał",  className: "text-green-700" },
+};
+
+function AnalysisCard({ inquiry, onRefresh }: { inquiry: Inquiry; onRefresh: () => void }) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const analysis = (() => {
+    try { return JSON.parse(inquiry.autoAnalysis) as {
+      tags?: string[];
+      score?: "LOW" | "MEDIUM" | "HIGH";
+      suggestedOffer?: "MINIMUM" | "STANDARD" | "PRO";
+      clientType?: "budget" | "standard" | "premium";
+      justification?: string;
+      warnings?: string[];
+      expressUpcharge?: boolean;
+    }; } catch { return null; }
+  })();
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetch(`/api/inquiries/${inquiry.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      onRefresh();
+      toast.success("Analiza odświeżona");
+    } catch {
+      toast.error("Błąd odświeżania analizy");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const clientCfg = CLIENT_TYPE_CONFIG[analysis?.clientType ?? "standard"];
+  const scoreCfg  = SCORE_CONFIG[analysis?.score ?? "MEDIUM"];
+  const tags: string[] = (() => {
+    try { return JSON.parse(inquiry.tags) as string[]; } catch { return []; }
+  })();
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-4 h-4 text-gray-400" />
+          <h3 className="font-medium text-gray-900 text-sm">Analiza zapytania</h3>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 disabled:opacity-40"
+        >
+          <RefreshCw className={cn("w-3 h-3", refreshing && "animate-spin")} />
+          Odśwież
+        </button>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Typ klienta + potencjał */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge className={cn("text-xs", clientCfg.className)}>{clientCfg.label}</Badge>
+          <span className={cn("text-xs font-medium flex items-center gap-1", scoreCfg.className)}>
+            <TrendingUp className="w-3 h-3" />
+            {scoreCfg.label}
+          </span>
+          {analysis?.suggestedOffer && (
+            <span className="text-xs text-gray-500">
+              · Sugerowany wariant: <strong>{analysis.suggestedOffer}</strong>
+            </span>
+          )}
+        </div>
+
+        {/* Uzasadnienie */}
+        {analysis?.justification && (
+          <p className="text-sm text-gray-700 leading-snug">{analysis.justification}</p>
+        )}
+
+        {/* Tagi */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className={cn(
+                  "inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium",
+                  TAG_COLORS[tag] ?? "bg-gray-100 text-gray-600"
+                )}
+              >
+                {tag === "Pilny termin" && <Clock className="w-2.5 h-2.5 mr-1" />}
+                {tag === "Możliwa dopłata ekspresowa" && <Zap className="w-2.5 h-2.5 mr-1" />}
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Dopłata ekspresowa */}
+        {analysis?.expressUpcharge && (
+          <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+            <Zap className="w-3.5 h-3.5 text-orange-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-orange-800">
+              <strong>Sugestia:</strong> Możliwa dopłata za realizację priorytetową — klient oczekuje
+              szybkiego terminu. Rozważ dodanie pozycji „Realizacja priorytetowa" w wycenie.
+            </p>
+          </div>
+        )}
+
+        {/* Ostrzeżenia */}
+        {analysis?.warnings && analysis.warnings.length > 0 && (
+          <div className="space-y-1">
+            {analysis.warnings.map((w, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs text-yellow-800">
+                <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5 text-yellow-600" />
+                {w}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!analysis && (
+          <p className="text-xs text-gray-400 italic">Brak danych analizy — kliknij „Odśwież".</p>
+        )}
       </div>
     </div>
   );

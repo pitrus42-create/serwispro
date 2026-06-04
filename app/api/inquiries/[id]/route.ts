@@ -1,5 +1,6 @@
 import { getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { analyzeInquiry } from "@/lib/inquiry-analysis";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
@@ -70,6 +71,34 @@ export async function PUT(
   if (contactEmail !== undefined && contactEmail !== existing.contactEmail) updatedFields.push("email");
   if (internalNotes !== undefined && internalNotes !== existing.internalNotes) updatedFields.push("notatki wewnętrzne");
 
+  const mergedServiceType = serviceType ?? existing.serviceType;
+  const mergedFormAnswers = formAnswers !== undefined ? JSON.stringify(formAnswers) : existing.formAnswers;
+  const mergedPriorities = priorities !== undefined ? JSON.stringify(priorities) : existing.priorities;
+  const mergedScale = aestheticsScale !== undefined ? (aestheticsScale ? parseInt(aestheticsScale) : null) : existing.aestheticsScale;
+  const mergedExpectedDate = expectedDate !== undefined ? expectedDate : existing.expectedDate;
+  const mergedBudgetRange = budgetRange !== undefined ? budgetRange : existing.budgetRange;
+  const mergedInternalNotes = internalNotes !== undefined ? internalNotes : existing.internalNotes;
+  const mergedPhone = contactPhone !== undefined ? contactPhone : existing.contactPhone;
+  const mergedEmail = contactEmail !== undefined ? contactEmail : existing.contactEmail;
+  const mergedAddress = investmentAddress !== undefined ? investmentAddress : existing.investmentAddress;
+  const mergedCity = investmentCity !== undefined ? investmentCity : existing.investmentCity;
+
+  const photoCount = await prisma.inquiryPhoto.count({ where: { inquiryId: id } });
+  const analysis = analyzeInquiry({
+    serviceType: mergedServiceType,
+    aestheticsScale: mergedScale,
+    priorities: mergedPriorities,
+    expectedDate: mergedExpectedDate,
+    formAnswers: mergedFormAnswers,
+    contactPhone: mergedPhone,
+    contactEmail: mergedEmail,
+    investmentAddress: mergedAddress,
+    investmentCity: mergedCity,
+    budgetRange: mergedBudgetRange,
+    internalNotes: mergedInternalNotes,
+    _count: { photos: photoCount },
+  });
+
   const updated = await prisma.inquiry.update({
     where: { id },
     data: {
@@ -83,12 +112,14 @@ export async function PUT(
       ...(investmentAddress !== undefined ? { investmentAddress } : {}),
       ...(investmentCity !== undefined ? { investmentCity } : {}),
       ...(investmentPostal !== undefined ? { investmentPostal } : {}),
-      ...(formAnswers !== undefined ? { formAnswers: JSON.stringify(formAnswers) } : {}),
-      ...(aestheticsScale !== undefined ? { aestheticsScale: aestheticsScale ? parseInt(aestheticsScale) : null } : {}),
-      ...(priorities !== undefined ? { priorities: JSON.stringify(priorities) } : {}),
+      ...(formAnswers !== undefined ? { formAnswers: mergedFormAnswers } : {}),
+      ...(aestheticsScale !== undefined ? { aestheticsScale: mergedScale } : {}),
+      ...(priorities !== undefined ? { priorities: mergedPriorities } : {}),
       ...(expectedDate !== undefined ? { expectedDate } : {}),
       ...(budgetRange !== undefined ? { budgetRange } : {}),
       ...(internalNotes !== undefined ? { internalNotes } : {}),
+      tags: JSON.stringify(analysis.tags),
+      autoAnalysis: JSON.stringify(analysis),
     },
   });
 

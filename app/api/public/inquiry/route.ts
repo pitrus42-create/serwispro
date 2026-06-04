@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { generateInquiryNumber } from "@/lib/order-number";
+import { analyzeInquiry } from "@/lib/inquiry-analysis";
 import { notifyAdmins } from "@/lib/notifications";
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
@@ -34,6 +35,24 @@ export async function POST(req: NextRequest) {
   const inquiryNumber = await generateInquiryNumber();
   const publicToken = randomBytes(32).toString("hex");
 
+  const parsedFormAnswers = formAnswers ? JSON.stringify(formAnswers) : "{}";
+  const parsedPriorities = priorities ? JSON.stringify(priorities) : "[]";
+  const parsedScale = aestheticsScale ? parseInt(aestheticsScale) : null;
+
+  const analysis = analyzeInquiry({
+    serviceType,
+    aestheticsScale: parsedScale,
+    priorities: parsedPriorities,
+    expectedDate: expectedDate ?? null,
+    formAnswers: parsedFormAnswers,
+    contactPhone: contactPhone ?? null,
+    contactEmail: contactEmail ?? null,
+    investmentAddress: investmentAddress ?? null,
+    investmentCity: investmentCity ?? null,
+    budgetRange: budgetRange ?? null,
+    _count: { photos: 0 },
+  });
+
   const inquiry = await prisma.inquiry.create({
     data: {
       inquiryNumber,
@@ -48,11 +67,13 @@ export async function POST(req: NextRequest) {
       investmentAddress: investmentAddress ?? null,
       investmentCity: investmentCity ?? null,
       investmentPostal: investmentPostal ?? null,
-      formAnswers: formAnswers ? JSON.stringify(formAnswers) : "{}",
-      aestheticsScale: aestheticsScale ? parseInt(aestheticsScale) : null,
-      priorities: priorities ? JSON.stringify(priorities) : "[]",
+      formAnswers: parsedFormAnswers,
+      aestheticsScale: parsedScale,
+      priorities: parsedPriorities,
       expectedDate: expectedDate ?? null,
       budgetRange: budgetRange ?? null,
+      tags: JSON.stringify(analysis.tags),
+      autoAnalysis: JSON.stringify(analysis),
       changeLogs: {
         create: {
           actorLabel: contactName,

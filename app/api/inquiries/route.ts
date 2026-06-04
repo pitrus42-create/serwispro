@@ -1,6 +1,7 @@
 import { getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateInquiryNumber } from "@/lib/order-number";
+import { analyzeInquiry } from "@/lib/inquiry-analysis";
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 
@@ -87,6 +88,25 @@ export async function POST(req: NextRequest) {
   const publicToken = randomBytes(32).toString("hex");
   const actorLabel = `${session.user.firstName} ${session.user.lastName}`;
 
+  const parsedFormAnswers = formAnswers ? JSON.stringify(formAnswers) : "{}";
+  const parsedPriorities = priorities ? JSON.stringify(priorities) : "[]";
+  const parsedScale = aestheticsScale ? parseInt(aestheticsScale) : null;
+
+  const analysis = analyzeInquiry({
+    serviceType,
+    aestheticsScale: parsedScale,
+    priorities: parsedPriorities,
+    expectedDate: expectedDate ?? null,
+    formAnswers: parsedFormAnswers,
+    contactPhone: contactPhone ?? null,
+    contactEmail: contactEmail ?? null,
+    investmentAddress: investmentAddress ?? null,
+    investmentCity: investmentCity ?? null,
+    budgetRange: budgetRange ?? null,
+    internalNotes: internalNotes ?? null,
+    _count: { photos: 0 },
+  });
+
   const inquiry = await prisma.inquiry.create({
     data: {
       inquiryNumber,
@@ -100,13 +120,15 @@ export async function POST(req: NextRequest) {
       investmentAddress,
       investmentCity,
       investmentPostal,
-      formAnswers: formAnswers ? JSON.stringify(formAnswers) : "{}",
-      aestheticsScale: aestheticsScale ? parseInt(aestheticsScale) : null,
-      priorities: priorities ? JSON.stringify(priorities) : "[]",
+      formAnswers: parsedFormAnswers,
+      aestheticsScale: parsedScale,
+      priorities: parsedPriorities,
       expectedDate,
       budgetRange,
       internalNotes,
       publicToken,
+      tags: JSON.stringify(analysis.tags),
+      autoAnalysis: JSON.stringify(analysis),
       changeLogs: {
         create: {
           userId: session.user.id,
