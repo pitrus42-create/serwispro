@@ -9,8 +9,14 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Phone, Mail, MapPin, Building2, FileText, Edit2, Check, X,
   Camera, History, MessageSquare, Receipt, Wrench, Plus, Trash2, Save,
-  Star, ChevronDown, UserPlus, Link2, AlertTriangle,
+  Star, ChevronDown, UserPlus, Link2, AlertTriangle, Archive, RotateCcw,
+  TrendingUp, TrendingDown, Minus, BarChart2,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -99,6 +105,9 @@ const CHANGE_TYPE_ICONS: Record<string, string> = {
   NOTE_ADDED: "📝",
   CONTACT_LOG: "📞",
   CONVERTED: "🤝",
+  ARCHIVED: "📦",
+  RESTORED: "♻️",
+  DELETED: "🗑️",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -136,6 +145,12 @@ interface Inquiry {
   internalNotes: string | null;
   convertedToClient: boolean;
   clientId: string | null;
+  tags: string;
+  autoAnalysis: string;
+  archivedAt: string | null;
+  archivedBy: string | null;
+  deletedAt: string | null;
+  deletedBy: string | null;
   createdAt: string;
   updatedAt: string;
   photos: InquiryPhoto[];
@@ -204,6 +219,8 @@ export default function InquiryDetailPage({
     },
   });
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
   const changeStatus = useMutation({
     mutationFn: async (status: string) => {
       const res = await fetch(`/api/inquiries/${id}/status`, {
@@ -219,6 +236,24 @@ export default function InquiryDetailPage({
     },
     onError: () => toast.error("Nie udało się zmienić statusu"),
   });
+
+  const archiveInquiry = async () => {
+    const res = await fetch(`/api/inquiries/${id}/archive`, { method: "POST" });
+    if (res.ok) { qc.invalidateQueries({ queryKey: ["inquiry", id] }); toast.success("Zapytanie zarchiwizowane"); }
+    else toast.error("Błąd archiwizacji");
+  };
+
+  const restoreInquiry = async () => {
+    const res = await fetch(`/api/inquiries/${id}/restore`, { method: "POST" });
+    if (res.ok) { qc.invalidateQueries({ queryKey: ["inquiry", id] }); toast.success("Zapytanie przywrócone"); }
+    else toast.error("Błąd przywracania");
+  };
+
+  const softDeleteInquiry = async () => {
+    const res = await fetch(`/api/inquiries/${id}`, { method: "DELETE" });
+    if (res.ok) { router.push("/inquiries"); toast.success("Zapytanie przeniesione do usuniętych"); }
+    else toast.error("Błąd usuwania");
+  };
 
   if (isLoading) {
     return (
@@ -263,26 +298,59 @@ export default function InquiryDetailPage({
             </div>
           </div>
 
-          {/* Status dropdown */}
-          <div className="relative">
-            <Select
-              value={inquiry.status}
-              onValueChange={(v) => changeStatus.mutate(v)}
-            >
+          {/* Akcje + Status */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Arch/Del/Restore */}
+            {!inquiry.deletedAt && !inquiry.archivedAt && (
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={archiveInquiry}>
+                <Archive className="w-3.5 h-3.5 mr-1" />Archiwizuj
+              </Button>
+            )}
+            {(inquiry.archivedAt || inquiry.deletedAt) && (
+              <Button variant="outline" size="sm" className="h-8 text-xs text-green-700 border-green-300" onClick={restoreInquiry}>
+                <RotateCcw className="w-3.5 h-3.5 mr-1" />Przywróć
+              </Button>
+            )}
+            {!inquiry.deletedAt && (
+              <Button variant="outline" size="sm" className="h-8 text-xs text-red-700 border-red-200" onClick={() => setDeleteDialogOpen(true)}>
+                <Trash2 className="w-3.5 h-3.5 mr-1" />Usuń
+              </Button>
+            )}
+            <Select value={inquiry.status} onValueChange={(v) => changeStatus.mutate(v)}>
               <SelectTrigger className="h-8 text-xs w-44">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {ALL_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s} className="text-xs">
-                    {STATUS_LABELS[s]}
-                  </SelectItem>
+                  <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć zapytanie?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Zapytanie zostanie przeniesione do usuniętych i będzie można je przywrócić.
+              Tylko administrator może je trwale usunąć.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-700 hover:bg-red-800"
+              onClick={() => { setDeleteDialogOpen(false); softDeleteInquiry(); }}
+            >
+              Przenieś do usuniętych
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Tabs */}
       <div className="flex-1 overflow-hidden">
@@ -305,6 +373,9 @@ export default function InquiryDetailPage({
             </TabsTrigger>
             <TabsTrigger value="quotes" className="text-xs data-[state=active]:bg-red-50 data-[state=active]:text-red-900 rounded-md">
               Wyceny {inquiry.quotes.length > 0 && `(${inquiry.quotes.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="analysis" className="text-xs data-[state=active]:bg-red-50 data-[state=active]:text-red-900 rounded-md">
+              Analiza
             </TabsTrigger>
             <TabsTrigger value="orders" className="text-xs data-[state=active]:bg-red-50 data-[state=active]:text-red-900 rounded-md">
               Zlecenia
@@ -344,6 +415,11 @@ export default function InquiryDetailPage({
             {/* ── Wyceny ──────────────────────────────────────────────────── */}
             <TabsContent value="quotes" className="m-0 p-4 md:p-6">
               <QuotesTab inquiryId={id} quotes={inquiry.quotes} onUpdate={() => qc.invalidateQueries({ queryKey: ["inquiry", id] })} />
+            </TabsContent>
+
+            {/* ── Analiza ─────────────────────────────────────────────────── */}
+            <TabsContent value="analysis" className="m-0 p-4 md:p-6">
+              <AnalysisTab inquiry={inquiry} />
             </TabsContent>
 
             {/* ── Zlecenia ────────────────────────────────────────────────── */}
@@ -1217,5 +1293,159 @@ function ConvertToClientSection({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// ── Tab: Analiza ──────────────────────────────────────────────────────────────
+
+interface InquiryAnalysis {
+  tags: string[];
+  score: "LOW" | "MEDIUM" | "HIGH";
+  suggestedOffer: "MINIMUM" | "STANDARD" | "PRO";
+  warnings: string[];
+}
+
+function safeJsonParse<T>(str: string, fallback: T): T {
+  try { return JSON.parse(str); } catch { return fallback; }
+}
+
+const TAG_COLORS: Record<string, string> = {
+  "Budżetowy system":      "bg-gray-100 text-gray-600",
+  "Klient premium":        "bg-purple-100 text-purple-800",
+  "Pilny termin":          "bg-red-100 text-red-700",
+  "Brakuje zdjęć":         "bg-yellow-100 text-yellow-700",
+  "Brakuje informacji":    "bg-orange-100 text-orange-700",
+  "Wymaga wizji lokalnej": "bg-blue-100 text-blue-700",
+  "Nowa instalacja":       "bg-teal-100 text-teal-700",
+  "Modernizacja":          "bg-teal-100 text-teal-700",
+};
+
+const OFFER_COLORS: Record<string, string> = {
+  MINIMUM: "bg-gray-100 text-gray-700 border-gray-300",
+  STANDARD: "bg-blue-100 text-blue-800 border-blue-300",
+  PRO: "bg-amber-100 text-amber-800 border-amber-300",
+};
+
+function AnalysisTab({ inquiry }: { inquiry: Inquiry }) {
+  const analysis = safeJsonParse<InquiryAnalysis>(inquiry.autoAnalysis, {
+    tags: [], score: "MEDIUM", suggestedOffer: "STANDARD", warnings: [],
+  });
+  const tags = safeJsonParse<string[]>(inquiry.tags, []);
+  const priorities = safeJsonParse<string[]>(inquiry.priorities, []);
+
+  const SCORE_CONFIG = {
+    HIGH:   { label: "Wysoki potencjał",  color: "text-green-800",  bg: "bg-green-50 border-green-200",  Icon: TrendingUp },
+    MEDIUM: { label: "Średni potencjał",  color: "text-amber-800",  bg: "bg-amber-50 border-amber-200",  Icon: Minus },
+    LOW:    { label: "Niski potencjał",   color: "text-gray-600",   bg: "bg-gray-50 border-gray-200",    Icon: TrendingDown },
+  };
+  const sc = SCORE_CONFIG[analysis.score] ?? SCORE_CONFIG.MEDIUM;
+  const ScoreIcon = sc.Icon;
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      {/* Ocena potencjału */}
+      <div className={`${sc.bg} border rounded-xl p-4`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${sc.bg}`}>
+              <ScoreIcon className={`w-5 h-5 ${sc.color}`} />
+            </div>
+            <div>
+              <p className={`font-semibold ${sc.color}`}>{sc.label}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Sugerowana oferta</p>
+            </div>
+          </div>
+          <span className={cn("px-3 py-1.5 rounded-lg text-sm font-bold border", OFFER_COLORS[analysis.suggestedOffer] ?? OFFER_COLORS.STANDARD)}>
+            {analysis.suggestedOffer}
+          </span>
+        </div>
+      </div>
+
+      {/* Tagi */}
+      {tags.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-gray-400" />
+            <h3 className="font-medium text-sm text-gray-900">Wykryte tagi</h3>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {tags.map((tag) => (
+              <span key={tag} className={cn("text-xs px-3 py-1 rounded-full font-medium", TAG_COLORS[tag] ?? "bg-gray-100 text-gray-600")}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ostrzeżenia */}
+      {analysis.warnings.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-orange-600" />
+            <h3 className="font-medium text-sm text-orange-900">Ostrzeżenia</h3>
+          </div>
+          <ul className="space-y-1">
+            {analysis.warnings.map((w, i) => (
+              <li key={i} className="text-sm text-orange-800">• {w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Preferencje klienta */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+        <h3 className="font-medium text-sm text-gray-900">Preferencje klienta</h3>
+
+        {inquiry.aestheticsScale !== null && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600 text-xs">Skala estetyki montażu</span>
+              <span className="font-semibold text-red-800 text-sm">{inquiry.aestheticsScale}/10</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={cn("h-2 rounded-full", inquiry.aestheticsScale >= 8 ? "bg-purple-600" : inquiry.aestheticsScale <= 4 ? "bg-gray-500" : "bg-red-800")}
+                style={{ width: `${inquiry.aestheticsScale * 10}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400">
+              <span>Budżetowy</span><span>Kompromis</span><span>Premium</span>
+            </div>
+          </div>
+        )}
+
+        {priorities.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-gray-600">Priorytety</p>
+            <div className="flex flex-wrap gap-1.5">
+              {priorities.map((p) => (
+                <Badge key={p} variant="secondary" className="text-xs">
+                  {PRIORITY_LABELS[p] ?? p}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {inquiry.expectedDate && (
+          <div>
+            <p className="text-xs text-gray-500">Oczekiwany termin</p>
+            <p className="text-sm font-medium text-gray-800">{inquiry.expectedDate}</p>
+          </div>
+        )}
+
+        {inquiry.budgetRange && (
+          <div>
+            <p className="text-xs text-gray-500">Budżet orientacyjny</p>
+            <p className="text-sm font-medium text-gray-800">{inquiry.budgetRange}</p>
+          </div>
+        )}
+
+        {tags.length === 0 && priorities.length === 0 && inquiry.aestheticsScale === null && (
+          <p className="text-sm text-gray-400 italic">Brak danych do analizy</p>
+        )}
+      </div>
+    </div>
   );
 }

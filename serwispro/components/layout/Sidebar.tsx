@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Calendar,
@@ -49,6 +50,19 @@ export function Sidebar() {
 
   const userRoles = session?.user?.roles as string[] | undefined;
 
+  const { data: countData } = useQuery({
+    queryKey: ["inquiries-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/inquiries/count");
+      if (!res.ok) return { active: 0, new: 0, toQuote: 0, waitingDecision: 0 };
+      return res.json() as Promise<{ active: number; new: number; toQuote: number; waitingDecision: number }>;
+    },
+    refetchInterval: 60_000,
+    enabled: !!session,
+  });
+
+  const activeInquiries = countData?.active ?? 0;
+
   return (
     <aside className="hidden md:flex flex-col w-60 bg-white border-r border-gray-200 h-full fixed left-0 top-0 z-30">
       {/* Logo */}
@@ -69,6 +83,7 @@ export function Sidebar() {
               item.href === "/"
                 ? pathname === "/"
                 : pathname.startsWith(item.href);
+            const showBadge = item.href === "/inquiries" && activeInquiries > 0;
             return (
               <li key={item.href}>
                 <Link
@@ -81,10 +96,14 @@ export function Sidebar() {
                   )}
                 >
                   <item.icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
-                  {isActive && (
-                    <ChevronRight className="w-3 h-3 ml-auto text-red-700" />
-                  )}
+                  <span className="flex-1">{item.label}</span>
+                  {showBadge ? (
+                    <span className="inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-red-700 text-white rounded-full">
+                      {activeInquiries > 99 ? "99+" : activeInquiries}
+                    </span>
+                  ) : isActive ? (
+                    <ChevronRight className="w-3 h-3 text-red-700" />
+                  ) : null}
                 </Link>
               </li>
             );
