@@ -182,6 +182,7 @@ interface Quote {
   id: string;
   quoteNumber: string;
   status: string;
+  quoteType: string;
   createdAt: string;
   packages: { packageType: string; grossTotal: number }[];
   acceptance: { acceptedPackage: string } | null;
@@ -1127,6 +1128,7 @@ function ContactTab({
 function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes: Quote[]; onUpdate: () => void }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [showTypeDialog, setShowTypeDialog] = useState(false);
 
   const QUOTE_STATUS_LABELS: Record<string, string> = {
     ROBOCZA: "Robocza",
@@ -1148,13 +1150,20 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
     WYGASLA: "bg-gray-100 text-gray-500",
   };
 
-  const createQuote = async () => {
+  const QUOTE_TYPE_LABELS: Record<string, string> = {
+    three_packages: "3 warianty",
+    two_packages:   "2 warianty",
+    single_variant: "1 wariant",
+  };
+
+  const createQuote = async (quoteType: string) => {
     setCreating(true);
+    setShowTypeDialog(false);
     try {
       const res = await fetch(`/api/inquiries/${inquiryId}/quotes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ quoteType }),
       });
       if (!res.ok) throw new Error();
       const quote = await res.json();
@@ -1166,6 +1175,27 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
     }
   };
 
+  const QUOTE_TYPE_OPTIONS = [
+    {
+      value: "three_packages",
+      label: "3 warianty",
+      desc: "Minimum / Standard / Pro — klasyczne porównanie trzech opcji",
+      icon: "▦",
+    },
+    {
+      value: "two_packages",
+      label: "2 warianty",
+      desc: "Ekonomiczny / Premium — uproszczone porównanie dwóch opcji",
+      icon: "▤",
+    },
+    {
+      value: "single_variant",
+      label: "1 wariant (uproszczona)",
+      desc: "Jedna konkretna propozycja — awarie, serwis, małe zlecenia",
+      icon: "▬",
+    },
+  ];
+
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
@@ -1175,7 +1205,7 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
         <Button
           size="sm"
           className="bg-red-800 hover:bg-red-900 text-white"
-          onClick={createQuote}
+          onClick={() => setShowTypeDialog(true)}
           disabled={creating}
         >
           <Plus className="w-4 h-4 mr-1" />
@@ -1183,11 +1213,37 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
         </Button>
       </div>
 
+      {/* Dialog wyboru trybu wyceny */}
+      <Dialog open={showTypeDialog} onOpenChange={setShowTypeDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Wybierz typ wyceny</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            {QUOTE_TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => createQuote(opt.value)}
+                className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl text-gray-400">{opt.icon}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                    <p className="text-xs text-gray-500">{opt.desc}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {quotes.length === 0 ? (
         <div className="text-center py-10 text-gray-400">
           <Receipt className="w-10 h-10 mx-auto mb-2 opacity-40" />
           <p className="text-sm">Brak wycen</p>
-          <p className="text-xs mt-1">Kliknij „Utwórz wycenę" aby przygotować ofertę z 3 pakietami</p>
+          <p className="text-xs mt-1">Kliknij „Utwórz wycenę" aby wybrać typ wyceny</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -1198,11 +1254,16 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
               className="w-full text-left bg-white border border-gray-200 rounded-xl p-3 hover:border-red-200 hover:shadow-sm transition-all"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-sm font-bold">{q.quoteNumber}</span>
                   <Badge className={cn("text-xs", QUOTE_STATUS_COLORS[q.status] ?? "bg-gray-100")}>
                     {QUOTE_STATUS_LABELS[q.status] ?? q.status}
                   </Badge>
+                  {q.quoteType && q.quoteType !== "three_packages" && (
+                    <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
+                      {QUOTE_TYPE_LABELS[q.quoteType] ?? q.quoteType}
+                    </span>
+                  )}
                 </div>
                 <span className="text-xs text-gray-400">
                   {format(new Date(q.createdAt), "d MMM yyyy", { locale: pl })}

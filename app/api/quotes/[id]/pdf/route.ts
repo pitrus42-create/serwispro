@@ -134,9 +134,15 @@ export async function GET(
     : "";
   const serviceLabel = SERVICE_LABELS[quote.serviceType ?? ""] ?? (quote.serviceType ?? "");
 
-  // Packages in order: MINIMUM, STANDARD, PRO
-  const pkgOrder = ["MINIMUM", "STANDARD", "PRO"];
-  const packages = pkgOrder.map(t => quote.packages.find(p => p.packageType === t)).filter(Boolean) as typeof quote.packages;
+  // Packages ordered per quoteType
+  const qt = (quote as typeof quote & { quoteType?: string }).quoteType ?? "three_packages";
+  const pkgOrder =
+    qt === "two_packages"   ? ["MINIMUM", "PRO"] :
+    qt === "single_variant" ? ["STANDARD"] :
+    ["MINIMUM", "STANDARD", "PRO"];
+  let packages = pkgOrder.map(t => quote.packages.find(p => p.packageType === t)).filter(Boolean) as typeof quote.packages;
+  if (packages.length === 0) packages = quote.packages.slice(0, 1); // fallback
+  const pkgColumns = packages.length;
 
   const PKG_COLORS = {
     MINIMUM:  { hdr: "#475569", accent: "#94a3b8", bg: "#f8fafc", badge: "#e2e8f0", badgeText: "#475569" },
@@ -191,7 +197,7 @@ export async function GET(
       ${isRec ? `<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:${c.accent};color:white;font-size:7.5px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;padding:3px 12px;border-radius:0 0 6px 6px;white-space:nowrap">★ Rekomendowany</div>` : ""}
       ${isPro && !isRec ? `<div style="position:absolute;top:-1px;right:10px;background:#78350f;color:white;font-size:7px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;padding:2px 8px;border-radius:0 0 5px 5px;white-space:nowrap">Premium</div>` : ""}
       <div style="background:${c.hdr};padding:${isRec ? "22px 14px 10px" : "10px 14px"};text-align:center">
-        <div style="display:inline-block;background:${c.badge};color:${c.badgeText};font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;padding:3px 10px;border-radius:999px;margin-bottom:4px">${esc(pkg.packageType)}</div>
+        ${qt !== "single_variant" ? `<div style="display:inline-block;background:${c.badge};color:${c.badgeText};font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;padding:3px 10px;border-radius:999px;margin-bottom:4px">${esc(pkg.packageType)}</div>` : ""}
         <div style="font-size:14px;font-weight:700;color:white;line-height:1.2">${esc(pkg.name)}</div>
         ${pkg.description ? `<div style="font-size:9.5px;color:rgba(255,255,255,0.8);margin-top:3px;line-height:1.4">${esc(pkg.description)}</div>` : ""}
       </div>
@@ -303,8 +309,8 @@ export async function GET(
 
   <!-- PACKAGES -->
   <div style="margin-bottom:8px">
-    <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid ${C_BORDER}">Warianty oferty</div>
-    <div style="display:grid;grid-template-columns:repeat(${packages.length},1fr);gap:12px">
+    <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid ${C_BORDER}">${qt === "single_variant" ? "Propozycja" : "Warianty oferty"}</div>
+    <div style="display:grid;grid-template-columns:repeat(${pkgColumns},1fr);gap:12px;${qt === "single_variant" ? "max-width:400px" : ""}">
       ${packages.map(renderPackage).join("")}
     </div>
   </div>

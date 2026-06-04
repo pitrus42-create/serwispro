@@ -141,6 +141,7 @@ interface Quote {
   id: string;
   quoteNumber: string;
   status: string;
+  quoteType: string;
   validUntil: string | null;
   internalNotes: string | null;
   summary: string | null;
@@ -233,9 +234,18 @@ export default function QuoteEditorPage({
   }
 
   const isAccepted = quote.status.startsWith("ZAAKCEPTOWANA");
-  const packagesOrdered = ["MINIMUM", "STANDARD", "PRO"]
+  const qt = quote.quoteType ?? "three_packages";
+  const pkgOrder =
+    qt === "two_packages"   ? ["MINIMUM", "PRO"] :
+    qt === "single_variant" ? ["STANDARD"] :
+    ["MINIMUM", "STANDARD", "PRO"];
+  const packagesOrdered = pkgOrder
     .map((t) => quote.packages.find((p) => p.packageType === t))
     .filter(Boolean) as QuotePackage[];
+  // single_variant: jeśli nie ma pakietu o typie STANDARD, weź pierwszy dostępny
+  const finalPackages = (qt === "single_variant" && packagesOrdered.length === 0)
+    ? quote.packages.slice(0, 1)
+    : packagesOrdered;
 
   return (
     <div className="flex flex-col h-full">
@@ -348,10 +358,15 @@ export default function QuoteEditorPage({
           <GeneralSection quote={quote} onSave={(data) => updateQuote.mutate(data)} />
           <div>
             <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">
-              Pakiety wyceny
+              {qt === "single_variant" ? "Wariant wyceny" : "Pakiety wyceny"}
             </h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {packagesOrdered.map((pkg) => (
+            <div className={cn(
+              "grid gap-4 grid-cols-1",
+              qt === "three_packages" && "lg:grid-cols-3",
+              qt === "two_packages"   && "lg:grid-cols-2",
+              qt === "single_variant" && "max-w-xl",
+            )}>
+              {finalPackages.map((pkg) => (
                 <PackageCard
                   key={pkg.id}
                   pkg={pkg}
@@ -381,7 +396,7 @@ export default function QuoteEditorPage({
       <AcceptanceDialog
         open={acceptDialog}
         onClose={() => setAcceptDialog(false)}
-        packages={packagesOrdered}
+        packages={finalPackages}
         quoteId={id}
         onAccepted={() => {
           setAcceptDialog(false);
