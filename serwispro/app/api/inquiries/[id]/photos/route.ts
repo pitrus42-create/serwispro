@@ -1,6 +1,7 @@
 import { getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFile } from "@/lib/storage";
+import { analyzeInquiry } from "@/lib/inquiry-analysis";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 
@@ -74,6 +75,19 @@ export async function POST(
       description: `Dodano ${files.length} zdjęcie(a) przez ${actorLabel}`,
     },
   });
+
+  // Re-analiza po dodaniu zdjęć (może usunąć tag "Brakuje zdjęć")
+  const updatedInquiry = await prisma.inquiry.findUnique({
+    where: { id },
+    include: { _count: { select: { photos: true } } },
+  });
+  if (updatedInquiry) {
+    const analysis = analyzeInquiry({ ...updatedInquiry, _count: { photos: updatedInquiry._count.photos } });
+    await prisma.inquiry.update({
+      where: { id },
+      data: { tags: JSON.stringify(analysis.tags), autoAnalysis: JSON.stringify(analysis) },
+    });
+  }
 
   return NextResponse.json(uploaded, { status: 201 });
 }

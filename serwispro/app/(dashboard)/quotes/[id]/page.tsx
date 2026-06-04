@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import { toast } from "sonner";
@@ -123,15 +123,12 @@ interface Quote {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function QuoteEditorPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+export default function QuoteEditorPage() {
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();
   const [acceptDialog, setAcceptDialog] = useState(false);
+  const [createOrderDialog, setCreateOrderDialog] = useState(false);
 
   const { data: quote, isLoading } = useQuery({
     queryKey: ["quote", id],
@@ -187,7 +184,6 @@ export default function QuoteEditorPage({
   }
 
   const isAccepted = quote.status.startsWith("ZAAKCEPTOWANA");
-  const [createOrderDialog, setCreateOrderDialog] = useState(false);
   const packagesOrdered = ["MINIMUM", "STANDARD", "PRO"]
     .map((t) => quote.packages.find((p) => p.packageType === t))
     .filter(Boolean) as QuotePackage[];

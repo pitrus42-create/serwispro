@@ -641,6 +641,12 @@ model Inquiry {
   publicToken       String?  @unique
   convertedToClient Boolean  @default(false)
   clientId          String?
+  tags              String   @default("[]")
+  autoAnalysis      String   @default("{}")
+  archivedAt        DateTime?
+  archivedBy        String?
+  deletedAt         DateTime?
+  deletedBy         String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   photos            InquiryPhoto[]

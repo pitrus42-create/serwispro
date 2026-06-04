@@ -6,7 +6,8 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { ArrowLeft, AlertTriangle, Search, X } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Search, X, Star, MapPin } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,14 +32,24 @@ const schema = z.object({
   internalNotes: z.string().optional(),
   scheduledAt: z.string().optional(),
   scheduledEndAt: z.string().optional(),
+  estimatedDuration: z.string().optional(),
+  difficulty: z.number().optional(),
   responsibleId: z.string().optional(),
   helperIds: z.array(z.string()),
 });
 
 type FormData = z.infer<typeof schema>;
 
-interface Client { id: string; name: string | null; alias: string | null; phone: string | null; }
-interface Location { id: string; name: string; address: string | null; }
+interface Client {
+  id: string;
+  name: string | null;
+  alias: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+}
+interface Location { id: string; name: string; address: string | null; city: string | null; }
 interface User { id: string; firstName: string; lastName: string; }
 
 // ── Client autocomplete ────────────────────────────────────────────────────
@@ -46,16 +57,27 @@ interface User { id: string; firstName: string; lastName: string; }
 function ClientSearch({
   value,
   onChange,
+  initialClient,
 }: {
   value: string | undefined;
   onChange: (clientId: string | undefined, client: Client | undefined) => void;
+  initialClient?: Client;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<Client | undefined>();
+  const [selected, setSelected] = useState<Client | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const initialApplied = useRef(false);
+
+  // Apply preloaded client once when it arrives
+  useEffect(() => {
+    if (initialClient && !initialApplied.current) {
+      initialApplied.current = true;
+      setSelected(initialClient);
+    }
+  }, [initialClient]);
 
   useEffect(() => {
     const down = (e: MouseEvent) => {
@@ -150,6 +172,36 @@ function ClientSearch({
   );
 }
 
+// ── Difficulty picker ──────────────────────────────────────────────────────────
+
+const DIFFICULTY_COLORS = ["", "text-green-500", "text-green-500", "text-yellow-500", "text-orange-500", "text-red-500"];
+
+function DifficultyPicker({ value, onChange }: { value: number | undefined; onChange: (v: number | undefined) => void }) {
+  const current = value ?? 0;
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n === current ? undefined : n)}
+          className="p-0.5 rounded hover:scale-110 transition-transform"
+        >
+          <Star
+            className={cn("h-5 w-5", n <= current ? DIFFICULTY_COLORS[current] : "text-gray-200")}
+            fill={n <= current ? "currentColor" : "none"}
+          />
+        </button>
+      ))}
+      {current > 0 && (
+        <span className="ml-1 text-xs text-gray-500 self-center">
+          {["", "Bardzo łatwe", "Łatwe", "Średnie", "Trudne", "Bardzo trudne"][current]}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function NewOrderPage() {
@@ -165,9 +217,12 @@ function NewOrderForm() {
   const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedClient, setSelectedClient] = useState<Client | undefined>();
+  const [preloadedClient, setPreloadedClient] = useState<Client | undefined>();
 
-  const initialDate = searchParams.get("scheduledAt"); // yyyy-MM-dd
+  const initialDate = searchParams.get("scheduledAt");
   const initialType = searchParams.get("type") ?? undefined;
+  const initialClientId = searchParams.get("clientId") ?? undefined;
 
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -182,28 +237,79 @@ function NewOrderForm() {
 
   const watchType = watch("type");
   const watchClientId = watch("clientId");
+  const watchLocationId = watch("locationId");
 
   const [users, setUsers] = useState<User[]>([]);
   useEffect(() => {
     fetch("/api/users?status=ACTIVE&limit=100").then((r) => r.json()).then((d) => setUsers(d.data ?? []));
   }, []);
 
+  // Preload client from URL param (e.g. when coming from client detail page)
   useEffect(() => {
-    if (!watchClientId) { setLocations([]); return; }
+    if (!initialClientId) return;
+    fetch(`/api/clients/${initialClientId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const c = d.data;
+        if (!c?.id) return;
+        const clientData: Client = {
+          id: c.id,
+          name: c.name,
+          alias: c.alias,
+          phone: c.phone,
+          address: c.address,
+          city: c.city,
+          postalCode: c.postalCode,
+        };
+        setPreloadedClient(clientData);
+        setSelectedClient(clientData);
+        setValue("clientId", c.id);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClientId]);
+
+  // Fetch locations when client changes; auto-select first if available
+  useEffect(() => {
+    if (!watchClientId) { setLocations([]); setValue("locationId", undefined); return; }
     fetch(`/api/clients/${watchClientId}/locations`)
       .then((r) => r.json())
-      .then((d) => setLocations(d.data ?? []))
-      .catch(() => setLocations([]));
-    setValue("locationId", undefined);
+      .then((d) => {
+        const locs: Location[] = d.data ?? [];
+        setLocations(locs);
+        if (locs.length > 0) {
+          setValue("locationId", locs[0].id);
+        } else {
+          setValue("locationId", undefined);
+        }
+      })
+      .catch(() => { setLocations([]); setValue("locationId", undefined); });
   }, [watchClientId, setValue]);
+
+  function clientAddressLabel(c: Client | undefined): string | null {
+    if (!c?.address) return null;
+    const postCity = [c.postalCode, c.city].filter(Boolean).join(" ");
+    return [c.address, postCity].filter(Boolean).join(", ");
+  }
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
+      const payload = { ...data };
+      // If no location but client has address, include it in description automatically
+      if (!data.locationId && selectedClient) {
+        const addr = clientAddressLabel(selectedClient);
+        if (addr) {
+          payload.description = [
+            `Lokalizacja: ${addr}`,
+            data.description,
+          ].filter(Boolean).join("\n");
+        }
+      }
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         let errMsg = "Błąd tworzenia zlecenia";
@@ -317,46 +423,96 @@ function NewOrderForm() {
             render={({ field }) => (
               <ClientSearch
                 value={field.value}
-                onChange={(clientId, _client) => field.onChange(clientId)}
+                initialClient={preloadedClient}
+                onChange={(clientId, client) => {
+                  field.onChange(clientId);
+                  setSelectedClient(client);
+                }}
               />
             )}
           />
         </div>
 
-        {/* Location */}
-        {watchClientId && locations.length > 0 && (
+        {/* Location — shown only when client is selected */}
+        {watchClientId && (
           <div className="space-y-1.5">
             <Label>Lokalizacja</Label>
+            {locations.length > 0 ? (
+              <Controller
+                name="locationId"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Wybierz lokalizację..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.name}{l.address ? ` – ${l.address}` : ""}{l.city ? `, ${l.city}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            ) : clientAddressLabel(selectedClient) ? (
+              <div className="flex items-start gap-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />
+                <div>
+                  <p className="font-medium">{clientAddressLabel(selectedClient)}</p>
+                  <p className="text-xs text-blue-600 mt-0.5">Adres z danych klienta</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">
+                Ten klient nie ma dodanej lokalizacji ani adresu kontaktowego.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Scheduled date — only start time */}
+        <div className="space-y-1.5">
+          <Label htmlFor="scheduledAt">Data/godzina</Label>
+          <Input id="scheduledAt" type="datetime-local" {...register("scheduledAt")} />
+        </div>
+
+        {/* Estimated duration + difficulty */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Szacowany czas pracy</Label>
             <Controller
-              name="locationId"
+              name="estimatedDuration"
               control={control}
               render={({ field }) => (
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <Select onValueChange={(v) => field.onChange(v === "none" ? undefined : v)} value={field.value ?? "none"}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Wybierz lokalizację..." />
+                    <SelectValue placeholder="Wybierz czas..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.name} {l.address ? `– ${l.address}` : ""}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="none">— nie określono —</SelectItem>
+                    <SelectItem value="30min">30 minut</SelectItem>
+                    <SelectItem value="1h">1 godzina</SelectItem>
+                    <SelectItem value="2h">2 godziny</SelectItem>
+                    <SelectItem value="halfday">Pół dnia</SelectItem>
+                    <SelectItem value="fullday">Cały dzień</SelectItem>
+                    <SelectItem value="2days">2 dni</SelectItem>
+                    <SelectItem value="several">Kilka dni</SelectItem>
                   </SelectContent>
                 </Select>
               )}
             />
           </div>
-        )}
-
-        {/* Scheduled date */}
-        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="scheduledAt">Data/godzina (od)</Label>
-            <Input id="scheduledAt" type="datetime-local" {...register("scheduledAt")} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="scheduledEndAt">Data/godzina (do)</Label>
-            <Input id="scheduledEndAt" type="datetime-local" {...register("scheduledEndAt")} />
+            <Label>Trudność</Label>
+            <Controller
+              name="difficulty"
+              control={control}
+              render={({ field }) => (
+                <DifficultyPicker value={field.value} onChange={field.onChange} />
+              )}
+            />
           </div>
         </div>
 

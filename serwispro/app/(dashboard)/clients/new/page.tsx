@@ -150,6 +150,7 @@ export default function NewClientPage() {
             <Input id="city" {...register("city")} placeholder="Warszawa" />
           </div>
         </div>
+        <p className="text-xs text-gray-400">Jeśli podasz adres, zostanie automatycznie dodany jako domyślna lokalizacja klienta.</p>
 
         <div className="space-y-1.5">
           <Label htmlFor="notes">Notatki</Label>

@@ -59,7 +59,7 @@ export function DashboardMobile({
 
   const pills = [
     { value: d.overdueOrders,        label: "Zaległe",     color: "bg-amber-100 text-amber-800",   href: "/orders?overdue=true" },
-    { value: d.openAlerts,           label: "Awarie",      color: "bg-orange-100 text-orange-800",  href: "/orders?type=AWARIA" },
+    { value: d.openAlerts,           label: "Awarie",      color: "bg-orange-100 text-orange-800",  href: "/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU" },
     { value: d.highPriorityOrders,   label: "Pilne",       color: "bg-purple-100 text-purple-800",  href: "/orders?priority=WYSOKI,KRYTYCZNY" },
     { value: d.pendingMaintenance,   label: "Konserwacje", color: "bg-teal-100 text-teal-800",      href: "/orders?type=KONSERWACJA" },
     { value: d.todayOrders.length,   label: "Dziś",        color: "bg-red-100 text-red-900",        href: "/calendar" },

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   format,
   startOfWeek,
@@ -19,10 +20,14 @@ import {
   isSameMonth,
 } from "date-fns";
 import { pl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, ChevronUp, ChevronDown, AlertTriangle, CheckSquare, Square, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { isAdmin, canDo } from "@/lib/permissions";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -57,30 +62,24 @@ const PRIORITY_BORDER: Record<string, string> = {
   KRYTYCZNY: "border-l-red-500",
 };
 
+const USER_COLORS = [
+  "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
+  "#06B6D4", "#F97316", "#14B8A6", "#EC4899", "#84CC16",
+];
+
 const WEEK_DAY_NAMES = ["Pn", "Wt", "Śr", "Cz", "Pt"];
 const MONTH_DAY_NAMES = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface CalendarOrder {
-  id: string;
-  orderNumber: string;
-  title: string;
-  start: string | null;
-  extendedProps: {
-    type: string;
-    status: string;
-    priority: string;
-    isCritical: boolean;
-    clientName: string | null;
-    leadName: string | null;
-    isMyOrder: boolean;
-    dayOrder: number | null;
-    note: string | null;
-  };
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getUserColor(userId: string | null): string | null {
+  if (!userId) return null;
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
+}
 
 function getFirstLine(text: string | null): string | null {
   if (!text) return null;
@@ -109,6 +108,39 @@ function buildMonthGrid(currentDate: Date): Date[] {
     cursor = addDays(cursor, 1);
   }
   return days;
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface CalendarOrder {
+  id: string;
+  orderNumber: string;
+  title: string;
+  start: string | null;
+  extendedProps: {
+    type: string;
+    status: string;
+    priority: string;
+    isCritical: boolean;
+    clientName: string | null;
+    leadName: string | null;
+    leadUserId: string | null;
+    isMyOrder: boolean;
+    dayOrder: number | null;
+    note: string | null;
+  };
+}
+
+interface UserOption { id: string; firstName: string; lastName: string; }
+
+interface SimpleTask {
+  id: string;
+  title: string;
+  description: string | null;
+  date: string | null;
+  assignedUserId: string | null;
+  assignedUser: { id: string; firstName: string; lastName: string } | null;
+  isCompleted: boolean;
 }
 
 // ── Order card (week view) ────────────────────────────────────────────────────
@@ -154,16 +186,24 @@ function OrderCard({
     router.push(`/orders/${order.id}`);
   }
 
-  const { type, priority, isCritical, clientName, leadName, isMyOrder, note } = order.extendedProps;
+  const { type, priority, isCritical, clientName, leadName, leadUserId, isMyOrder, note, status } = order.extendedProps;
   const noteLine = getFirstLine(note);
+  const userColor = getUserColor(leadUserId);
+  const isOverdue = !!order.start && new Date(order.start) < new Date() && !["ZAKONCZONE", "ANULOWANE"].includes(status);
 
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", JSON.stringify({ orderId: order.id, scheduledAt: order.start }));
+        e.dataTransfer.effectAllowed = "move";
+      }}
       className={cn(
-        "relative rounded-md border-l-4 bg-white border border-gray-100 px-2.5 py-2 text-xs cursor-pointer select-none transition-all",
+        "relative rounded-md border-l-4 bg-white border border-gray-100 px-2.5 py-2 text-xs cursor-grab select-none transition-all active:cursor-grabbing",
         PRIORITY_BORDER[priority] ?? "border-l-gray-300",
         isReordering && "ring-2 ring-red-800 shadow-md",
         isCritical && "bg-red-50",
+        isOverdue && "ring-1 ring-red-400 border-red-200",
         !isMyOrder && "opacity-70"
       )}
       onPointerDown={startPress}
@@ -173,6 +213,7 @@ function OrderCard({
     >
       <div className="flex items-start gap-1.5">
         {isCritical && <AlertTriangle className="h-3 w-3 text-red-500 shrink-0 mt-0.5" />}
+        {isOverdue && !isCritical && <Clock className="h-3 w-3 text-red-400 shrink-0 mt-0.5" />}
         <span className={cn("shrink-0 rounded px-1 py-0.5 font-medium", TYPE_COLORS[type] ?? "bg-gray-100 text-gray-700")}>
           {TYPE_LABELS[type] ?? type}
         </span>
@@ -186,8 +227,13 @@ function OrderCard({
       {noteLine && (
         <p className="mt-0.5 text-gray-400 italic truncate pl-0.5">{noteLine}</p>
       )}
-      {leadName && !isMyOrder && (
-        <p className="mt-0.5 text-gray-400 truncate pl-0.5">👤 {leadName}</p>
+      {leadName && (
+        <p className="mt-0.5 text-gray-400 truncate pl-0.5 flex items-center gap-1">
+          {userColor && (
+            <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: userColor }} />
+          )}
+          {!isMyOrder && leadName}
+        </p>
       )}
 
       {isReordering && (
@@ -217,19 +263,49 @@ function OrderCard({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function CalendarPage() {
+function CalendarPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
 
   const [view, setView] = useState<"week" | "month">("week");
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => {
+    const d = searchParams.get("date");
+    return d ? new Date(d) : new Date();
+  });
   const [reorderingId, setReorderingId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  const [taskModalDay, setTaskModalDay] = useState<Date | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskNote, setTaskNote] = useState("");
+
+  // Calendar view filter: "mine" | "all" | userId
+  const canManage = isAdmin(session?.user) || canDo(session?.user, "calendar:view_all");
+  const [calendarUserId, setCalendarUserId] = useState<string>("mine");
+
+  const resolvedUserId =
+    calendarUserId === "mine" ? (session?.user?.id ?? "") :
+    calendarUserId === "all" ? "" :
+    calendarUserId;
+
+  // Fetch users for filter select (admin/manager only)
+  const { data: usersData } = useQuery({
+    queryKey: ["users-list"],
+    queryFn: async () => {
+      const r = await fetch("/api/users?limit=100&status=ACTIVE");
+      return r.json();
+    },
+    enabled: canManage,
+    staleTime: 5 * 60 * 1000,
+  });
+  const allUsers: UserOption[] = usersData?.data ?? [];
 
   // Week bounds
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
-  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i)); // Mon–Fri
+  const weekDays = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
 
   // Month grid
   const monthGridDays = buildMonthGrid(currentDate);
@@ -240,13 +316,18 @@ export default function CalendarPage() {
   const from = view === "week" ? weekStart.toISOString() : gridStart.toISOString();
   const to = view === "week" ? weekEnd.toISOString() : gridEnd.toISOString();
 
+  const calendarUrl = resolvedUserId
+    ? `/api/calendar?from=${from}&to=${to}&userId=${resolvedUserId}`
+    : `/api/calendar?from=${from}&to=${to}`;
+
   const { data, isLoading } = useQuery({
-    queryKey: ["calendar", view, from],
+    queryKey: ["calendar", view, from, resolvedUserId],
     queryFn: async () => {
-      const r = await fetch(`/api/calendar?from=${from}&to=${to}`);
+      const r = await fetch(calendarUrl);
       return r.json();
     },
     staleTime: 30_000,
+    enabled: !!session,
   });
 
   const dayOrderMutation = useMutation({
@@ -263,12 +344,102 @@ export default function CalendarPage() {
     onError: () => toast.error("Błąd zmiany kolejności"),
   });
 
+  const rescheduleMutation = useMutation({
+    mutationFn: async ({ orderId, scheduledAt }: { orderId: string; scheduledAt: string }) => {
+      const r = await fetch(`/api/orders/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledAt }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast.success("Termin zmieniony");
+    },
+    onError: () => toast.error("Błąd zmiany terminu"),
+  });
+
   const allOrders: CalendarOrder[] = data?.data ?? [];
+
+  // Simple tasks for current week
+  const { data: simpleTasksData } = useQuery({
+    queryKey: ["simple-tasks-calendar", from, resolvedUserId],
+    queryFn: async () => {
+      const userId = resolvedUserId || session?.user?.id;
+      const weekEnd = addDays(weekStart, 6);
+      const url = `/api/simple-tasks?date=${format(weekStart, "yyyy-MM-dd")}&to=${format(weekEnd, "yyyy-MM-dd")}&userId=${userId ?? ""}`;
+      const r = await fetch(url);
+      return r.json();
+    },
+    enabled: view === "week" && !!session,
+    staleTime: 30_000,
+  });
+  const allSimpleTasks: SimpleTask[] = simpleTasksData?.data ?? [];
+
+  function simpleTasksForDay(day: Date): SimpleTask[] {
+    return allSimpleTasks.filter((t) => t.date && isSameDay(new Date(t.date), day));
+  }
+
+  const completeSimpleTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/simple-tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCompleted: true }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["simple-tasks-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      toast.success("Zadanie wykonane");
+    },
+  });
+
+  const createSimpleTaskMutation = useMutation({
+    mutationFn: async ({ title, note, day }: { title: string; note: string; day: Date }) => {
+      const r = await fetch("/api/simple-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description: note || null,
+          date: day.toISOString(),
+          assignedUserId: resolvedUserId || null,
+        }),
+      });
+      if (!r.ok) throw new Error("Błąd dodawania zadania");
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["simple-tasks-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setTaskModalDay(null);
+      setTaskTitle("");
+      setTaskNote("");
+      toast.success("Zadanie dodane");
+    },
+    onError: () => toast.error("Błąd dodawania zadania"),
+  });
 
   function ordersForDay(day: Date): CalendarOrder[] {
     return sortOrders(
       allOrders.filter((o) => o.start && isSameDay(new Date(o.start), day))
     );
+  }
+
+  function handleDropToDay(orderId: string, originalScheduledAt: string | null, targetDay: Date) {
+    const newDateTime = new Date(targetDay);
+    if (originalScheduledAt) {
+      const orig = new Date(originalScheduledAt);
+      newDateTime.setHours(orig.getHours(), orig.getMinutes(), 0, 0);
+    } else {
+      newDateTime.setHours(8, 0, 0, 0);
+    }
+    rescheduleMutation.mutate({ orderId, scheduledAt: newDateTime.toISOString() });
   }
 
   const handleMoveOrder = useCallback(
@@ -307,9 +478,10 @@ export default function CalendarPage() {
       : format(currentDate, "LLLL yyyy", { locale: pl });
 
   return (
+    <>
     <div className="p-3 md:p-5 h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <button
             onClick={prev}
@@ -333,7 +505,50 @@ export default function CalendarPage() {
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View filter — admin/manager only */}
+          {canManage && (
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
+              <button
+                onClick={() => setCalendarUserId("mine")}
+                className={cn(
+                  "px-3 py-1.5 transition-colors",
+                  calendarUserId === "mine" ? "bg-red-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                Moje
+              </button>
+              <button
+                onClick={() => setCalendarUserId("all")}
+                className={cn(
+                  "px-3 py-1.5 transition-colors border-l border-gray-200",
+                  calendarUserId === "all" ? "bg-red-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                Wszyscy
+              </button>
+              {allUsers.length > 0 && (
+                <div className="border-l border-gray-200">
+                  <Select
+                    value={!["mine", "all"].includes(calendarUserId) ? calendarUserId : ""}
+                    onValueChange={(v) => v && setCalendarUserId(v)}
+                  >
+                    <SelectTrigger className="h-full border-0 rounded-none text-xs px-2 w-32 focus:ring-0">
+                      <SelectValue placeholder="Serwisant..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allUsers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.firstName} {u.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* View toggle */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
             <button
@@ -376,9 +591,24 @@ export default function CalendarPage() {
               {weekDays.map((day, i) => {
                 const dayOrders = ordersForDay(day);
                 const today = isToday(day);
+                const dayKey = day.toISOString();
+                const isDragOver = dragOverDay === dayKey;
 
                 return (
-                  <div key={day.toISOString()} className="flex flex-col min-w-0">
+                  <div
+                    key={dayKey}
+                    className="flex flex-col min-w-0"
+                    onDragOver={(e) => { e.preventDefault(); setDragOverDay(dayKey); }}
+                    onDragLeave={() => setDragOverDay(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverDay(null);
+                      try {
+                        const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                        handleDropToDay(data.orderId, data.scheduledAt, day);
+                      } catch {}
+                    }}
+                  >
                     {/* Day header */}
                     <div
                       className={cn(
@@ -407,22 +637,18 @@ export default function CalendarPage() {
                       </span>
                     </div>
 
-                    {/* Orders */}
-                    <div className="flex-1 space-y-1 overflow-y-auto max-h-[calc(100vh-220px)]">
+                    {/* Orders drop zone */}
+                    <div
+                      className={cn(
+                        "flex-1 space-y-1 overflow-y-auto max-h-[calc(100vh-220px)] rounded-lg transition-colors",
+                        isDragOver && "bg-blue-50 ring-2 ring-blue-300 ring-dashed"
+                      )}
+                    >
                       {isLoading ? (
                         <div className="space-y-1">
                           {[1, 2].map((n) => (
                             <div key={n} className="h-12 bg-gray-100 rounded animate-pulse" />
                           ))}
-                        </div>
-                      ) : dayOrders.length === 0 ? (
-                        <div
-                          className="h-16 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-gray-300 transition-colors"
-                          onClick={() =>
-                            router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)
-                          }
-                        >
-                          <Plus className="h-3.5 w-3.5 text-gray-300" />
                         </div>
                       ) : (
                         dayOrders.map((order, idx) => (
@@ -439,7 +665,54 @@ export default function CalendarPage() {
                           />
                         ))
                       )}
+                      {/* Simple tasks */}
+                      {simpleTasksForDay(day).map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-xs text-gray-600 dark:text-gray-400 group"
+                        >
+                          <button
+                            onClick={() => completeSimpleTaskMutation.mutate(task.id)}
+                            className="shrink-0 text-gray-400 hover:text-green-500 transition-colors"
+                          >
+                            <Square className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="flex-1 truncate">{task.title}</span>
+                          {task.assignedUser && (
+                            <span className="text-gray-400 shrink-0">{task.assignedUser.firstName}</span>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Add buttons inside scroll area */}
+                      {!isLoading && (
+                        <button
+                          onClick={() => router.push(`/orders/new?scheduledAt=${format(day, "yyyy-MM-dd")}`)}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border-2 border-dashed text-[11px] font-medium transition-colors",
+                            "border-gray-200 text-gray-400 hover:border-red-300 hover:text-red-600 hover:bg-red-50",
+                            "dark:border-gray-700 dark:text-gray-600 dark:hover:border-red-800 dark:hover:text-red-400 dark:hover:bg-red-950/20"
+                          )}
+                        >
+                          <Plus className="h-3 w-3" />
+                          Zlecenie
+                        </button>
+                      )}
+                      {!isLoading && resolvedUserId && (
+                        <button
+                          onClick={() => { setTaskModalDay(day); setTaskTitle(""); setTaskNote(""); }}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-1 py-1.5 rounded-lg border-2 border-dashed text-[11px] font-medium transition-colors",
+                            "border-gray-200 text-gray-400 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50",
+                            "dark:border-gray-700 dark:text-gray-600 dark:hover:border-blue-700 dark:hover:text-blue-400 dark:hover:bg-blue-950/20"
+                          )}
+                        >
+                          <CheckSquare className="h-3 w-3" />
+                          Zadanie
+                        </button>
+                      )}
                     </div>
+
                   </div>
                 );
               })}
@@ -460,8 +733,18 @@ export default function CalendarPage() {
             <span className="flex items-center gap-1">
               <span className="h-3 w-1 rounded-full bg-red-500 inline-block" /> Krytyczny
             </span>
+            {/* User color legend */}
+            {calendarUserId === "all" && allUsers.slice(0, 5).map((u) => {
+              const color = getUserColor(u.id);
+              return color ? (
+                <span key={u.id} className="flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                  {u.firstName}
+                </span>
+              ) : null;
+            })}
             <span className="ml-auto italic text-gray-400">
-              Przytrzymaj zlecenie aby zmienić kolejność
+              Przeciągnij zlecenie aby zmienić dzień · przytrzymaj aby zmienić kolejność
             </span>
           </div>
         </>
@@ -491,14 +774,29 @@ export default function CalendarPage() {
                 const today = isToday(day);
                 const isWeekend = day.getDay() === 0 || day.getDay() === 6;
 
-                return (
+                const dayKey = day.toISOString();
+              const isDragOver = dragOverDay === dayKey;
+              return (
                   <div
-                    key={day.toISOString()}
+                    key={dayKey}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverDay(dayKey); }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDay(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverDay(null);
+                      try {
+                        const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                        handleDropToDay(data.orderId, data.scheduledAt, day);
+                      } catch {}
+                    }}
                     className={cn(
-                      "min-h-[90px] p-1.5",
+                      "min-h-[90px] p-1.5 transition-colors",
                       isWeekend
                         ? inMonth ? "bg-amber-50" : "bg-amber-100/60"
-                        : inMonth ? "bg-white" : "bg-gray-50"
+                        : inMonth ? "bg-white" : "bg-gray-50",
+                      isDragOver && "bg-blue-50 ring-inset ring-1 ring-blue-300"
                     )}
                   >
                     <div
@@ -518,18 +816,29 @@ export default function CalendarPage() {
                     </div>
                     <div className="space-y-0.5">
                       {!isLoading &&
-                        dayOrders.slice(0, 3).map((order) => (
-                          <div
-                            key={order.id}
-                            onClick={() => router.push(`/orders/${order.id}`)}
-                            className={cn(
-                              "text-[10px] truncate rounded px-1 py-0.5 cursor-pointer hover:opacity-80",
-                              TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
-                            )}
-                          >
-                            {order.title}
-                          </div>
-                        ))}
+                        dayOrders.slice(0, 3).map((order) => {
+                          const color = getUserColor(order.extendedProps.leadUserId);
+                          return (
+                            <div
+                              key={order.id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("text/plain", JSON.stringify({ orderId: order.id, scheduledAt: order.start }));
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              onClick={() => router.push(`/orders/${order.id}`)}
+                              className={cn(
+                                "text-[10px] truncate rounded px-1 py-0.5 cursor-grab hover:opacity-80 flex items-center gap-1 select-none",
+                                TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
+                              )}
+                            >
+                              {color && (
+                                <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                              )}
+                              {order.title}
+                            </div>
+                          );
+                        })}
                       {dayOrders.length > 3 && (
                         <div className="text-[10px] text-gray-400 pl-1">
                           +{dayOrders.length - 3} więcej
@@ -585,17 +894,18 @@ export default function CalendarPage() {
                     >
                       {format(day, "d")}
                     </span>
-                    {/* Colored dots per order */}
+                    {/* Colored dots per order (user color) */}
                     <div className="flex flex-wrap gap-0.5 mt-0.5 justify-center max-w-[22px]">
-                      {dayOrders.slice(0, 4).map((o) => (
-                        <span
-                          key={o.id}
-                          className={cn(
-                            "w-1.5 h-1.5 rounded-sm",
-                            TYPE_DOT[o.extendedProps.type] ?? "bg-gray-400"
-                          )}
-                        />
-                      ))}
+                      {dayOrders.slice(0, 4).map((o) => {
+                        const color = getUserColor(o.extendedProps.leadUserId);
+                        return (
+                          <span
+                            key={o.id}
+                            className={cn("w-1.5 h-1.5 rounded-sm", !color && (TYPE_DOT[o.extendedProps.type] ?? "bg-gray-400"))}
+                            style={color ? { backgroundColor: color } : undefined}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -626,32 +936,41 @@ export default function CalendarPage() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {ordersForDay(selectedDay).map((order) => (
-                      <div
-                        key={order.id}
-                        onClick={() => router.push(`/orders/${order.id}`)}
-                        className={cn(
-                          "rounded-md border-l-4 bg-white border border-gray-100 px-3 py-2 text-xs cursor-pointer",
-                          PRIORITY_BORDER[order.extendedProps.priority] ?? "border-l-gray-300",
-                          order.extendedProps.isCritical && "bg-red-50"
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span
-                            className={cn(
-                              "shrink-0 rounded px-1 py-0.5 font-medium",
-                              TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
-                            )}
-                          >
-                            {TYPE_LABELS[order.extendedProps.type] ?? order.extendedProps.type}
-                          </span>
-                          <span className="font-medium text-gray-900 truncate">{order.title}</span>
+                    {ordersForDay(selectedDay).map((order) => {
+                      const color = getUserColor(order.extendedProps.leadUserId);
+                      return (
+                        <div
+                          key={order.id}
+                          onClick={() => router.push(`/orders/${order.id}`)}
+                          className={cn(
+                            "rounded-md border-l-4 bg-white border border-gray-100 px-3 py-2 text-xs cursor-pointer",
+                            PRIORITY_BORDER[order.extendedProps.priority] ?? "border-l-gray-300",
+                            order.extendedProps.isCritical && "bg-red-50"
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span
+                              className={cn(
+                                "shrink-0 rounded px-1 py-0.5 font-medium",
+                                TYPE_COLORS[order.extendedProps.type] ?? "bg-gray-100 text-gray-700"
+                              )}
+                            >
+                              {TYPE_LABELS[order.extendedProps.type] ?? order.extendedProps.type}
+                            </span>
+                            <span className="font-medium text-gray-900 truncate">{order.title}</span>
+                          </div>
+                          {order.extendedProps.clientName && (
+                            <p className="text-gray-500 truncate">{order.extendedProps.clientName}</p>
+                          )}
+                          {order.extendedProps.leadName && (
+                            <p className="text-gray-400 truncate flex items-center gap-1">
+                              {color && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />}
+                              {order.extendedProps.leadName}
+                            </p>
+                          )}
                         </div>
-                        {order.extendedProps.clientName && (
-                          <p className="text-gray-500 truncate">{order.extendedProps.clientName}</p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -660,5 +979,77 @@ export default function CalendarPage() {
         </div>
       )}
     </div>
+
+    {/* Quick task modal */}
+    {taskModalDay && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        onClick={() => setTaskModalDay(null)}
+      >
+        <div
+          className="bg-white dark:bg-gray-900 rounded-xl border dark:border-gray-700 p-5 w-full max-w-sm mx-4 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Szybkie zadanie — {format(taskModalDay, "EEEE, d MMM", { locale: pl })}
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                Tytuł *
+              </label>
+              <input
+                autoFocus
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && taskTitle.trim()) {
+                    createSimpleTaskMutation.mutate({ title: taskTitle.trim(), note: taskNote, day: taskModalDay });
+                  }
+                }}
+                placeholder="np. odebrać zamówienie, zawieźć dokumenty..."
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-800"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                Notatka (opcjonalnie)
+              </label>
+              <textarea
+                value={taskNote}
+                onChange={(e) => setTaskNote(e.target.value)}
+                rows={2}
+                placeholder="Dodatkowe informacje..."
+                className="w-full text-sm border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-800 resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={() => setTaskModalDay(null)}
+              className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              Anuluj
+            </button>
+            <button
+              disabled={!taskTitle.trim() || createSimpleTaskMutation.isPending}
+              onClick={() => createSimpleTaskMutation.mutate({ title: taskTitle.trim(), note: taskNote, day: taskModalDay })}
+              className="flex-1 px-3 py-2 text-sm bg-red-800 text-white rounded-lg hover:bg-red-900 disabled:opacity-40 transition-colors"
+            >
+              {createSimpleTaskMutation.isPending ? "Dodawanie..." : "Dodaj zadanie"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
+  );
+}
+
+export default function CalendarPageWrapper() {
+  return (
+    <Suspense>
+      <CalendarPage />
+    </Suspense>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, use } from "react";
+import { useState, useRef } from "react";
+import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
@@ -93,12 +94,8 @@ interface PublicInquiry {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function InquiryReturnPage({
-  params,
-}: {
-  params: Promise<{ token: string }>;
-}) {
-  const { token } = use(params);
+export default function InquiryReturnPage() {
+  const { token } = useParams<{ token: string }>();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);

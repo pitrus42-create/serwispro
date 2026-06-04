@@ -14,6 +14,9 @@ export async function POST(
 
   const { id } = await params;
 
+  const body = await req.json().catch(() => ({}));
+  const scheduledAt: string | null = body.scheduledAt ?? null;
+
   const order = await prisma.order.findUnique({
     where: { id },
     include: { assignments: true },
@@ -43,11 +46,19 @@ export async function POST(
     },
   });
 
-  // Zmień status na PRZYJETE jeśli OCZEKUJACE
+  // Zmień status na PRZYJETE jeśli OCZEKUJACE; opcjonalnie ustaw datę
   if (order.status === "OCZEKUJACE") {
     await prisma.order.update({
       where: { id },
-      data: { status: "PRZYJETE" },
+      data: {
+        status: "PRZYJETE",
+        ...(scheduledAt ? { scheduledAt: new Date(scheduledAt) } : {}),
+      },
+    });
+  } else if (scheduledAt) {
+    await prisma.order.update({
+      where: { id },
+      data: { scheduledAt: new Date(scheduledAt) },
     });
   }
 

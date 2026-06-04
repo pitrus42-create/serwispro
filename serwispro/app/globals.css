@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode for Tailwind v4 */
+@variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f9fafb;
   --foreground: #111827;
@@ -31,6 +34,35 @@
   --accent-foreground: #111827;
 
   /* Shadcn UI – destructive */
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+}
+
+/* ── Dark mode CSS variables ─────────────────────────────────────────────── */
+.dark {
+  --background: #0f1117;
+  --foreground: #e5e7eb;
+
+  --popover: #1a1f2e;
+  --popover-foreground: #e5e7eb;
+
+  --card: #1a1f2e;
+  --card-foreground: #e5e7eb;
+
+  --border: #2d3748;
+  --input: #2d3748;
+  --ring: #ef4444;
+
+  --primary: #ef4444;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1e2433;
+  --secondary-foreground: #e5e7eb;
+  --muted: #1e2433;
+  --muted-foreground: #9ca3af;
+  --accent: #1e2433;
+  --accent-foreground: #e5e7eb;
+
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 }

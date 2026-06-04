@@ -63,7 +63,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Powiadom adminów o nowym zapytaniu
   try {
     const SERVICE_LABELS: Record<string, string> = {
       CCTV: "Monitoring CCTV", ALARM: "Alarm", BRAMA: "Automatyka bramowa",

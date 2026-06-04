@@ -21,7 +21,6 @@ function createPrismaClient() {
     );
   }
 
-  // Fallback do lokalnego SQLite (dev bez Turso)
   const dbPath = path.join(process.cwd(), "prisma", "dev.db");
   const adapter = new PrismaLibSql({ url: `file:${dbPath}` });
   return new PrismaClient({ adapter } as never);

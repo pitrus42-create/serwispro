@@ -75,3 +75,6 @@ prisma/dev.db
 prisma/dev.db-journal
 prisma/dev.db-wal
 prisma/dev.db-shm
+
+# local uploads (stored in Firebase Storage in production)
+public/uploads/

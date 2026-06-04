@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, Suspense } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { pl } from "date-fns/locale";
@@ -56,13 +56,12 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 type DatePreset = "all" | "today" | "week" | "month";
-type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAPLANOWANE" | "ZAKONCZONE" | "DO_ROZLICZENIA";
+type TabKey = "all" | "OCZEKUJACE" | "PRZYJETE" | "W_TOKU" | "ZAKONCZONE" | "DO_ROZLICZENIA";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "OCZEKUJACE", label: "Oczekujące" },
   { key: "PRZYJETE", label: "Przyjęte" },
   { key: "W_TOKU", label: "W toku" },
-  { key: "ZAPLANOWANE", label: "Zaplanowane" },
   { key: "ZAKONCZONE", label: "Zakończone" },
   { key: "all", label: "Wszystkie" },
 ];
@@ -136,29 +135,8 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-function OrdersLoading() {
-  return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4">
-      <div className="h-8 w-48 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
-      <div className="h-10 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />
-      ))}
-    </div>
-  );
-}
-
 export default function OrdersPage() {
-  return (
-    <Suspense fallback={<OrdersLoading />}>
-      <OrdersContent />
-    </Suspense>
-  );
-}
-
-function OrdersContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const canCreateOrders = canDo(session?.user, "orders:create");
@@ -169,31 +147,14 @@ function OrdersContent() {
     (session.user as { role?: string }).role === "ADMIN"
   );
 
-  // Filters derived directly from URL — always in sync, no useState/useEffect needed
-  const type = searchParams.get("type") ?? "all";
-  const datePreset = (searchParams.get("datePreset") as DatePreset) ?? "all";
-  const tabParam = searchParams.get("tab") as TabKey | null;
-  const urlStatuses = (searchParams.get("status") ?? "").split(",").filter(Boolean);
-  const activeTab: TabKey =
-    tabParam && (tabParam in STATUS_LABELS || tabParam === "all" || tabParam === "DO_ROZLICZENIA")
-      ? tabParam
-      : urlStatuses.length === 1 && (urlStatuses[0] as TabKey) in STATUS_LABELS
-      ? (urlStatuses[0] as TabKey)
-      : type === "AWARIA"
-      ? "ZAPLANOWANE"
-      : "OCZEKUJACE";
-
+  const [activeTab, setActiveTab] = useState<TabKey>("OCZEKUJACE");
   const [search, setSearch] = useState("");
+  const [type, setType] = useState("all");
   const [priority, setPriority] = useState("all");
   const [userId, setUserId] = useState("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
-
-  function updateFilters(updates: Record<string, string | null>) {
-    const p = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([k, v]) => v === null ? p.delete(k) : p.set(k, v));
-    router.replace(`/orders?${p.toString()}`);
-  }
 
   const { data: usersData } = useQuery({
     queryKey: ["users-list"],
@@ -208,10 +169,10 @@ function OrdersContent() {
   if (search) params.q = search;
   if (activeTab === "DO_ROZLICZENIA") {
     params.settled = "false";
-  } else if (activeTab !== "all") {
+  } else if (activeTab === "all") {
+    params.status = "OCZEKUJACE,PRZYJETE,W_TOKU,ZAPLANOWANE,ZAKONCZONE";
+  } else {
     params.status = activeTab;
-  } else if (urlStatuses.length > 0) {
-    params.status = urlStatuses.join(",");
   }
   if (type !== "all") params.type = type;
   if (priority !== "all") params.priority = priority;
@@ -265,7 +226,7 @@ function OrdersContent() {
   const unsettledCount: number = unsettledData?.total ?? 0;
 
   const activeFilters: { label: string; clear: () => void }[] = [];
-  if (type !== "all") activeFilters.push({ label: TYPE_LABELS[type] ?? type, clear: () => { updateFilters({ type: null }); setPage(1); } });
+  if (type !== "all") activeFilters.push({ label: TYPE_LABELS[type] ?? type, clear: () => { setType("all"); setPage(1); } });
   if (priority !== "all") activeFilters.push({ label: priority, clear: () => { setPriority("all"); setPage(1); } });
   if (userId !== "all") {
     const u = users.find((u) => u.id === userId);
@@ -273,39 +234,28 @@ function OrdersContent() {
   }
   if (datePreset !== "all") {
     const labels: Record<DatePreset, string> = { all: "", today: "Dziś", week: "Ten tydzień", month: "Ten miesiąc" };
-    activeFilters.push({ label: labels[datePreset], clear: () => { updateFilters({ datePreset: null }); setPage(1); } });
+    activeFilters.push({ label: labels[datePreset], clear: () => { setDatePreset("all"); setPage(1); } });
   }
 
   function clearAll() {
-    setSearch(""); setPriority("all"); setUserId("all"); setPage(1);
-    updateFilters({ tab: null, type: null, status: null, settled: null, datePreset: null });
+    setSearch(""); setType("all"); setPriority("all");
+    setUserId("all"); setDatePreset("all"); setPage(1);
   }
 
-  const tabs =
-    type === "AWARIA"
-      ? [
-          { key: "OCZEKUJACE" as TabKey, label: "Oczekujące" },
-          { key: "ZAPLANOWANE" as TabKey, label: "Zaplanowane" },
-          { key: "ZAKONCZONE" as TabKey, label: "Zakończone" },
-        ]
-      : canSettle
-      ? [
-          { key: "OCZEKUJACE" as TabKey, label: "Oczekujące" },
-          { key: "PRZYJETE" as TabKey, label: "Przyjęte" },
-          { key: "W_TOKU" as TabKey, label: "W toku" },
-          { key: "ZAPLANOWANE" as TabKey, label: "Zaplanowane" },
-          { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
-          { key: "ZAKONCZONE" as TabKey, label: "Zakończone" },
-          { key: "all" as TabKey, label: "Wszystkie" },
-        ]
-      : TABS;
+  const tabs = canSettle
+    ? [
+        ...TABS.slice(0, 4),
+        { key: "DO_ROZLICZENIA" as TabKey, label: "Do rozliczenia" },
+        TABS[4], // "Wszystkie" stays last
+      ]
+    : TABS;
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{type === "AWARIA" ? "Awarie" : "Zlecenia"}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Zlecenia</h1>
           <p className="text-sm text-gray-500 mt-0.5">{total} zleceń</p>
         </div>
         {canCreateOrders && (
@@ -317,19 +267,11 @@ function OrdersContent() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-none">
+      <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto scrollbar-none">
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => {
-              setPage(1);
-              if (tab.key === "all")
-                updateFilters({ tab: "all", status: null, settled: null });
-              else if (tab.key === "DO_ROZLICZENIA")
-                updateFilters({ tab: "DO_ROZLICZENIA", status: null, settled: "false" });
-              else
-                updateFilters({ tab: tab.key, status: tab.key, settled: null });
-            }}
+            onClick={() => { setActiveTab(tab.key); setPage(1); }}
             className={cn(
               "relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
               activeTab === tab.key
@@ -379,7 +321,7 @@ function OrdersContent() {
         "md:flex flex-col sm:flex-row gap-3 mb-3",
         filtersOpen ? "flex" : "hidden"
       )}>
-        <Select value={type} onValueChange={(v) => { updateFilters({ type: v === "all" ? null : v }); setPage(1); }}>
+        <Select value={type} onValueChange={(v) => { setType(v); setPage(1); }}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Typ" />
           </SelectTrigger>
@@ -418,7 +360,7 @@ function OrdersContent() {
           </SelectContent>
         </Select>
 
-        <Select value={datePreset} onValueChange={(v) => { updateFilters({ datePreset: v === "all" ? null : v }); setPage(1); }}>
+        <Select value={datePreset} onValueChange={(v) => { setDatePreset(v as DatePreset); setPage(1); }}>
           <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Data" />
           </SelectTrigger>
@@ -450,12 +392,12 @@ function OrdersContent() {
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />
+            <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
           ))}
         </div>
       ) : orders.length === 0 ? (
-        <div className="text-center py-16 text-gray-500 dark:text-gray-400">
-          <Filter className="h-10 w-10 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+        <div className="text-center py-16 text-gray-500">
+          <Filter className="h-10 w-10 mx-auto mb-3 text-gray-300" />
           <p className="font-medium">Brak zleceń</p>
           <p className="text-sm mt-1">Zmień filtry lub utwórz nowe zlecenie</p>
           {activeFilters.length > 0 && (
@@ -477,9 +419,9 @@ function OrdersContent() {
               <div
                 key={order.id}
                 className={cn(
-                  "bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow",
-                  order.isCritical && "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/60",
-                  isUnsettled && canSettle && "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60"
+                  "bg-white rounded-lg border p-4 hover:shadow-md transition-shadow",
+                  order.isCritical && "border-red-300 bg-red-50",
+                  isUnsettled && canSettle && "border-amber-300 bg-amber-50"
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -491,14 +433,14 @@ function OrdersContent() {
                     onClick={() => router.push(`/orders/${order.id}`)}
                   >
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="text-xs font-mono text-gray-400 dark:text-gray-500">{order.orderNumber}</span>
+                      <span className="text-xs font-mono text-gray-400">{order.orderNumber}</span>
                       <Badge className={cn("text-xs", STATUS_COLORS[order.status])}>
                         {STATUS_LABELS[order.status]}
                       </Badge>
                       <Badge className={cn("text-xs", PRIORITY_COLORS[order.priority])}>
                         {order.priority}
                       </Badge>
-                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                         {TYPE_LABELS[order.type] ?? order.type}
                       </span>
                       {isUnassigned && (
@@ -524,10 +466,10 @@ function OrdersContent() {
                         </span>
                       )}
                     </div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                    <p className="font-medium text-gray-900 truncate">
                       {order.title ?? order.client?.name ?? `Zlecenie ${order.orderNumber}`}
                     </p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
                       {order.client && <span>{order.client.name}</span>}
                       {order.location && (
                         <span className="truncate">{order.location.address ?? order.location.name}</span>

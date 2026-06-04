@@ -1,3 +1,5 @@
+rootDir: serwispro
+
 runConfig:
   concurrency: 10
   minInstances: 0

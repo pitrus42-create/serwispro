@@ -1,6 +1,5 @@
 import { auth, getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/permissions";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
@@ -12,13 +11,9 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to");
   const userId = searchParams.get("userId");
 
-  const admin = isAdmin(session.user);
-
-  // Admins and managers see all or filtered by userId param
-  // Serwisants see ALL orders (to know team schedule) — isMyOrder flag differentiates theirs
-  const assignmentsFilter = admin
-    ? userId ? { assignments: { some: { userId } } } : {}
-    : {}; // serwisant sees all
+  const assignmentsFilter = userId
+    ? { assignments: { some: { userId } } }
+    : {};
 
   const orders = await prisma.order.findMany({
     where: {
@@ -59,6 +54,7 @@ export async function GET(req: NextRequest) {
         clientName: order.client?.name ?? null,
         address,
         leadName: lead ? `${lead.user.firstName} ${lead.user.lastName}` : null,
+        leadUserId: lead?.user.id ?? null,
         isMyOrder: order.assignments.some((a) => a.user.id === session.user.id),
         dayOrder: order.dayOrder,
         note: order.internalNotes ?? null,

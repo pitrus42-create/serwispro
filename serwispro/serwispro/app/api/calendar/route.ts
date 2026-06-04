@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
         ...(from ? { gte: new Date(from) } : {}),
         ...(to ? { lte: new Date(to) } : {}),
       },
-      status: { not: "ZAKONCZONE" },
+      status: { notIn: ["ZAKONCZONE", "ANULOWANE"] },
       ...assignmentsFilter,
     },
     include: {

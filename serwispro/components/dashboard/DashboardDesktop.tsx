@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Clock,
@@ -13,6 +15,9 @@ import {
   UserPlus,
   Users,
   ChevronRight,
+  CheckSquare,
+  CircleDollarSign,
+  FileSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,17 +26,18 @@ import { formatDateTime } from "@/lib/utils";
 import { ORDER_TYPE_CONFIG } from "@/constants/colors";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { isAdmin } from "@/lib/permissions";
 import { PersonalPanel } from "./PersonalPanel";
+import { MiniCalendar } from "./MiniCalendar";
 import type { DashboardData } from "./types";
 
-const ACTION_LABELS: Record<string, string> = {
-  order_created: "utworzył zlecenie",
-  status_changed: "zmienił status",
-  assignment_added: "przypisał pracownika",
-  note_added: "dodał notatkę",
-  protocol_generated: "wygenerował protokół",
-  checklist_item_checked: "odhaczył punkt checklisty",
+const DURATION_LABELS: Record<string, string> = {
+  "30min": "30 min",
+  "1h": "1h",
+  "2h": "2h",
+  "halfday": "pół dnia",
+  "fullday": "cały dzień",
+  "2days": "2 dni",
+  "several": "kilka dni",
 };
 
 function StatCard({
@@ -83,14 +89,30 @@ export function DashboardDesktop({
 }) {
   const d = data;
   const { data: session } = useSession();
-  const userRoles = (session?.user?.roles as string[]) ?? [];
-  const canSeeActivity = isAdmin(session?.user) || userRoles.includes("MENEDZER");
-  const [activityFilter, setActivityFilter] = useState<string>("all");
+  const qc = useQueryClient();
+  const [completingTask, setCompletingTask] = useState<string | null>(null);
+
+  const completeTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/simple-tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isCompleted: true }),
+      });
+      if (!r.ok) throw new Error("Błąd");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      setCompletingTask(null);
+    },
+    onError: () => { toast.error("Błąd oznaczenia zadania"); setCompletingTask(null); },
+  });
 
   return (
-    <div className="flex gap-6 max-w-7xl mx-auto items-start">
+    <div className="flex gap-5 max-w-7xl mx-auto items-start">
       {/* ── Main content ──────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-6">
+      <div className="flex-1 min-w-0 space-y-5">
+
       {/* Critical alert banner */}
       {d.criticalAlerts > 0 && (
         <Link href="/orders?critical=true">
@@ -99,9 +121,7 @@ export function DashboardDesktop({
             <div className="flex-1">
               <p className="font-bold">
                 {d.criticalAlerts}{" "}
-                {d.criticalAlerts === 1
-                  ? "aktywna awaria krytyczna!"
-                  : "aktywne awarie krytyczne!"}
+                {d.criticalAlerts === 1 ? "aktywna awaria krytyczna!" : "aktywne awarie krytyczne!"}
               </p>
               <p className="text-sm opacity-90">Kliknij aby zobaczyć szczegóły</p>
             </div>
@@ -111,245 +131,286 @@ export function DashboardDesktop({
       )}
 
       {/* Stat cards — 3-column grid */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard
-          title="Awarie krytyczne"
-          value={d.criticalAlerts}
-          icon={AlertTriangle}
-          color={
-            d.criticalAlerts > 0
-              ? "bg-red-100 text-red-900"
-              : "bg-green-100 text-green-900"
-          }
-          href="/orders?critical=true"
-          pulse={d.criticalAlerts > 0}
-          description={
-            d.criticalAlerts === 0 ? "Wszystko OK ✓" : "Wymagają reakcji!"
-          }
-        />
+      <div className="grid grid-cols-3 gap-3">
         <StatCard
           title="Otwarte awarie"
           value={d.openAlerts}
           icon={Flame}
-          color="bg-orange-100 text-orange-900"
+          color={d.openAlerts > 0 ? "bg-orange-100 text-orange-900 dark:bg-orange-900/20 dark:text-orange-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU"
         />
         <StatCard
           title="Zadania dziś"
           value={d.todayOrders.length}
           icon={ClipboardList}
-          color="bg-red-100 text-red-950"
+          color={d.todayOrders.length > 0 ? "bg-red-100 text-red-950 dark:bg-red-900/20 dark:text-red-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/calendar"
         />
         <StatCard
           title="Zaległe"
           value={d.overdueOrders}
           icon={Clock}
-          color={
-            d.overdueOrders > 0
-              ? "bg-amber-100 text-amber-900"
-              : "bg-gray-100 text-gray-700"
-          }
+          color={d.overdueOrders > 0 ? "bg-amber-100 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders?overdue=true"
         />
         <StatCard
-          title="Wysoki priorytet"
-          value={d.highPriorityOrders}
-          icon={Flame}
-          color="bg-purple-100 text-purple-900"
-          href="/orders?priority=WYSOKI,KRYTYCZNY"
+          title="Oczekujące"
+          value={d.waitingOrders}
+          icon={ClipboardList}
+          color={d.waitingOrders > 0 ? "bg-blue-100 text-blue-900 dark:bg-blue-900/20 dark:text-blue-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
+          href="/orders"
+        />
+        <StatCard
+          title="Do rozliczenia"
+          value={d.unsettledOrders}
+          icon={CircleDollarSign}
+          color={d.unsettledOrders > 0 ? "bg-purple-100 text-purple-900 dark:bg-purple-900/20 dark:text-purple-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
+          href="/orders"
         />
         <StatCard
           title="Konserwacje do planu"
           value={d.pendingMaintenance}
           icon={Wrench}
-          color="bg-teal-100 text-teal-900"
+          color={d.pendingMaintenance > 0 ? "bg-teal-100 text-teal-900 dark:bg-teal-900/20 dark:text-teal-200" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"}
           href="/orders?type=KONSERWACJA"
         />
       </div>
 
+      {/* Inquiry stats card */}
+      {d.inquiryStats && d.inquiryStats.active > 0 && (
+        <Card className="border-red-100">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FileSearch className="w-4 h-4 text-red-800" />
+                <span className="font-semibold text-sm text-gray-900">Zapytania ofertowe</span>
+              </div>
+              <Link href="/inquiries" className="text-xs text-red-800 font-medium hover:text-red-900">
+                Wszystkie →
+              </Link>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: "Nowe", value: d.inquiryStats.new, href: "/inquiries?tab=AKTYWNE", color: "bg-blue-50 text-blue-800" },
+                { label: "Aktywne", value: d.inquiryStats.active, href: "/inquiries", color: "bg-gray-50 text-gray-800" },
+                { label: "Do wyceny", value: d.inquiryStats.toQuote, href: "/inquiries?tab=AKTYWNE", color: "bg-purple-50 text-purple-800" },
+                { label: "Oczekują", value: d.inquiryStats.waitingDecision, href: "/inquiries?tab=WYCENA", color: "bg-yellow-50 text-yellow-800" },
+              ].map((item) => (
+                <Link key={item.label} href={item.href} className={`${item.color} rounded-lg p-3 text-center hover:opacity-80 transition-opacity`}>
+                  <p className="text-2xl font-bold">{item.value}</p>
+                  <p className="text-xs mt-0.5 opacity-70">{item.label}</p>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick actions */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Szybkie akcje</CardTitle>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Szybkie akcje</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild className="bg-red-600 hover:bg-red-700">
+        <CardContent className="px-4 pb-4">
+          <div className="grid grid-cols-3 gap-2">
+            <Button asChild className="bg-red-600 hover:bg-red-700 h-10 justify-start">
               <Link href="/orders/new?type=AWARIA">
-                <Zap className="w-4 h-4 mr-1.5" />
+                <Zap className="w-4 h-4 mr-1.5 shrink-0" />
                 Nowa Awaria
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="h-10 justify-start">
               <Link href="/orders/new">
-                <Plus className="w-4 h-4 mr-1.5" />
+                <Plus className="w-4 h-4 mr-1.5 shrink-0" />
                 Nowe Zlecenie
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="h-10 justify-start">
               <Link href="/calendar">
-                <Calendar className="w-4 h-4 mr-1.5" />
+                <Calendar className="w-4 h-4 mr-1.5 shrink-0" />
                 Kalendarz
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="h-10 justify-start">
               <Link href="/clients/new">
-                <UserPlus className="w-4 h-4 mr-1.5" />
+                <UserPlus className="w-4 h-4 mr-1.5 shrink-0" />
                 Nowy klient
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="h-10 justify-start">
               <Link href="/clients">
-                <Users className="w-4 h-4 mr-1.5" />
+                <Users className="w-4 h-4 mr-1.5 shrink-0" />
                 Klienci
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="h-10 justify-start">
               <Link href="/orders">
-                <ClipboardList className="w-4 h-4 mr-1.5" />
+                <ClipboardList className="w-4 h-4 mr-1.5 shrink-0" />
                 Wszystkie zlecenia
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-10 justify-start">
+              <Link href="/inquiries/new">
+                <FileSearch className="w-4 h-4 mr-1.5 shrink-0" />
+                Nowe zapytanie
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-10 justify-start">
+              <Link href="/inquiries">
+                <FileSearch className="w-4 h-4 mr-1.5 shrink-0" />
+                Wszystkie zapytania
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-10 justify-start">
+              <Link href="/inquiries?tab=WYCENA">
+                <FileSearch className="w-4 h-4 mr-1.5 shrink-0" />
+                Do wyceny
               </Link>
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Two-column: tasks + activity (activity only for manager/admin) */}
-      <div className={`grid gap-4 ${canSeeActivity ? "grid-cols-2" : "grid-cols-1"}`}>
-        {/* Today's tasks */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center justify-between">
-              <span>Zadania na dziś</span>
-              <Link
-                href="/calendar"
-                className="text-xs text-red-800 font-normal"
-              >
-                Kalendarz →
-              </Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {d.todayOrders.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">
-                Brak zaplanowanych zadań na dziś
+      {/* Today's tasks — full width */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-base flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              Zadania na dziś
+              {(d.todayOrders.length + d.todaySimpleTasks.length) > 0 && (
+                <span className="text-xs font-normal bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">
+                  {d.todayOrders.length + d.todaySimpleTasks.length}
+                </span>
+              )}
+            </span>
+            <Link href="/calendar" className="text-xs text-red-800 dark:text-red-400 font-normal">
+              Kalendarz →
+            </Link>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+
+          {/* Overdue orders — "Wymaga reakcji" */}
+          {d.overdueOrdersList.length > 0 && (
+            <div className="mb-4 pb-4 border-b border-red-100">
+              <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Wymaga reakcji ({d.overdueOrdersList.length})
               </p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {d.todayOrders.map((order) => {
-                  const typeConfig =
-                    ORDER_TYPE_CONFIG[
-                      order.type as keyof typeof ORDER_TYPE_CONFIG
-                    ];
+              <ul className="space-y-1.5">
+                {d.overdueOrdersList.map((order) => {
+                  const typeConfig = ORDER_TYPE_CONFIG[order.type as keyof typeof ORDER_TYPE_CONFIG];
                   const lead = order.assignments[0]?.user;
                   return (
                     <li key={order.id}>
                       <Link
                         href={`/orders/${order.id}`}
-                        className="flex items-center gap-2 py-2.5 hover:bg-gray-50 rounded-lg px-1 transition-colors"
+                        className="flex items-center gap-2 pl-3 border-l-2 border-red-400 bg-red-50 hover:bg-red-100 rounded-r-lg py-2 pr-3 transition-colors"
                       >
-                        <span className="text-lg shrink-0">
-                          {typeConfig?.icon ?? "📋"}
-                        </span>
+                        <span className="text-base shrink-0">{typeConfig?.icon ?? "📋"}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {order.title ??
-                              order.client?.name ??
-                              order.orderNumber}
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {order.title ?? order.client?.name ?? order.orderNumber}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-red-500">
+                            {order.client?.name && `${order.client.name} · `}
                             {formatDateTime(order.scheduledAt)}
-                            {lead &&
-                              ` · ${lead.firstName} ${lead.lastName}`}
+                            {lead && ` · ${lead.firstName} ${lead.lastName}`}
                           </p>
                         </div>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {typeConfig?.label}
-                        </Badge>
-                        <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                        <Badge className="text-[10px] bg-red-100 text-red-700 border-0 shrink-0">Zaległe</Badge>
+                        <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                       </Link>
                     </li>
                   );
                 })}
               </ul>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
 
-        {/* Recent activity — manager/admin only, up to 10 items */}
-        {canSeeActivity && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Ostatnia aktywność</span>
-                <select
-                  value={activityFilter}
-                  onChange={(e) => setActivityFilter(e.target.value)}
-                  className="text-xs font-normal text-gray-600 border border-gray-200 rounded px-2 py-0.5 bg-white cursor-pointer"
-                >
-                  <option value="all">Wszystkie</option>
-                  <option value="order_created">Utworzone</option>
-                  <option value="status_changed">Zmiana statusu</option>
-                  <option value="order_settled">Rozliczone</option>
-                  <option value="assignment_added">Przypisania</option>
-                  <option value="note_added">Notatki</option>
-                  <option value="protocol_generated">Protokoły</option>
-                </select>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(() => {
-                const filtered =
-                  activityFilter === "all"
-                    ? d.recentActivity
-                    : d.recentActivity.filter((l) => l.action === activityFilter);
-                return filtered.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-6">
-                    Brak aktywności
-                  </p>
-                ) : (
-                  <ul className="space-y-2.5">
-                    {filtered.map((log) => (
-                      <li key={log.id} className="flex gap-2 text-sm">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-600 mt-1.5 shrink-0" />
-                        <div className="text-gray-600">
-                          <span className="font-medium text-gray-800">
-                            {log.user
-                              ? `${log.user.firstName} ${log.user.lastName}`
-                              : "System"}
-                          </span>{" "}
-                          {ACTION_LABELS[log.action] ?? log.action}
-                          {log.order && (
-                            <>
-                              {" · "}
-                              <Link
-                                href="/orders"
-                                className="text-red-800 hover:underline"
-                              >
-                                {log.order.orderNumber}
-                              </Link>
-                            </>
-                          )}
-                          <span className="text-gray-400 ml-1.5 text-xs">
-                            {formatDateTime(log.createdAt)}
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+          {/* Simple tasks */}
+          {d.todaySimpleTasks.length > 0 && (
+            <ul className="space-y-1 mb-3 pb-3 border-b border-dashed border-gray-200">
+              {d.todaySimpleTasks.map((task) => (
+                <li key={task.id} className="flex items-center gap-2 py-1.5 px-1 rounded-lg hover:bg-gray-50">
+                  <button
+                    onClick={() => {
+                      setCompletingTask(task.id);
+                      completeTaskMutation.mutate(task.id);
+                    }}
+                    disabled={completingTask === task.id}
+                    className="shrink-0 w-4 h-4 rounded border-2 border-gray-300 hover:border-green-500 transition-colors flex items-center justify-center"
+                  >
+                    {completingTask === task.id && <CheckSquare className="h-3 w-3 text-green-500" />}
+                  </button>
+                  <span className="flex-1 text-sm text-gray-700 truncate">{task.title}</span>
+                  {task.assignedUser && (
+                    <span className="text-xs text-gray-400 shrink-0">{task.assignedUser.firstName}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Today's orders */}
+          {d.todayOrders.length === 0 && d.todaySimpleTasks.length === 0 && d.overdueOrdersList.length === 0 ? (
+            <div className="text-center py-8">
+              <ClipboardList className="h-8 w-8 mx-auto mb-2 text-gray-200" />
+              <p className="text-sm text-gray-400">Brak zaplanowanych zadań na dziś</p>
+              <Link href="/calendar" className="text-xs text-red-800 hover:underline mt-1 inline-block">
+                Przejdź do kalendarza →
+              </Link>
+            </div>
+          ) : d.todayOrders.length === 0 ? null : (
+            <ul className="divide-y divide-gray-100">
+              {d.todayOrders.map((order) => {
+                const typeConfig = ORDER_TYPE_CONFIG[order.type as keyof typeof ORDER_TYPE_CONFIG];
+                const lead = order.assignments[0]?.user;
+                const isPastDue = !!order.scheduledAt && new Date(order.scheduledAt) < new Date();
+                const dur = order.estimatedDuration ? DURATION_LABELS[order.estimatedDuration] : null;
+                return (
+                  <li key={order.id}>
+                    <Link
+                      href={`/orders/${order.id}`}
+                      className="flex items-center gap-2 py-3 hover:bg-gray-50 rounded-lg px-1 transition-colors"
+                    >
+                      <span className="text-lg shrink-0">{typeConfig?.icon ?? "📋"}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate text-gray-900">
+                          {order.title ?? order.client?.name ?? order.orderNumber}
+                        </p>
+                        {(order.client?.name || order.location?.address) && (
+                          <p className="text-xs text-gray-500 truncate">
+                            {order.client?.name}
+                            {order.location?.address ? ` · ${order.location.address}` : ""}
+                          </p>
+                        )}
+                        <p className={`text-xs ${isPastDue ? "text-red-500 font-medium" : "text-gray-400"}`}>
+                          {formatDateTime(order.scheduledAt)}
+                          {lead && ` · ${lead.firstName} ${lead.lastName}`}
+                          {dur && ` · ${dur}`}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0">{typeConfig?.label}</Badge>
+                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                    </Link>
+                  </li>
                 );
-              })()}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
       </div>
       {/* ── end main content ── */}
 
       {/* ── Personal sidebar ──────────────────────────────────────────── */}
-      <div className="w-72 shrink-0">
-        <PersonalPanel />
+      <div className="w-64 shrink-0">
+        <div className="sticky top-4 max-h-[calc(100vh-120px)] overflow-y-auto overflow-x-hidden space-y-4">
+          <MiniCalendar />
+          <PersonalPanel />
+        </div>
       </div>
     </div>
   );
