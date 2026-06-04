@@ -89,15 +89,15 @@ export default function LoginPage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Login lub e-mail</Label>
                 <Input
                   id="email"
-                  type="email"
-                  placeholder="adres@firma.pl"
+                  type="text"
+                  placeholder="login lub adres@firma.pl"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  autoComplete="email"
+                  autoComplete="username"
                   disabled={loading}
                 />
               </div>

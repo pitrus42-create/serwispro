@@ -65,19 +65,19 @@ function markdownToHtml(text: string): string {
 }
 
 // ── Status config for PDF ─────────────────────────────────────────────────
-const PDF_STATUS: Record<string, { bg: string; color: string; label: string }> = {
-  OK:           { bg: "#f0fdf4", color: "#166534", label: "OK" },
-  WYKONANO:     { bg: "#eff6ff", color: "#1d4ed8", label: "Wykonano" },
-  NAPRAWIONO:   { bg: "#f0fdfa", color: "#0f766e", label: "Naprawiono" },
-  WYMIENIONO:   { bg: "#f5f3ff", color: "#6d28d9", label: "Wymieniono" },
-  SPRAWDZIC:    { bg: "#fffbeb", color: "#92400e", label: "Do sprawdzenia" },
-  USTERKA:      { bg: "#fef2f2", color: "#991b1b", label: "Usterka" },
-  BRAK_DOSTEPU: { bg: "#f8fafc", color: "#475569", label: "Brak dostępu" },
-  ND:           { bg: "#f8fafc", color: "#94a3b8", label: "Nie dotyczy" },
+const PDF_STATUS: Record<string, { bg: string; color: string; label: string; border?: string }> = {
+  OK:           { bg: "#dcfce7", color: "#14532d", label: "OK" },
+  WYKONANO:     { bg: "#dbeafe", color: "#1e3a8a", label: "WYKONANO", border: "1px solid #bfdbfe" },
+  NAPRAWIONO:   { bg: "#e0f2fe", color: "#0369a1", label: "NAPRAWIONO" },
+  WYMIENIONO:   { bg: "#ede9fe", color: "#5b21b6", label: "WYMIENIONO" },
+  SPRAWDZIC:    { bg: "#fef3c7", color: "#78350f", label: "DO SPRAWDZENIA" },
+  USTERKA:      { bg: "#fee2e2", color: "#7f1d1d", label: "USTERKA" },
+  BRAK_DOSTEPU: { bg: "#f1f5f9", color: "#475569", label: "BRAK DOSTĘPU" },
+  ND:           { bg: "#f8fafc", color: "#94a3b8", label: "NIE DOTYCZY" },
   // Legacy keys
-  "Do sprawdzenia": { bg: "#fffbeb", color: "#92400e", label: "Do sprawdzenia" },
-  "Usterka":        { bg: "#fef2f2", color: "#991b1b", label: "Usterka" },
-  "Nie dotyczy":    { bg: "#f8fafc", color: "#64748b", label: "Nie dotyczy" },
+  "Do sprawdzenia": { bg: "#fef3c7", color: "#78350f", label: "DO SPRAWDZENIA" },
+  "Usterka":        { bg: "#fee2e2", color: "#7f1d1d", label: "USTERKA" },
+  "Nie dotyczy":    { bg: "#f8fafc", color: "#94a3b8", label: "NIE DOTYCZY" },
 };
 
 const STATUS_COLS_PDF = new Set([
@@ -87,7 +87,7 @@ const STATUS_COLS_PDF = new Set([
 function pdfStatusBadge(val: string): string {
   const st = PDF_STATUS[val];
   if (!st) return esc(val);
-  return `<span style="background:${st.bg};color:${st.color};font-size:8px;font-weight:600;padding:2px 8px;border-radius:10px;display:inline-block;white-space:nowrap">${st.label}</span>`;
+  return `<span style="background:${st.bg};color:${st.color};${st.border ? `border:${st.border};` : ""}font-size:6.5px;font-weight:800;letter-spacing:0.03em;padding:0;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;width:78px;height:16px;text-align:center;white-space:nowrap">${st.label}</span>`;
 }
 
 interface PdfTokens {
@@ -95,21 +95,32 @@ interface PdfTokens {
   C_MUTED: string; C_MUTED2: string; R_CARD: string; SHADOW: string;
 }
 
-// Render a flat list of checklist items (shared by legacy + new format)
+// Render a 2-column table of checklist items (shared by legacy + new format)
 function renderChecklistItemsPdf(
   items: Array<{ text: string; status: string; comment: string }>,
   t: PdfTokens,
 ): string {
-  return items.map((item) => {
+  if (!items.length) return "";
+  const BADGE_BASE = `flex-shrink:0;align-self:flex-start;font-size:6.5px;font-weight:800;letter-spacing:0.03em;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;width:78px;height:16px;white-space:nowrap`;
+  const makeCell = (item: { text: string; status: string; comment: string } | undefined, pr: string, pl: string) => {
+    if (!item) return `<td style="width:50%;padding:5px ${pr} 5px ${pl};border-bottom:1px solid ${t.C_BORDER}"></td>`;
     const st = PDF_STATUS[item.status] ?? PDF_STATUS.OK;
-    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;border-bottom:1px solid ${t.C_BORDER}">
-      <span style="flex-shrink:0;background:${st.bg};color:${st.color};font-size:7.5px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:2px;white-space:nowrap">${st.label}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:11px;font-weight:500;line-height:1.4;color:#0f172a">${esc(item.text)}</div>
-        ${item.comment ? `<div style="font-size:9px;color:${t.C_MUTED};margin-top:1px">${esc(item.comment)}</div>` : ""}
+    const bdStyle = st.border ? `border:${st.border};` : "";
+    return `<td style="width:50%;padding:5px ${pr} 5px ${pl};vertical-align:top;border-bottom:1px solid ${t.C_BORDER}">
+      <div style="display:flex;align-items:flex-start;gap:8px">
+        <span style="${BADGE_BASE};background:${st.bg};color:${st.color};${bdStyle}">${st.label}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:9.5px;font-weight:500;line-height:1.32;color:#111827;word-break:break-word;overflow-wrap:anywhere">${esc(item.text)}</div>
+          ${item.comment ? `<div style="font-size:8px;color:${t.C_MUTED};margin-top:1px;word-break:break-word">${esc(item.comment)}</div>` : ""}
+        </div>
       </div>
-    </div>`;
-  }).join("");
+    </td>`;
+  };
+  const rows: string[] = [];
+  for (let i = 0; i < items.length; i += 2) {
+    rows.push(`<tr>${makeCell(items[i], "8px", "0")}${makeCell(items[i + 1], "0", "8px")}</tr>`);
+  }
+  return `<table style="width:100%;border-collapse:collapse">${rows.join("")}</table>`;
 }
 
 function renderTablePdf(
@@ -260,6 +271,7 @@ export async function GET(req: NextRequest, { params }: Params) {
   const hFrom = content.hoursFrom ?? "";
   const hTo   = content.hoursTo   ?? "";
   const hDate = content.date      ?? "";
+  const confirmDate = format(new Date(protocol.createdAt), "dd.MM.yyyy", { locale: pl });
 
   // Logo
   let logoSrc = "";
@@ -364,29 +376,34 @@ export async function GET(req: NextRequest, { params }: Params) {
   const checklistsHtml = orderChecklists?.length > 0
     ? `<div style="margin-bottom:12px;page-break-inside:avoid">
         ${sh("Checklist")}
-        ${orderChecklists.map((cl) => `
-          ${orderChecklists.length > 1
-            ? `<div style="font-size:8.5px;font-weight:600;color:${C_MUTED};margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px">${esc(cl.name)}</div>`
-            : ""}
-          <table style="width:100%;border-collapse:collapse;border:1px solid ${C_BORDER};border-radius:${R_CARD};overflow:hidden;margin-bottom:6px;box-shadow:${SHADOW}">
-            <thead>
-              <tr style="background:${C_SURFACE}">
-                <th style="text-align:left;padding:5px 9px;border-bottom:1px solid ${C_BORDER};font-size:7.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED}">Zadanie</th>
-                <th style="text-align:center;padding:5px 9px;border-bottom:1px solid ${C_BORDER};font-size:7.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};width:60px">Status</th>
-                <th style="text-align:left;padding:5px 9px;border-bottom:1px solid ${C_BORDER};font-size:7.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED}">Notatka</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${cl.items.map((item, i) => `
-                <tr style="${i % 2 === 1 ? `background:${C_SURFACE}` : "background:white"}">
-                  <td style="padding:5px 9px;font-size:10.5px;border-bottom:1px solid ${C_BORDER}">${esc(item.text)}</td>
-                  <td style="padding:5px 9px;text-align:center;border-bottom:1px solid ${C_BORDER}">
-                    <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:${item.isChecked ? "#dcfce7" : C_BORDER};color:${item.isChecked ? C_SUCCESS : C_MUTED2};font-size:9px;font-weight:800">${item.isChecked ? "&#10003;" : "&#8211;"}</span>
-                  </td>
-                  <td style="padding:5px 9px;font-size:9px;color:${C_MUTED};border-bottom:1px solid ${C_BORDER}">${item.note ? esc(item.note) : ""}</td>
-                </tr>`).join("")}
-            </tbody>
-          </table>`).join("")}
+        ${orderChecklists.map((cl) => {
+          const rows: string[] = [];
+          for (let i = 0; i < cl.items.length; i += 2) {
+            const makeChkCell = (item: typeof cl.items[0] | undefined, pr: string, pl: string) => {
+              if (!item) return `<td style="width:50%;padding:5px ${pr} 5px ${pl};border-bottom:1px solid ${C_BORDER}"></td>`;
+              const chkBg    = item.isChecked ? "#dcfce7" : C_BORDER;
+              const chkColor = item.isChecked ? C_SUCCESS  : C_MUTED2;
+              const chkIcon  = item.isChecked ? "&#10003;" : "&#8211;";
+              return `<td style="width:50%;padding:5px ${pr} 5px ${pl};vertical-align:top;border-bottom:1px solid ${C_BORDER}">
+                <div style="display:flex;align-items:flex-start;gap:7px">
+                  <span style="flex-shrink:0;align-self:flex-start;width:15px;height:15px;border-radius:50%;background:${chkBg};color:${chkColor};font-size:8px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;margin-top:1px">${chkIcon}</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:9.5px;line-height:1.32;word-break:break-word;overflow-wrap:anywhere">${esc(item.text)}</div>
+                    ${item.note ? `<div style="font-size:8px;color:${C_MUTED};margin-top:1px;word-break:break-word">${esc(item.note)}</div>` : ""}
+                  </div>
+                </div>
+              </td>`;
+            };
+            rows.push(`<tr>${makeChkCell(cl.items[i], "8px", "0")}${makeChkCell(cl.items[i + 1], "0", "8px")}</tr>`);
+          }
+          return `
+            ${orderChecklists.length > 1
+              ? `<div style="font-size:8.5px;font-weight:600;color:${C_MUTED};margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px">${esc(cl.name)}</div>`
+              : ""}
+            <table style="width:100%;border-collapse:collapse;border:1px solid ${C_BORDER};border-radius:${R_CARD};overflow:hidden;margin-bottom:6px;box-shadow:${SHADOW}">
+              <tbody>${rows.join("")}</tbody>
+            </table>`;
+        }).join("")}
       </div>`
     : "";
 
@@ -421,33 +438,46 @@ export async function GET(req: NextRequest, { params }: Params) {
   // ── Info cards ────────────────────────────────────────────────────────────
   const infoCards: string[] = [];
 
-  const orderTypeLine = [
-    TYPE_LABELS[order.type] ?? order.type,
-    order.scheduledAt ? format(new Date(order.scheduledAt), "d.MM.yyyy", { locale: pl }) : null,
-  ].filter(Boolean).join(" · ");
+  const orderTypeLabel = TYPE_LABELS[order.type] ?? order.type;
+  const orderDateStr   = order.scheduledAt
+    ? format(new Date(order.scheduledAt), "dd.MM.yyyy", { locale: pl })
+    : "";
 
-  // Order number — accent left border + dark header
-  infoCards.push(
-    `<div style="background:white;border:1px solid ${C_CARD_BORD};border-left:3px solid ${C_ACCENT};border-radius:${R_CARD};overflow:hidden;box-shadow:${SHADOW}">
-      <div style="background:${C_CARD_HDR};padding:4px 10px">
-        <div style="font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:white">Nr zlecenia</div>
-      </div>
-      <div style="padding:7px 10px">
-        <div style="font-size:11px;font-weight:600;color:${C_TEXT};line-height:1.3">${esc(order.orderNumber)}</div>
-        ${orderTypeLine ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:2px">${orderTypeLine}</div>` : ""}
-      </div>
-    </div>`
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const locObj  = order.location as any;
+  const locName = order.location?.name ?? "";
+  const locSub  = order.location
+    ? [
+        order.location.address,
+        [locObj?.postalCode, locObj?.city].filter(Boolean).join(" "),
+      ].filter(Boolean).join(" · ")
+    : "";
 
-  if (order.location) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loc    = order.location as any;
-    const locSub = [
-      order.location.address,
-      [loc?.postalCode, loc?.city].filter(Boolean).join(" "),
-    ].filter(Boolean).join(" · ");
-    infoCards.push(card("Lokalizacja", esc(order.location.name), locSub ? esc(locSub) : ""));
-  }
+  // Combined block: location + order number + date + type — single-row card matching card() style
+  const locDisplay = locName.trim() || `<span style="color:${C_MUTED2};font-style:italic">Brak podanej lokalizacji</span>`;
+  const locLine    = [locName.trim(), locSub].filter(Boolean).join(" · ") || "Brak podanej lokalizacji";
+  const orderInfoBlockHtml =
+    `<div style="background:white;border:1px solid ${C_CARD_BORD};border-radius:${R_CARD};overflow:hidden;box-shadow:${SHADOW};margin-bottom:10px">
+      <div style="background:${C_CARD_HDR};padding:4px 12px">
+        <div style="font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:white">Zlecenie serwisowe</div>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,1.8fr) minmax(90px,0.7fr) minmax(80px,0.6fr) auto;align-items:center;gap:14px;padding:9px 12px">
+        <div style="min-width:0">
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Lokalizacja</div>
+          <div style="font-size:10.5px;font-weight:700;color:${C_TEXT};line-height:1.25;overflow-wrap:anywhere;word-break:break-word">${locDisplay}</div>
+          ${locSub ? `<div style="font-size:8px;color:${C_MUTED};margin-top:1px;overflow-wrap:anywhere;word-break:break-word">${esc(locSub)}</div>` : ""}
+        </div>
+        <div>
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Nr zlecenia</div>
+          <div style="font-size:10.5px;font-weight:700;color:${C_TEXT};white-space:nowrap">${esc(order.orderNumber)}</div>
+        </div>
+        <div>
+          <div style="font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:1px">Data</div>
+          <div style="font-size:10.5px;font-weight:600;color:${C_MUTED};white-space:nowrap">${orderDateStr || "—"}</div>
+        </div>
+        ${orderTypeLabel ? `<span style="background:#e8eef6;color:#1f3a56;font-size:7px;font-weight:700;height:18px;padding:0 9px;border-radius:999px;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center">${esc(orderTypeLabel)}</span>` : "<span></span>"}
+      </div>
+    </div>`;
 
   infoCards.push(card("Serwisant", esc(assigneesText)));
 
@@ -467,6 +497,41 @@ export async function GET(req: NextRequest, { params }: Params) {
   const infoGridHtml = `<div style="display:grid;grid-template-columns:repeat(${gridCols},1fr);gap:8px;margin-bottom:12px">
     ${infoCards.join("")}
   </div>`;
+
+  // ── Electronic confirmation ───────────────────────────────────────────────
+  const electronicConfirmationHtml =
+    `<div style="margin-top:14px;border:1px solid #cfd6df;border-radius:6px;overflow:hidden;background:#ffffff;page-break-inside:avoid;break-inside:avoid">
+      <div style="background:#26394d;color:#ffffff;text-align:center;padding:6px 10px;font-size:7.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase">
+        POTWIERDZENIE ELEKTRONICZNE PROTOKOŁU
+      </div>
+      <div style="padding:12px 16px;background:#ffffff">
+        <div style="text-align:center;margin-bottom:6px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;background:#e8f5ee;color:#166534;font-size:7px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase">
+            &#10003;&nbsp;POTWIERDZONO ELEKTRONICZNIE
+          </span>
+        </div>
+        <div style="text-align:center;font-size:10px;line-height:1.45;font-weight:600;color:#111827">
+          Niniejszy protokół został potwierdzony elektronicznie w systemie ${esc(company?.name ?? "All-Secure")} i nie wymaga podpisu odręcznego.
+        </div>
+        <div style="margin-top:4px;text-align:center;font-size:8.5px;line-height:1.35;color:#4b5563">
+          Dokument stanowi potwierdzenie wykonania czynności serwisowych wskazanych w protokole.
+        </div>
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid #e5e7eb;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="text-align:center">
+            <div style="font-size:6.8px;line-height:1.2;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:#6b7280">Data potwierdzenia</div>
+            <div style="margin-top:2px;font-size:8.5px;line-height:1.25;font-weight:700;color:#111827">${confirmDate}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:6.8px;line-height:1.2;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:#6b7280">Wygenerowano przez</div>
+            <div style="margin-top:2px;font-size:8.5px;line-height:1.25;font-weight:700;color:#111827">${esc(company?.name ?? "All-Secure")}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:6.8px;line-height:1.2;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:#6b7280">Status dokumentu</div>
+            <div style="margin-top:2px;font-size:8.5px;line-height:1.25;font-weight:700;color:#111827">Potwierdzony elektronicznie</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
 
   // ── Header style constants ────────────────────────────────────────────────
   const HDR_LABEL = `font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED2};margin-bottom:3px`;
@@ -505,49 +570,41 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
 <div class="frame">
 
   <!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
-  <!--
-    3-column table: [Wykonawca] [spacer] [Zamawiajacy]
-    Logo goes in its own row above so company name and client name
-    are always in the same <tr> — guaranteed optical alignment.
-  -->
-  <table style="width:100%;border-collapse:collapse">
-    ${logoSrc ? `<tr>
-      <td style="padding-bottom:5px;vertical-align:bottom">
-        <img src="${logoSrc}" alt="" style="max-height:46px;max-width:130px;object-fit:contain;display:block" />
-      </td>
-      <td style="width:100%"></td>
-      <td style="padding-bottom:5px"></td>
-    </tr>` : ""}
-    <tr>
-      <td style="vertical-align:top;padding-bottom:12px;white-space:nowrap">
-        <div style="${HDR_LABEL}">Wykonawca</div>
-        <div style="${HDR_NAME}">${esc(company?.name ?? "SerwisPro")}</div>
-        <div style="${HDR_DATA}">
-          ${company?.nip     ? `NIP: ${esc(company.nip)}<br>` : ""}
-          ${company?.address ? `${esc(company.address)}<br>` : ""}
-          ${company?.phone   ? `Tel: ${esc(company.phone)}<br>` : ""}
-          ${company?.email   ? `${esc(company.email)}` : ""}
-        </div>
-      </td>
-      <td style="width:100%"></td>
-      <td style="vertical-align:top;text-align:right;padding-bottom:12px;white-space:nowrap">
-        ${order.client ? `
-        <div style="${HDR_LABEL}">Zamawiający</div>
-        <div style="${HDR_NAME}">${esc(order.client.name ?? "")}</div>
-        <div style="${HDR_DATA}">
-          ${clientAny?.nip     ? `NIP: ${esc(clientAny.nip)}<br>` : ""}
-          ${clientAddr         ? `${esc(clientAddr)}<br>` : ""}
-          ${order.client.phone ? `Tel: ${esc(order.client.phone)}<br>` : ""}
-          ${order.client.email ? `${esc(order.client.email)}` : ""}
-        </div>` : ""}
-      </td>
-    </tr>
-  </table>
+  <!-- grid: 1fr [logo auto] 1fr — logo centered, sides expand symmetrically -->
+  <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:20px;padding-bottom:12px">
+    <!-- Wykonawca -->
+    <div>
+      <div style="${HDR_LABEL}">Wykonawca</div>
+      <div style="${HDR_NAME}">${esc(company?.name ?? "SerwisPro")}</div>
+      <div style="${HDR_DATA}">
+        ${company?.nip     ? `NIP: ${esc(company.nip)}<br>` : ""}
+        ${company?.address ? `${esc(company.address)}<br>` : ""}
+        ${company?.phone   ? `Tel: ${esc(company.phone)}<br>` : ""}
+        ${company?.email   ? `${esc(company.email)}` : ""}
+      </div>
+    </div>
+    <!-- Logo centered -->
+    <div style="display:flex;align-items:center;justify-content:center;padding-top:2px">
+      ${logoSrc ? `<img src="${logoSrc}" alt="" style="max-height:74px;max-width:210px;object-fit:contain;display:block" />` : ""}
+    </div>
+    <!-- Zamawiający -->
+    <div style="text-align:right">
+      ${order.client ? `
+      <div style="${HDR_LABEL}">Zamawiający</div>
+      <div style="${HDR_NAME}">${esc(order.client.name ?? "")}</div>
+      <div style="${HDR_DATA}">
+        ${clientAny?.nip     ? `NIP: ${esc(clientAny.nip)}<br>` : ""}
+        ${clientAddr         ? `${esc(clientAddr)}<br>` : ""}
+        ${order.client.phone ? `Tel: ${esc(order.client.phone)}<br>` : ""}
+        ${order.client.email ? `${esc(order.client.email)}` : ""}
+      </div>` : ""}
+    </div>
+  </div>
   <div style="height:2px;background:${C_PRIMARY};margin-bottom:14px;border-radius:1px"></div>
 
   <!-- ═══ ZLECENIE ══════════════════════════════════════════════════════════ -->
   <div style="margin-bottom:12px">
-    <div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:7px">Zlecenie serwisowe</div>
+    ${orderInfoBlockHtml}
     ${infoGridHtml}
   </div>
 
@@ -567,16 +624,26 @@ ${autoPrint ? `<div class="no-print print-hint">&#128196; Aby ukryć URL i datę
   ${photosHtml}
 
   <!-- ═══ UWAGI ════════════════════════════════════════════════════════════ -->
-  ${notesHtml ? `<div style="margin-bottom:12px">
-    ${sh("Uwagi / zalecenia")}
-    <div class="text-block">${notesHtml}</div>
+  ${notesHtml ? `<div style="margin-bottom:12px;page-break-inside:avoid">
+    <div style="background:#eff8fc;border:1px solid #bfe7f5;border-left:4px solid #22a9d6;border-radius:${R_CARD};padding:12px 16px">
+      <div style="text-align:center;margin-bottom:8px">
+        <span style="font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#1f3a56">Podsumowanie serwisu</span>
+      </div>
+      <div style="font-size:10.5px;line-height:1.6;color:${C_TEXT}">${notesHtml}</div>
+    </div>
   </div>` : ""}
+
+  <!-- ═══ POTWIERDZENIE ELEKTRONICZNE ══════════════════════════════════════ -->
+  ${electronicConfirmationHtml}
 
 </div>
 </body>
 </html>`;
 
   return new NextResponse(html, {
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
   });
 }

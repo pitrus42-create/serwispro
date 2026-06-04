@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const locations = await prisma.location.findMany({
     where: { clientId, isActive: true },
-    orderBy: { name: "asc" },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
   });
   return NextResponse.json({ data: locations });
 }

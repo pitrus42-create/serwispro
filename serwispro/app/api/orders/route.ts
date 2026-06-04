@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
   const critical = searchParams.get("critical");
   const overdue = searchParams.get("overdue");
   const settled = searchParams.get("settled");
+  const pending = searchParams.get("pending");
+  const planned = searchParams.get("planned");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
   const q = searchParams.get("q");
@@ -33,7 +35,11 @@ export async function GET(req: NextRequest) {
       : userId
       ? { assignments: { some: { userId } } }
       : {}),
-    ...(status?.length ? { status: { in: status } } : {}),
+    ...(pending === "true"
+      ? { scheduledAt: null, status: { notIn: ["ZAKONCZONE", "ANULOWANE"] } }
+      : planned === "true"
+      ? { scheduledAt: { not: null }, status: { in: ["OCZEKUJACE", "PRZYJETE", "W_TOKU", "ZAPLANOWANE"] } }
+      : status?.length ? { status: { in: status } } : {}),
     ...(type?.length ? { type: { in: type } } : {}),
     ...(priority?.length ? { priority: { in: priority } } : {}),
     ...(clientId ? { clientId } : {}),
@@ -87,6 +93,8 @@ export async function POST(req: NextRequest) {
     scheduledAt,
     scheduledEndAt,
     dayOrder,
+    estimatedDuration,
+    difficulty,
     responsibleId,
     helperIds = [],
   } = body;
@@ -110,6 +118,8 @@ export async function POST(req: NextRequest) {
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         scheduledEndAt: scheduledEndAt ? new Date(scheduledEndAt) : null,
         dayOrder: dayOrder ?? null,
+        estimatedDuration: estimatedDuration ?? null,
+        difficulty: difficulty ?? null,
         createdById: session.user.id,
         assignments: {
           create: [

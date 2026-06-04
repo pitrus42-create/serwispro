@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 type Params = { params: Promise<{ id: string; pid: string }> };
 
 export async function PUT(req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: orderId, pid } = await params;
