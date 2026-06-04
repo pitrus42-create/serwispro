@@ -17,6 +17,9 @@ import {
   FileText,
   Bell,
   BarChart3,
+  FileSearch,
+  BookOpen,
+  Image,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,12 +30,16 @@ const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/calendar", icon: Calendar, label: "Kalendarz" },
   { href: "/orders", icon: ClipboardList, label: "Zlecenia" },
+  { href: "/inquiries", icon: FileSearch, label: "Zapytania ofertowe" },
   { href: "/clients", icon: Users, label: "Klienci" },
   { href: "/templates/checklists", icon: FileText, label: "Checklisty" },
   { href: "/templates/protocols", icon: FileText, label: "Szablony protokołów" },
   { href: "/vehicles", icon: Car, label: "Pojazdy" },
   { href: "/stock", icon: Package, label: "Magazyn" },
   { href: "/analytics", icon: BarChart3, label: "Analizy" },
+  { href: "/settings/product-catalog", icon: BookOpen, label: "Katalog produktów", roles: ["SUPERADMIN", "ADMIN", "SZEF", "MENEDZER"] },
+  { href: "/settings/quote-templates", icon: FileText, label: "Szablony wycen", roles: ["SUPERADMIN", "ADMIN", "SZEF", "MENEDZER"] },
+  { href: "/settings/gallery", icon: Image, label: "Galeria realizacji", roles: ["SUPERADMIN", "ADMIN", "SZEF"] },
   { href: "/settings", icon: Settings, label: "Ustawienia", roles: ["SUPERADMIN", "ADMIN", "SZEF"] },
 ];
 

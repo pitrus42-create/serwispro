@@ -1,9 +1,22 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    root: path.resolve(__dirname),
+  serverExternalPackages: ["@prisma/client", "@libsql/client", "@prisma/adapter-libsql"],
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Force .prisma/client modules as external to prevent WASM bundling issues
+      const existingExternals = Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean);
+      config.externals = [
+        ...existingExternals,
+        ({ request }: { request: string }, callback: (err?: Error | null, result?: string) => void) => {
+          if (request && (request.includes(".prisma/client") || request.includes("query_compiler"))) {
+            return callback(undefined, `commonjs ${request}`);
+          }
+          callback();
+        },
+      ];
+    }
+    return config;
   },
   experimental: {
     serverActions: {
