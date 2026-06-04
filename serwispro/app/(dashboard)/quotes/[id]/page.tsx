@@ -128,6 +128,7 @@ export default function QuoteEditorPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const [acceptDialog, setAcceptDialog] = useState(false);
+  const [createOrderDialog, setCreateOrderDialog] = useState(false);
 
   const { data: quote, isLoading } = useQuery({
     queryKey: ["quote", id],
@@ -183,7 +184,6 @@ export default function QuoteEditorPage() {
   }
 
   const isAccepted = quote.status.startsWith("ZAAKCEPTOWANA");
-  const [createOrderDialog, setCreateOrderDialog] = useState(false);
   const packagesOrdered = ["MINIMUM", "STANDARD", "PRO"]
     .map((t) => quote.packages.find((p) => p.packageType === t))
     .filter(Boolean) as QuotePackage[];
