@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import {
   Plus, Search, FileText, Phone, Mail, Image, CheckCircle2, Clock, X,
-  ChevronDown, Copy, ExternalLink, Check,
+  ChevronDown, Copy, ExternalLink, Check, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,6 +73,12 @@ const TAB_STATUSES: Record<string, string[] | null> = {
   WSZYSTKIE: null,
 };
 
+const ACTIVE_STATUSES = [
+  "NOWE", "W_ANALIZIE", "BRAKUJE_INFO", "GOTOWE_DO_WYCENY",
+  "WYCENA_PRZYGOTOWANA", "WYCENA_WYSLANA", "OCZEKUJE_NA_DECYZJE",
+  "ZAAKCEPTOWANE", "ZAPLANOWANO_MONTAZ",
+];
+
 type TabKey = keyof typeof TAB_STATUSES;
 
 interface InquiryRow {
@@ -88,6 +98,7 @@ interface InquiryRow {
 
 export default function InquiriesPage() {
   const router = useRouter();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<TabKey>("AKTYWNE");
   const [q, setQ] = useState("");
   const [serviceType, setServiceType] = useState("__ALL__");
@@ -111,9 +122,38 @@ export default function InquiriesPage() {
     refetchInterval: 30000,
   });
 
+  // Licznik aktywnych zapytań — niezależny od zakładki
+  const { data: activeCount } = useQuery({
+    queryKey: ["inquiries-active-count"],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("status", ACTIVE_STATUSES.join(","));
+      params.set("limit", "1");
+      params.set("page", "1");
+      const res = await fetch(`/api/inquiries?${params}`);
+      const json = await res.json() as { total: number };
+      return json.total;
+    },
+    refetchInterval: 30000,
+  });
+
   const inquiries = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
+  const active = activeCount ?? 0;
+
+  const deleteInquiry = async (id: string) => {
+    try {
+      const res = await fetch(`/api/inquiries/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast.success("Zapytanie zostało usunięte");
+      qc.invalidateQueries({ queryKey: ["inquiries"] });
+      qc.invalidateQueries({ queryKey: ["inquiries-active-count"] });
+      qc.invalidateQueries({ queryKey: ["inquiries-count"] });
+    } catch {
+      toast.error("Nie udało się usunąć zapytania");
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -123,7 +163,7 @@ export default function InquiriesPage() {
           <div>
             <h1 className="text-xl font-semibold text-gray-900">Zapytania ofertowe</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {total} {total === 1 ? "zapytanie" : total < 5 ? "zapytania" : "zapytań"}
+              {active} aktywnych {active === 1 ? "zapytanie" : active < 5 ? "zapytania" : "zapytań"}
             </p>
           </div>
           <Button
@@ -222,6 +262,7 @@ export default function InquiriesPage() {
                 key={inq.id}
                 inquiry={inq}
                 onClick={() => router.push(`/inquiries/${inq.id}`)}
+                onDelete={() => deleteInquiry(inq.id)}
               />
             ))}
           </div>
@@ -328,74 +369,118 @@ function ClientFormLinkBanner() {
   );
 }
 
+// ── InquiryCard ───────────────────────────────────────────────────────────────
+
 function InquiryCard({
   inquiry,
   onClick,
+  onDelete,
 }: {
   inquiry: InquiryRow;
   onClick: () => void;
+  onDelete: () => void;
 }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-red-200 hover:shadow-sm transition-all"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="font-mono text-xs text-gray-400">{inquiry.inquiryNumber}</span>
-            <Badge className={cn("text-xs px-2 py-0", STATUS_COLORS[inquiry.status] ?? "bg-gray-100 text-gray-600")}>
-              {STATUS_LABELS[inquiry.status] ?? inquiry.status}
-            </Badge>
-            <Badge variant="outline" className="text-xs px-2 py-0">
-              {SERVICE_TYPE_LABELS[inquiry.serviceType] ?? inquiry.serviceType}
-            </Badge>
-          </div>
+    <>
+      <div className="relative group">
+        <button
+          onClick={onClick}
+          className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-red-200 hover:shadow-sm transition-all pr-12"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="font-mono text-xs text-gray-400">{inquiry.inquiryNumber}</span>
+                <Badge className={cn("text-xs px-2 py-0", STATUS_COLORS[inquiry.status] ?? "bg-gray-100 text-gray-600")}>
+                  {STATUS_LABELS[inquiry.status] ?? inquiry.status}
+                </Badge>
+                <Badge variant="outline" className="text-xs px-2 py-0">
+                  {SERVICE_TYPE_LABELS[inquiry.serviceType] ?? inquiry.serviceType}
+                </Badge>
+              </div>
 
-          <p className="font-medium text-gray-900 truncate">
-            {inquiry.contactName}
-            {inquiry.companyName && (
-              <span className="text-gray-500 font-normal"> — {inquiry.companyName}</span>
-            )}
-          </p>
+              <p className="font-medium text-gray-900 truncate">
+                {inquiry.contactName}
+                {inquiry.companyName && (
+                  <span className="text-gray-500 font-normal"> — {inquiry.companyName}</span>
+                )}
+              </p>
 
-          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-            {inquiry.contactPhone && (
-              <span className="flex items-center gap-1">
-                <Phone className="w-3 h-3" />
-                {inquiry.contactPhone}
-              </span>
-            )}
-            {inquiry.contactEmail && (
-              <span className="flex items-center gap-1 truncate">
-                <Mail className="w-3 h-3" />
-                {inquiry.contactEmail}
-              </span>
-            )}
-          </div>
-        </div>
+              <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                {inquiry.contactPhone && (
+                  <span className="flex items-center gap-1">
+                    <Phone className="w-3 h-3" />
+                    {inquiry.contactPhone}
+                  </span>
+                )}
+                {inquiry.contactEmail && (
+                  <span className="flex items-center gap-1 truncate">
+                    <Mail className="w-3 h-3" />
+                    {inquiry.contactEmail}
+                  </span>
+                )}
+              </div>
+            </div>
 
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <span className="text-xs text-gray-400 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {format(new Date(inquiry.createdAt), "d MMM yyyy", { locale: pl })}
-          </span>
-          <div className="flex items-center gap-2">
-            {inquiry._count.photos > 0 && (
-              <span className="flex items-center gap-0.5 text-xs text-gray-500">
-                <Image className="w-3 h-3" />
-                {inquiry._count.photos}
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {format(new Date(inquiry.createdAt), "d MMM yyyy", { locale: pl })}
               </span>
-            )}
-            {inquiry._count.quotes > 0 && (
-              <span className="flex items-center gap-0.5 text-xs text-green-600">
-                <CheckCircle2 className="w-3 h-3" />
-                {inquiry._count.quotes}
-              </span>
-            )}
+              <div className="flex items-center gap-2">
+                {inquiry._count.photos > 0 && (
+                  <span className="flex items-center gap-0.5 text-xs text-gray-500">
+                    <Image className="w-3 h-3" />
+                    {inquiry._count.photos}
+                  </span>
+                )}
+                {inquiry._count.quotes > 0 && (
+                  <span className="flex items-center gap-0.5 text-xs text-green-600">
+                    <CheckCircle2 className="w-3 h-3" />
+                    {inquiry._count.quotes}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </button>
+
+        {/* Przycisk usuwania — widoczny po najechaniu */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
+          className="absolute top-1/2 -translate-y-1/2 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50"
+          title="Usuń zapytanie"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
       </div>
-    </button>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Usuń zapytanie</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            Czy na pewno chcesz usunąć zapytanie <strong>{inquiry.inquiryNumber}</strong> od <strong>{inquiry.contactName}</strong>?
+            Tej operacji nie można cofnąć.
+          </p>
+          <DialogFooter className="gap-2 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
+              Anuluj
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-700 hover:bg-red-800 text-white"
+              onClick={() => { setConfirmOpen(false); onDelete(); }}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              Usuń
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
