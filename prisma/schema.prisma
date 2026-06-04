@@ -770,18 +770,20 @@ model QuoteAcceptance {
 }
 
 model ProductCatalogItem {
-  id              String   @id @default(uuid())
-  name            String
-  description     String?
-  itemType        String   @default("SPRZET")
-  unit            String   @default("szt")
-  defaultNetPrice Float    @default(0)
-  vatRate         Float    @default(23)
-  modelName       String?
-  isActive        Boolean  @default(true)
-  createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  itemType          String   @default("SPRZET")
+  unit              String   @default("szt")
+  defaultNetPrice   Float    @default(0)
+  vatRate           Float    @default(23)
+  modelName         String?
+  photoUrl          String?
+  showPhotoInQuote  Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model QuoteTemplate {

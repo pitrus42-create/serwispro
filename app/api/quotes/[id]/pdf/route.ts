@@ -150,15 +150,17 @@ export async function GET(
     PRO:      { hdr: "#78350f", accent: "#d97706", bg: "#fffbeb", badge: "#fef3c7", badgeText: "#92400e" },
   } as Record<string, { hdr: string; accent: string; bg: string; badge: string; badgeText: string }>;
 
-  const renderItems = (items: typeof packages[0]["items"]) => {
+  const renderItems = async (items: typeof packages[0]["items"]) => {
     if (!items.length) return `<p style="font-size:10px;color:${C_MUTED2};font-style:italic;padding:8px 0">Brak pozycji</p>`;
-    return items
-      .filter(i => i.isVisibleToClient)
-      .map((item, idx) => {
-        const lineGross = item.grossPrice * item.quantity;
-        const bg = idx % 2 === 1 ? C_SURFACE : "white";
+    const visibleItems = items.filter(i => i.isVisibleToClient);
+    const rows = await Promise.all(visibleItems.map(async (item, idx) => {
+      const lineGross = item.grossPrice * item.quantity;
+      const bg = idx % 2 === 1 ? C_SURFACE : "white";
+        const itemPhoto = (item as typeof item & { photoUrl?: string | null }).photoUrl;
+        const photoDataUri = itemPhoto ? await fileUrlToDataUri(itemPhoto) : "";
         return `<div style="padding:7px 8px;background:${bg};border-bottom:1px solid ${C_BORDER}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            ${photoDataUri ? `<img src="${photoDataUri}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;flex-shrink:0;border:1px solid ${C_BORDER}" alt="" />` : ""}
             <div style="flex:1;min-width:0">
               <div style="font-size:10px;font-weight:600;color:${C_TEXT};line-height:1.3">${esc(item.name)}</div>
               ${item.modelName ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:1px;font-style:italic">${esc(item.modelName)}</div>` : ""}
@@ -168,10 +170,11 @@ export async function GET(
             <div style="font-size:11px;font-weight:700;color:${C_TEXT};white-space:nowrap;flex-shrink:0">${lineGross.toFixed(2)} zł</div>
           </div>
         </div>`;
-      }).join("") || `<p style="font-size:10px;color:${C_MUTED2};font-style:italic;padding:8px">Brak pozycji widocznych</p>`;
+    }));
+    return rows.length ? rows.join("") : `<p style="font-size:10px;color:${C_MUTED2};font-style:italic;padding:8px">Brak pozycji widocznych</p>`;
   };
 
-  const renderPackage = (pkg: typeof packages[0]) => {
+  const renderPackage = async (pkg: typeof packages[0]) => {
     const c = PKG_COLORS[pkg.packageType] ?? PKG_COLORS.MINIMUM;
     const isRec = pkg.isRecommended;
     const isPro = pkg.packageType === "PRO";
@@ -203,7 +206,7 @@ export async function GET(
       </div>
 
       <div style="background:${c.bg}">
-        ${renderItems(pkg.items)}
+        ${await renderItems(pkg.items)}
       </div>
 
       <div style="background:${c.bg};padding:10px 14px;border-top:2px solid ${isRec ? c.accent : C_BORDER}">
@@ -311,7 +314,7 @@ export async function GET(
   <div style="margin-bottom:8px">
     <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid ${C_BORDER}">${qt === "single_variant" ? "Propozycja" : "Warianty oferty"}</div>
     <div style="display:grid;grid-template-columns:repeat(${pkgColumns},1fr);gap:12px;${qt === "single_variant" ? "max-width:400px" : ""}">
-      ${packages.map(renderPackage).join("")}
+      ${(await Promise.all(packages.map(renderPackage))).join("")}
     </div>
   </div>
 

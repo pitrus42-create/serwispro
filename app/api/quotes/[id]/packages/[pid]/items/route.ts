@@ -13,7 +13,7 @@ export async function POST(
   const body = await req.json();
   const {
     name, description, itemType = "SPRZET", quantity = 1, unit = "szt",
-    netPrice = 0, vatRate = 23, isVisibleToClient = true, modelName,
+    netPrice = 0, vatRate = 23, isVisibleToClient = true, modelName, photoUrl,
   } = body;
 
   if (!name) return NextResponse.json({ error: "Nazwa jest wymagana" }, { status: 400 });
@@ -33,6 +33,7 @@ export async function POST(
       grossPrice,
       isVisibleToClient,
       modelName: modelName ?? null,
+      photoUrl: photoUrl ?? null,
     },
   });
 

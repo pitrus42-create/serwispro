@@ -75,6 +75,7 @@ interface QuoteItem {
   grossPrice: number;
   isVisibleToClient: boolean;
   modelName: string | null;
+  photoUrl: string | null;
 }
 
 interface BenefitsData { title: string; points: string[] }
@@ -920,6 +921,15 @@ function ItemRow({
 
   return (
     <div className="flex items-start gap-2 group">
+      {/* Miniatura produktu */}
+      {item.photoUrl && (
+        <img
+          src={item.photoUrl}
+          alt=""
+          className="w-10 h-10 rounded-md object-cover border border-gray-200 shrink-0 mt-0.5"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 flex-wrap">
           <span className="text-sm font-medium text-gray-900">{item.name}</span>
@@ -963,11 +973,12 @@ interface ItemFormData {
   vatRate: string;
   isVisibleToClient: boolean;
   modelName: string;
+  photoUrl: string;
 }
 
 const emptyItemForm: ItemFormData = {
   name: "", description: "", itemType: "SPRZET", quantity: "1", unit: "szt",
-  netPrice: "0", vatRate: "23", isVisibleToClient: true, modelName: "",
+  netPrice: "0", vatRate: "23", isVisibleToClient: true, modelName: "", photoUrl: "",
 };
 
 function AddItemForm({
@@ -988,7 +999,7 @@ function AddItemForm({
     queryFn: async () => {
       if (!catalogQ) return [];
       const res = await fetch(`/api/product-catalog?q=${encodeURIComponent(catalogQ)}`);
-      return res.json() as Promise<{ id: string; name: string; modelName: string | null; itemType: string; unit: string; defaultNetPrice: number; vatRate: number }[]>;
+      return res.json() as Promise<{ id: string; name: string; modelName: string | null; itemType: string; unit: string; defaultNetPrice: number; vatRate: number; photoUrl?: string | null; showPhotoInQuote?: boolean }[]>;
     },
     enabled: catalogQ.length > 1,
   });
@@ -1004,6 +1015,7 @@ function AddItemForm({
       vatRate: String(item.vatRate),
       isVisibleToClient: true,
       modelName: item.modelName ?? "",
+      photoUrl: (item.showPhotoInQuote !== false && item.photoUrl) ? item.photoUrl : "",
     });
     setShowCatalog(false);
     setCatalogQ("");
@@ -1070,6 +1082,7 @@ function EditItemForm({
     vatRate: String(item.vatRate),
     isVisibleToClient: item.isVisibleToClient,
     modelName: item.modelName ?? "",
+    photoUrl: item.photoUrl ?? "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -1139,6 +1152,27 @@ function ItemFormFields({
             <Input type="number" min="0.01" step="0.01" value={form.quantity} onChange={(e) => setForm({...form, quantity: e.target.value})} className="h-7 text-xs w-16" />
             <Input value={form.unit} onChange={(e) => setForm({...form, unit: e.target.value})} className="h-7 text-xs" placeholder="szt" />
           </div>
+        </div>
+      </div>
+
+      {/* Zdjęcie produktu */}
+      <div className="space-y-1">
+        <Label className="text-xs">URL zdjęcia produktu (opcjonalnie)</Label>
+        <div className="flex gap-2 items-center">
+          <Input
+            value={form.photoUrl}
+            onChange={(e) => setForm({...form, photoUrl: e.target.value})}
+            className="h-7 text-xs flex-1"
+            placeholder="https://... lub /uploads/..."
+          />
+          {form.photoUrl && (
+            <img
+              src={form.photoUrl}
+              alt=""
+              className="w-8 h-8 rounded object-cover border border-gray-200 shrink-0"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
         </div>
       </div>
 
