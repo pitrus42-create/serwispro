@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
-import { createClient } from "@libsql/client";
 import path from "path";
 
 const globalForPrisma = globalThis as unknown as {
@@ -12,10 +11,7 @@ function createPrismaClient() {
   const tursoToken = process.env.TURSO_AUTH_TOKEN;
 
   if (tursoUrl && tursoToken) {
-    // Create libsql client explicitly — the adapter's internal client creation
-    // has an encoding bug that corrupts multi-byte UTF-8 chars (Polish diacritics)
-    const libsql = createClient({ url: tursoUrl, authToken: tursoToken });
-    const adapter = new PrismaLibSql(libsql);
+    const adapter = new PrismaLibSql({ url: tursoUrl, authToken: tursoToken });
     return new PrismaClient({ adapter } as never);
   }
 
@@ -26,8 +22,7 @@ function createPrismaClient() {
   }
 
   const dbPath = path.join(process.cwd(), "prisma", "dev.db");
-  const libsql = createClient({ url: `file:${dbPath}` });
-  const adapter = new PrismaLibSql(libsql);
+  const adapter = new PrismaLibSql({ url: `file:${dbPath}` });
   return new PrismaClient({ adapter } as never);
 }
 
