@@ -77,6 +77,50 @@ interface QuoteItem {
   modelName: string | null;
 }
 
+interface BenefitsData { title: string; points: string[] }
+
+const DEFAULT_BENEFITS: Record<string, BenefitsData> = {
+  MINIMUM: {
+    title: "Ekonomiczne rozwiązanie spełniające podstawowe założenia systemu.",
+    points: [
+      "Spełnia podstawowe założenia systemu zabezpieczeń.",
+      "Zapewnia realne poczucie bezpieczeństwa przy ograniczonym budżecie.",
+      "Obejmuje niezbędne elementy do prawidłowego działania systemu.",
+      "Jest dobrym wyborem, gdy najważniejsze jest uruchomienie systemu w możliwie ekonomicznej wersji.",
+      "Pozwala w przyszłości rozbudować instalację, jeżeli warunki techniczne na to pozwolą.",
+    ],
+  },
+  STANDARD: {
+    title: "Rekomendowany wariant — najlepszy balans ceny, jakości i niezawodności.",
+    points: [
+      "Oparty na sprzęcie o bardzo dobrym stosunku jakości do ceny.",
+      "Zapewnia stabilną i bezawaryjną pracę systemu w codziennym użytkowaniu.",
+      "Obejmuje pełniejszą konfigurację i lepsze dopasowanie do potrzeb klienta.",
+      "Daje większy komfort użytkowania niż wariant podstawowy.",
+      "Jest rekomendowany jako najbardziej opłacalny wybór dla większości realizacji.",
+      "Pozwala uzyskać profesjonalny efekt bez wchodzenia w najwyższy budżet.",
+    ],
+  },
+  PRO: {
+    title: "Rozwiązanie premium dla klientów oczekujących najwyższej jakości i indywidualnego podejścia.",
+    points: [
+      "Profesjonalny sprzęt dobrany pod wyższe wymagania użytkownika.",
+      "Konfiguracja systemu dostosowana do indywidualnych potrzeb klienta.",
+      "Instalacja wykonana z dużą dbałością o estetykę i najmniejsze szczegóły.",
+      "Większa możliwość rozbudowy systemu w przyszłości.",
+      "Dodatkowe konsultacje przy konfiguracji i użytkowaniu systemu.",
+      "Priorytetowe podejście do realizacji i ustalenia terminu montażu.",
+      "Roczna karta SIM do komunikacji systemu w cenie pakietu, jeżeli dana konfiguracja wymaga łączności GSM/LTE.",
+      "Najlepszy wybór dla osób, które oczekują maksymalnej niezawodności, wygody i profesjonalnego efektu końcowego.",
+    ],
+  },
+};
+
+function parseBenefits(raw: string | null | undefined, packageType: string): BenefitsData {
+  if (raw) { try { return JSON.parse(raw) as BenefitsData; } catch { /* fall through */ } }
+  return DEFAULT_BENEFITS[packageType] ?? DEFAULT_BENEFITS.MINIMUM;
+}
+
 interface QuotePackage {
   id: string;
   packageType: string;
@@ -89,6 +133,7 @@ interface QuotePackage {
   discount: number | null;
   includes: string | null;
   excludes: string | null;
+  benefits: string | null;
   items: QuoteItem[];
 }
 
@@ -709,6 +754,27 @@ function PackageCard({
           )}
         </div>
       )}
+
+      {/* Benefits section */}
+      {expanded && <PackageBenefitsView benefits={pkg.benefits} packageType={pkg.packageType} />}
+    </div>
+  );
+}
+
+function PackageBenefitsView({ benefits, packageType }: { benefits: string | null; packageType: string }) {
+  const data = parseBenefits(benefits, packageType);
+  return (
+    <div className="border-t border-gray-100 px-3 py-3 bg-white">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Korzyści pakietu</p>
+      <p className="text-xs font-semibold text-gray-700 mb-2 leading-snug">{data.title}</p>
+      <ul className="space-y-1">
+        {data.points.map((point, i) => (
+          <li key={i} className="flex items-start gap-1.5 text-xs text-gray-600">
+            <Check className="w-3 h-3 text-green-600 mt-0.5 shrink-0" />
+            <span>{point}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -722,13 +788,29 @@ function PackageEditForm({
   onSave: (d: Partial<QuotePackage>) => void;
   onCancel: () => void;
 }) {
+  const defaultBenefits = parseBenefits(pkg.benefits, pkg.packageType);
   const [form, setForm] = useState({
     name: pkg.name,
     description: pkg.description ?? "",
     includes: pkg.includes ?? "",
     excludes: pkg.excludes ?? "",
     discount: pkg.discount !== null ? String(pkg.discount) : "",
+    benefitsTitle: defaultBenefits.title,
+    benefitsPoints: defaultBenefits.points.join("\n"),
   });
+
+  const resetBenefits = () => {
+    const def = DEFAULT_BENEFITS[pkg.packageType] ?? DEFAULT_BENEFITS.MINIMUM;
+    setForm(p => ({ ...p, benefitsTitle: def.title, benefitsPoints: def.points.join("\n") }));
+  };
+
+  const handleSave = () => {
+    const benefits = JSON.stringify({
+      title: form.benefitsTitle,
+      points: form.benefitsPoints.split("\n").map(s => s.trim()).filter(Boolean),
+    });
+    onSave({ ...form, discount: form.discount ? parseFloat(form.discount) : null, benefits });
+  };
 
   return (
     <div className="px-3 pb-3 space-y-2 border-b border-gray-100 bg-white">
@@ -754,10 +836,33 @@ function PackageEditForm({
         <Label className="text-xs">Rabat (%)</Label>
         <Input type="number" value={form.discount} onChange={(e) => setForm(p => ({...p, discount: e.target.value}))} className="h-7 text-xs" min="0" max="100" placeholder="0" />
       </div>
-      <div className="flex gap-2">
-        <Button size="sm" className="h-6 text-xs bg-red-800 hover:bg-red-900 text-white px-2" onClick={() =>
-          onSave({ ...form, discount: form.discount ? parseFloat(form.discount) : null })
-        }>
+
+      {/* Korzyści */}
+      <div className="border-t border-gray-100 pt-2 space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-semibold text-gray-600">Korzyści pakietu</Label>
+          <button onClick={resetBenefits} className="text-[10px] text-blue-600 hover:text-blue-800">
+            Przywróć domyślne
+          </button>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Tytuł sekcji</Label>
+          <Input value={form.benefitsTitle} onChange={(e) => setForm(p => ({...p, benefitsTitle: e.target.value}))} className="h-7 text-xs" placeholder="Opis korzyści pakietu..." />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Punkty (każdy w nowej linii)</Label>
+          <Textarea
+            value={form.benefitsPoints}
+            onChange={(e) => setForm(p => ({...p, benefitsPoints: e.target.value}))}
+            rows={5}
+            className="text-xs font-mono leading-relaxed"
+            placeholder={"Punkt 1\nPunkt 2\nPunkt 3"}
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" className="h-6 text-xs bg-red-800 hover:bg-red-900 text-white px-2" onClick={handleSave}>
           <Save className="w-3 h-3 mr-1" />Zapisz
         </Button>
         <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={onCancel}>Anuluj</Button>

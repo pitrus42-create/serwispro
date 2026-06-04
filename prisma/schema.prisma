@@ -734,6 +734,7 @@ model QuotePackage {
   discount      Float?
   includes      String?
   excludes      String?
+  benefits      String?
   quote         Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   items         QuoteItem[]
 }

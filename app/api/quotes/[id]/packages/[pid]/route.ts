@@ -11,7 +11,7 @@ export async function PUT(
 
   const { pid } = await params;
   const body = await req.json();
-  const { name, description, isRecommended, includes, excludes, discount } = body;
+  const { name, description, isRecommended, includes, excludes, discount, benefits } = body;
 
   const pkg = await prisma.quotePackage.update({
     where: { id: pid },
@@ -22,6 +22,7 @@ export async function PUT(
       ...(includes !== undefined ? { includes } : {}),
       ...(excludes !== undefined ? { excludes } : {}),
       ...(discount !== undefined ? { discount: discount !== null ? parseFloat(discount) : null } : {}),
+      ...(benefits !== undefined ? { benefits } : {}),
     },
     include: { items: true },
   });
