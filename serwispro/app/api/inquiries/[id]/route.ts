@@ -42,16 +42,26 @@ export async function PUT(
   const body = await req.json();
   const actorLabel = `${session.user.firstName} ${session.user.lastName}`;
 
-  const existing = await prisma.inquiry.findUnique({
-    where: { id },
-    include: { _count: { select: { photos: true } } },
-  });
+  const existing = await prisma.inquiry.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Nie znaleziono" }, { status: 404 });
 
   const {
-    serviceType, source, contactName, contactPhone, contactEmail,
-    companyName, nip, investmentAddress, investmentCity, investmentPostal,
-    formAnswers, aestheticsScale, priorities, expectedDate, budgetRange, internalNotes,
+    serviceType,
+    source,
+    contactName,
+    contactPhone,
+    contactEmail,
+    companyName,
+    nip,
+    investmentAddress,
+    investmentCity,
+    investmentPostal,
+    formAnswers,
+    aestheticsScale,
+    priorities,
+    expectedDate,
+    budgetRange,
+    internalNotes,
   } = body;
 
   const updatedFields: string[] = [];
@@ -59,27 +69,34 @@ export async function PUT(
   if (contactName && contactName !== existing.contactName) updatedFields.push("imię/nazwisko");
   if (contactPhone !== undefined && contactPhone !== existing.contactPhone) updatedFields.push("telefon");
   if (contactEmail !== undefined && contactEmail !== existing.contactEmail) updatedFields.push("email");
-  if (investmentCity !== undefined && investmentCity !== existing.investmentCity) updatedFields.push("miasto");
-  if (investmentAddress !== undefined && investmentAddress !== existing.investmentAddress) updatedFields.push("adres");
   if (internalNotes !== undefined && internalNotes !== existing.internalNotes) updatedFields.push("notatki wewnętrzne");
 
-  const newFormAnswers = formAnswers !== undefined ? JSON.stringify(formAnswers) : existing.formAnswers;
-  const newPriorities = priorities !== undefined ? JSON.stringify(priorities) : existing.priorities;
-  const newAestheticsScale = aestheticsScale !== undefined
-    ? (aestheticsScale ? parseInt(aestheticsScale) : null)
-    : existing.aestheticsScale;
+  const mergedServiceType = serviceType ?? existing.serviceType;
+  const mergedFormAnswers = formAnswers !== undefined ? JSON.stringify(formAnswers) : existing.formAnswers;
+  const mergedPriorities = priorities !== undefined ? JSON.stringify(priorities) : existing.priorities;
+  const mergedScale = aestheticsScale !== undefined ? (aestheticsScale ? parseInt(aestheticsScale) : null) : existing.aestheticsScale;
+  const mergedExpectedDate = expectedDate !== undefined ? expectedDate : existing.expectedDate;
+  const mergedBudgetRange = budgetRange !== undefined ? budgetRange : existing.budgetRange;
+  const mergedInternalNotes = internalNotes !== undefined ? internalNotes : existing.internalNotes;
+  const mergedPhone = contactPhone !== undefined ? contactPhone : existing.contactPhone;
+  const mergedEmail = contactEmail !== undefined ? contactEmail : existing.contactEmail;
+  const mergedAddress = investmentAddress !== undefined ? investmentAddress : existing.investmentAddress;
+  const mergedCity = investmentCity !== undefined ? investmentCity : existing.investmentCity;
 
+  const photoCount = await prisma.inquiryPhoto.count({ where: { inquiryId: id } });
   const analysis = analyzeInquiry({
-    serviceType: serviceType ?? existing.serviceType,
-    aestheticsScale: newAestheticsScale,
-    priorities: newPriorities,
-    expectedDate: expectedDate !== undefined ? expectedDate : existing.expectedDate,
-    formAnswers: newFormAnswers,
-    contactPhone: contactPhone !== undefined ? contactPhone : existing.contactPhone,
-    contactEmail: contactEmail !== undefined ? contactEmail : existing.contactEmail,
-    investmentAddress: investmentAddress !== undefined ? investmentAddress : existing.investmentAddress,
-    investmentCity: investmentCity !== undefined ? investmentCity : existing.investmentCity,
-    _count: { photos: existing._count.photos },
+    serviceType: mergedServiceType,
+    aestheticsScale: mergedScale,
+    priorities: mergedPriorities,
+    expectedDate: mergedExpectedDate,
+    formAnswers: mergedFormAnswers,
+    contactPhone: mergedPhone,
+    contactEmail: mergedEmail,
+    investmentAddress: mergedAddress,
+    investmentCity: mergedCity,
+    budgetRange: mergedBudgetRange,
+    internalNotes: mergedInternalNotes,
+    _count: { photos: photoCount },
   });
 
   const updated = await prisma.inquiry.update({
@@ -95,9 +112,9 @@ export async function PUT(
       ...(investmentAddress !== undefined ? { investmentAddress } : {}),
       ...(investmentCity !== undefined ? { investmentCity } : {}),
       ...(investmentPostal !== undefined ? { investmentPostal } : {}),
-      ...(formAnswers !== undefined ? { formAnswers: newFormAnswers } : {}),
-      ...(aestheticsScale !== undefined ? { aestheticsScale: newAestheticsScale } : {}),
-      ...(priorities !== undefined ? { priorities: newPriorities } : {}),
+      ...(formAnswers !== undefined ? { formAnswers: mergedFormAnswers } : {}),
+      ...(aestheticsScale !== undefined ? { aestheticsScale: mergedScale } : {}),
+      ...(priorities !== undefined ? { priorities: mergedPriorities } : {}),
       ...(expectedDate !== undefined ? { expectedDate } : {}),
       ...(budgetRange !== undefined ? { budgetRange } : {}),
       ...(internalNotes !== undefined ? { internalNotes } : {}),
@@ -129,25 +146,8 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const actorLabel = `${session.user.firstName} ${session.user.lastName}`;
 
-  const existing = await prisma.inquiry.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Nie znaleziono" }, { status: 404 });
-
-  await prisma.inquiry.update({
-    where: { id },
-    data: { deletedAt: new Date(), deletedBy: session.user.id },
-  });
-
-  await prisma.inquiryChangeLog.create({
-    data: {
-      inquiryId: id,
-      userId: session.user.id,
-      actorLabel,
-      changeType: "DELETED",
-      description: `Zapytanie przeniesione do usuniętych przez ${actorLabel}`,
-    },
-  });
+  await prisma.inquiry.delete({ where: { id } });
 
   return NextResponse.json({ success: true });
 }

@@ -17,7 +17,6 @@ import {
   ChevronRight,
   CheckSquare,
   CircleDollarSign,
-  FileSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -176,36 +175,6 @@ export function DashboardDesktop({
         />
       </div>
 
-      {/* Inquiry stats card */}
-      {d.inquiryStats && d.inquiryStats.active > 0 && (
-        <Card className="border-red-100">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <FileSearch className="w-4 h-4 text-red-800" />
-                <span className="font-semibold text-sm text-gray-900">Zapytania ofertowe</span>
-              </div>
-              <Link href="/inquiries" className="text-xs text-red-800 font-medium hover:text-red-900">
-                Wszystkie →
-              </Link>
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: "Nowe", value: d.inquiryStats.new, href: "/inquiries?tab=AKTYWNE", color: "bg-blue-50 text-blue-800" },
-                { label: "Aktywne", value: d.inquiryStats.active, href: "/inquiries", color: "bg-gray-50 text-gray-800" },
-                { label: "Do wyceny", value: d.inquiryStats.toQuote, href: "/inquiries?tab=AKTYWNE", color: "bg-purple-50 text-purple-800" },
-                { label: "Oczekują", value: d.inquiryStats.waitingDecision, href: "/inquiries?tab=WYCENA", color: "bg-yellow-50 text-yellow-800" },
-              ].map((item) => (
-                <Link key={item.label} href={item.href} className={`${item.color} rounded-lg p-3 text-center hover:opacity-80 transition-opacity`}>
-                  <p className="text-2xl font-bold">{item.value}</p>
-                  <p className="text-xs mt-0.5 opacity-70">{item.label}</p>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Quick actions */}
       <Card>
         <CardHeader className="pb-2 pt-4 px-4">
@@ -247,24 +216,6 @@ export function DashboardDesktop({
               <Link href="/orders">
                 <ClipboardList className="w-4 h-4 mr-1.5 shrink-0" />
                 Wszystkie zlecenia
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="h-10 justify-start">
-              <Link href="/inquiries/new">
-                <FileSearch className="w-4 h-4 mr-1.5 shrink-0" />
-                Nowe zapytanie
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="h-10 justify-start">
-              <Link href="/inquiries">
-                <FileSearch className="w-4 h-4 mr-1.5 shrink-0" />
-                Wszystkie zapytania
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="h-10 justify-start">
-              <Link href="/inquiries?tab=WYCENA">
-                <FileSearch className="w-4 h-4 mr-1.5 shrink-0" />
-                Do wyceny
               </Link>
             </Button>
           </div>

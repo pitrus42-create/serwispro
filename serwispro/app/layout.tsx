@@ -5,7 +5,7 @@ import { Providers } from "./providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin", "latin-ext"],
+  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {

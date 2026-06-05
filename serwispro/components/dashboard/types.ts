@@ -33,10 +33,4 @@ export interface DashboardData {
     user?: { firstName: string; lastName: string } | null;
     order?: { orderNumber: string; type: string } | null;
   }[];
-  inquiryStats?: {
-    new: number;
-    active: number;
-    toQuote: number;
-    waitingDecision: number;
-  };
 }

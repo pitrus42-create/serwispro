@@ -26,6 +26,52 @@ async function fileUrlToDataUri(fileUrl: string): Promise<string> {
   } catch { return ""; }
 }
 
+interface BenefitsData { title: string; points: string[] }
+
+const DEFAULT_BENEFITS: Record<string, BenefitsData> = {
+  MINIMUM: {
+    title: "Ekonomiczne rozwiązanie spełniające podstawowe założenia systemu.",
+    points: [
+      "Spełnia podstawowe założenia systemu zabezpieczeń.",
+      "Zapewnia realne poczucie bezpieczeństwa przy ograniczonym budżecie.",
+      "Obejmuje niezbędne elementy do prawidłowego działania systemu.",
+      "Jest dobrym wyborem, gdy najważniejsze jest uruchomienie systemu w możliwie ekonomicznej wersji.",
+      "Pozwala w przyszłości rozbudować instalację, jeżeli warunki techniczne na to pozwolą.",
+    ],
+  },
+  STANDARD: {
+    title: "Rekomendowany wariant — najlepszy balans ceny, jakości i niezawodności.",
+    points: [
+      "Oparty na sprzęcie o bardzo dobrym stosunku jakości do ceny.",
+      "Zapewnia stabilną i bezawaryjną pracę systemu w codziennym użytkowaniu.",
+      "Obejmuje pełniejszą konfigurację i lepsze dopasowanie do potrzeb klienta.",
+      "Daje większy komfort użytkowania niż wariant podstawowy.",
+      "Jest rekomendowany jako najbardziej opłacalny wybór dla większości realizacji.",
+      "Pozwala uzyskać profesjonalny efekt bez wchodzenia w najwyższy budżet.",
+    ],
+  },
+  PRO: {
+    title: "Rozwiązanie premium dla klientów oczekujących najwyższej jakości i indywidualnego podejścia.",
+    points: [
+      "Profesjonalny sprzęt dobrany pod wyższe wymagania użytkownika.",
+      "Konfiguracja systemu dostosowana do indywidualnych potrzeb klienta.",
+      "Instalacja wykonana z dużą dbałością o estetykę i najmniejsze szczegóły.",
+      "Większa możliwość rozbudowy systemu w przyszłości.",
+      "Dodatkowe konsultacje przy konfiguracji i użytkowaniu systemu.",
+      "Priorytetowe podejście do realizacji i ustalenia terminu montażu.",
+      "Roczna karta SIM do komunikacji systemu w cenie pakietu, jeżeli dana konfiguracja wymaga łączności GSM/LTE.",
+      "Najlepszy wybór dla osób, które oczekują maksymalnej niezawodności, wygody i profesjonalnego efektu końcowego.",
+    ],
+  },
+};
+
+function parseBenefits(raw: string | null | undefined, packageType: string): BenefitsData {
+  if (raw) {
+    try { return JSON.parse(raw) as BenefitsData; } catch { /* fall through */ }
+  }
+  return DEFAULT_BENEFITS[packageType] ?? DEFAULT_BENEFITS.MINIMUM;
+}
+
 const SERVICE_LABELS: Record<string, string> = {
   CCTV: "Monitoring CCTV", ALARM: "System alarmowy", BRAMA: "Automatyka bramowa",
   DOMOFON: "Domofon / wideodomofon", SIEC: "Sieć LAN / Wi-Fi", AWARIA: "Naprawa awarii",
@@ -88,9 +134,15 @@ export async function GET(
     : "";
   const serviceLabel = SERVICE_LABELS[quote.serviceType ?? ""] ?? (quote.serviceType ?? "");
 
-  // Packages in order: MINIMUM, STANDARD, PRO
-  const pkgOrder = ["MINIMUM", "STANDARD", "PRO"];
-  const packages = pkgOrder.map(t => quote.packages.find(p => p.packageType === t)).filter(Boolean) as typeof quote.packages;
+  // Packages ordered per quoteType
+  const qt = (quote as typeof quote & { quoteType?: string }).quoteType ?? "three_packages";
+  const pkgOrder =
+    qt === "two_packages"   ? ["MINIMUM", "PRO"] :
+    qt === "single_variant" ? ["STANDARD"] :
+    ["MINIMUM", "STANDARD", "PRO"];
+  let packages = pkgOrder.map(t => quote.packages.find(p => p.packageType === t)).filter(Boolean) as typeof quote.packages;
+  if (packages.length === 0) packages = quote.packages.slice(0, 1); // fallback
+  const pkgColumns = packages.length;
 
   const PKG_COLORS = {
     MINIMUM:  { hdr: "#475569", accent: "#94a3b8", bg: "#f8fafc", badge: "#e2e8f0", badgeText: "#475569" },
@@ -98,15 +150,17 @@ export async function GET(
     PRO:      { hdr: "#78350f", accent: "#d97706", bg: "#fffbeb", badge: "#fef3c7", badgeText: "#92400e" },
   } as Record<string, { hdr: string; accent: string; bg: string; badge: string; badgeText: string }>;
 
-  const renderItems = (items: typeof packages[0]["items"]) => {
+  const renderItems = async (items: typeof packages[0]["items"]) => {
     if (!items.length) return `<p style="font-size:10px;color:${C_MUTED2};font-style:italic;padding:8px 0">Brak pozycji</p>`;
-    return items
-      .filter(i => i.isVisibleToClient)
-      .map((item, idx) => {
-        const lineGross = item.grossPrice * item.quantity;
-        const bg = idx % 2 === 1 ? C_SURFACE : "white";
+    const visibleItems = items.filter(i => i.isVisibleToClient);
+    const rows = await Promise.all(visibleItems.map(async (item, idx) => {
+      const lineGross = item.grossPrice * item.quantity;
+      const bg = idx % 2 === 1 ? C_SURFACE : "white";
+        const itemPhoto = (item as typeof item & { photoUrl?: string | null }).photoUrl;
+        const photoDataUri = itemPhoto ? await fileUrlToDataUri(itemPhoto) : "";
         return `<div style="padding:7px 8px;background:${bg};border-bottom:1px solid ${C_BORDER}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            ${photoDataUri ? `<img src="${photoDataUri}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;flex-shrink:0;border:1px solid ${C_BORDER}" alt="" />` : ""}
             <div style="flex:1;min-width:0">
               <div style="font-size:10px;font-weight:600;color:${C_TEXT};line-height:1.3">${esc(item.name)}</div>
               ${item.modelName ? `<div style="font-size:8.5px;color:${C_MUTED};margin-top:1px;font-style:italic">${esc(item.modelName)}</div>` : ""}
@@ -116,27 +170,43 @@ export async function GET(
             <div style="font-size:11px;font-weight:700;color:${C_TEXT};white-space:nowrap;flex-shrink:0">${lineGross.toFixed(2)} zł</div>
           </div>
         </div>`;
-      }).join("") || `<p style="font-size:10px;color:${C_MUTED2};font-style:italic;padding:8px">Brak pozycji widocznych</p>`;
+    }));
+    return rows.length ? rows.join("") : `<p style="font-size:10px;color:${C_MUTED2};font-style:italic;padding:8px">Brak pozycji widocznych</p>`;
   };
 
-  const renderPackage = (pkg: typeof packages[0]) => {
+  const renderPackage = async (pkg: typeof packages[0]) => {
     const c = PKG_COLORS[pkg.packageType] ?? PKG_COLORS.MINIMUM;
     const isRec = pkg.isRecommended;
+    const isPro = pkg.packageType === "PRO";
     const discountedGross = pkg.discount
       ? pkg.grossTotal * (1 - pkg.discount / 100)
       : pkg.grossTotal;
 
+    const benefits = parseBenefits((pkg as typeof pkg & { benefits?: string | null }).benefits, pkg.packageType);
+
+    const benefitsHtml = `
+      <div style="padding:10px 14px 12px;background:white;border-top:1px solid ${C_BORDER}">
+        <div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:5px">Korzyści pakietu</div>
+        <div style="font-size:9.5px;font-weight:600;color:${C_TEXT};line-height:1.4;margin-bottom:6px">${esc(benefits.title)}</div>
+        ${benefits.points.map(p => `
+          <div style="display:flex;align-items:flex-start;gap:5px;margin-bottom:3px">
+            <span style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:9px;line-height:1.5">✓</span>
+            <span style="font-size:8.5px;color:${C_TEXT};line-height:1.5">${esc(p)}</span>
+          </div>`).join("")}
+      </div>`;
+
     return `
-    <div style="border:2px solid ${isRec ? c.accent : C_BORDER};border-radius:${R_CARD};overflow:hidden;box-shadow:${isRec ? "0 4px 12px rgba(37,99,235,0.15)" : SHADOW};position:relative">
+    <div style="border:2px solid ${isRec ? c.accent : C_BORDER};border-radius:${R_CARD};overflow:hidden;box-shadow:${isRec ? "0 4px 12px rgba(37,99,235,0.15)" : SHADOW};position:relative;page-break-inside:avoid;break-inside:avoid">
       ${isRec ? `<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:${c.accent};color:white;font-size:7.5px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;padding:3px 12px;border-radius:0 0 6px 6px;white-space:nowrap">★ Rekomendowany</div>` : ""}
+      ${isPro && !isRec ? `<div style="position:absolute;top:-1px;right:10px;background:#78350f;color:white;font-size:7px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;padding:2px 8px;border-radius:0 0 5px 5px;white-space:nowrap">Premium</div>` : ""}
       <div style="background:${c.hdr};padding:${isRec ? "22px 14px 10px" : "10px 14px"};text-align:center">
-        <div style="display:inline-block;background:${c.badge};color:${c.badgeText};font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;padding:3px 10px;border-radius:999px;margin-bottom:4px">${esc(pkg.packageType)}</div>
+        ${qt !== "single_variant" ? `<div style="display:inline-block;background:${c.badge};color:${c.badgeText};font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;padding:3px 10px;border-radius:999px;margin-bottom:4px">${esc(pkg.packageType)}</div>` : ""}
         <div style="font-size:14px;font-weight:700;color:white;line-height:1.2">${esc(pkg.name)}</div>
         ${pkg.description ? `<div style="font-size:9.5px;color:rgba(255,255,255,0.8);margin-top:3px;line-height:1.4">${esc(pkg.description)}</div>` : ""}
       </div>
 
       <div style="background:${c.bg}">
-        ${renderItems(pkg.items)}
+        ${await renderItems(pkg.items)}
       </div>
 
       <div style="background:${c.bg};padding:10px 14px;border-top:2px solid ${isRec ? c.accent : C_BORDER}">
@@ -151,8 +221,10 @@ export async function GET(
         ${pkg.discount ? `<div style="font-size:8.5px;color:#16a34a;text-align:right;margin-top:1px">Rabat ${pkg.discount}%</div>` : ""}
       </div>
 
+      ${benefitsHtml}
+
       ${(pkg.includes || pkg.excludes) ? `
-      <div style="padding:8px 14px 10px;background:white;border-top:1px solid ${C_BORDER};font-size:9px;line-height:1.6">
+      <div style="padding:8px 14px 10px;background:${C_SURFACE};border-top:1px solid ${C_BORDER};font-size:9px;line-height:1.6">
         ${pkg.includes ? `<div style="margin-bottom:4px"><span style="font-weight:700;color:#16a34a">✓ Wliczone:</span> <span style="color:${C_MUTED}">${esc(pkg.includes)}</span></div>` : ""}
         ${pkg.excludes ? `<div><span style="font-weight:700;color:#dc2626">✗ Nie wliczone:</span> <span style="color:${C_MUTED}">${esc(pkg.excludes)}</span></div>` : ""}
       </div>` : ""}
@@ -240,9 +312,9 @@ export async function GET(
 
   <!-- PACKAGES -->
   <div style="margin-bottom:8px">
-    <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid ${C_BORDER}">Warianty oferty</div>
-    <div style="display:grid;grid-template-columns:repeat(${packages.length},1fr);gap:12px">
-      ${packages.map(renderPackage).join("")}
+    <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:${C_MUTED};margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid ${C_BORDER}">${qt === "single_variant" ? "Propozycja" : "Warianty oferty"}</div>
+    <div style="display:grid;grid-template-columns:repeat(${pkgColumns},1fr);gap:12px;${qt === "single_variant" ? "max-width:400px" : ""}">
+      ${(await Promise.all(packages.map(renderPackage))).join("")}
     </div>
   </div>
 

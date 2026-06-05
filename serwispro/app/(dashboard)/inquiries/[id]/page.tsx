@@ -1,22 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, use } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import { toast } from "sonner";
 import {
   ArrowLeft, Phone, Mail, MapPin, Building2, FileText, Edit2, Check, X,
   Camera, History, MessageSquare, Receipt, Wrench, Plus, Trash2, Save,
-  Star, ChevronDown, UserPlus, Link2, AlertTriangle, Archive, RotateCcw,
-  TrendingUp, TrendingDown, Minus, BarChart2,
+  Star, ChevronDown, UserPlus, Link2, AlertTriangle, BarChart2, RefreshCw,
+  TrendingUp, Clock, Zap,
 } from "lucide-react";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -105,9 +100,6 @@ const CHANGE_TYPE_ICONS: Record<string, string> = {
   NOTE_ADDED: "📝",
   CONTACT_LOG: "📞",
   CONVERTED: "🤝",
-  ARCHIVED: "📦",
-  RESTORED: "♻️",
-  DELETED: "🗑️",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -143,14 +135,10 @@ interface Inquiry {
   expectedDate: string | null;
   budgetRange: string | null;
   internalNotes: string | null;
-  convertedToClient: boolean;
-  clientId: string | null;
   tags: string;
   autoAnalysis: string;
-  archivedAt: string | null;
-  archivedBy: string | null;
-  deletedAt: string | null;
-  deletedBy: string | null;
+  convertedToClient: boolean;
+  clientId: string | null;
   createdAt: string;
   updatedAt: string;
   photos: InquiryPhoto[];
@@ -194,6 +182,7 @@ interface Quote {
   id: string;
   quoteNumber: string;
   status: string;
+  quoteType: string;
   createdAt: string;
   packages: { packageType: string; grossTotal: number }[];
   acceptance: { acceptedPackage: string } | null;
@@ -201,8 +190,12 @@ interface Quote {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function InquiryDetailPage() {
-  const { id } = useParams<{ id: string }>();
+export default function InquiryDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();
 
@@ -214,8 +207,6 @@ export default function InquiryDetailPage() {
       return res.json() as Promise<Inquiry>;
     },
   });
-
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const changeStatus = useMutation({
     mutationFn: async (status: string) => {
@@ -232,24 +223,6 @@ export default function InquiryDetailPage() {
     },
     onError: () => toast.error("Nie udało się zmienić statusu"),
   });
-
-  const archiveInquiry = async () => {
-    const res = await fetch(`/api/inquiries/${id}/archive`, { method: "POST" });
-    if (res.ok) { qc.invalidateQueries({ queryKey: ["inquiry", id] }); toast.success("Zapytanie zarchiwizowane"); }
-    else toast.error("Błąd archiwizacji");
-  };
-
-  const restoreInquiry = async () => {
-    const res = await fetch(`/api/inquiries/${id}/restore`, { method: "POST" });
-    if (res.ok) { qc.invalidateQueries({ queryKey: ["inquiry", id] }); toast.success("Zapytanie przywrócone"); }
-    else toast.error("Błąd przywracania");
-  };
-
-  const softDeleteInquiry = async () => {
-    const res = await fetch(`/api/inquiries/${id}`, { method: "DELETE" });
-    if (res.ok) { router.push("/inquiries"); toast.success("Zapytanie przeniesione do usuniętych"); }
-    else toast.error("Błąd usuwania");
-  };
 
   if (isLoading) {
     return (
@@ -294,59 +267,26 @@ export default function InquiryDetailPage() {
             </div>
           </div>
 
-          {/* Akcje + Status */}
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {/* Arch/Del/Restore */}
-            {!inquiry.deletedAt && !inquiry.archivedAt && (
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={archiveInquiry}>
-                <Archive className="w-3.5 h-3.5 mr-1" />Archiwizuj
-              </Button>
-            )}
-            {(inquiry.archivedAt || inquiry.deletedAt) && (
-              <Button variant="outline" size="sm" className="h-8 text-xs text-green-700 border-green-300" onClick={restoreInquiry}>
-                <RotateCcw className="w-3.5 h-3.5 mr-1" />Przywróć
-              </Button>
-            )}
-            {!inquiry.deletedAt && (
-              <Button variant="outline" size="sm" className="h-8 text-xs text-red-700 border-red-200" onClick={() => setDeleteDialogOpen(true)}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" />Usuń
-              </Button>
-            )}
-            <Select value={inquiry.status} onValueChange={(v) => changeStatus.mutate(v)}>
+          {/* Status dropdown */}
+          <div className="relative">
+            <Select
+              value={inquiry.status}
+              onValueChange={(v) => changeStatus.mutate(v)}
+            >
               <SelectTrigger className="h-8 text-xs w-44">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {ALL_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s} className="text-xs">{STATUS_LABELS[s]}</SelectItem>
+                  <SelectItem key={s} value={s} className="text-xs">
+                    {STATUS_LABELS[s]}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
         </div>
       </div>
-
-      {/* Delete confirmation dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Usunąć zapytanie?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Zapytanie zostanie przeniesione do usuniętych i będzie można je przywrócić.
-              Tylko administrator może je trwale usunąć.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Anuluj</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-700 hover:bg-red-800"
-              onClick={() => { setDeleteDialogOpen(false); softDeleteInquiry(); }}
-            >
-              Przenieś do usuniętych
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Tabs */}
       <div className="flex-1 overflow-hidden">
@@ -369,9 +309,6 @@ export default function InquiryDetailPage() {
             </TabsTrigger>
             <TabsTrigger value="quotes" className="text-xs data-[state=active]:bg-red-50 data-[state=active]:text-red-900 rounded-md">
               Wyceny {inquiry.quotes.length > 0 && `(${inquiry.quotes.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="analysis" className="text-xs data-[state=active]:bg-red-50 data-[state=active]:text-red-900 rounded-md">
-              Analiza
             </TabsTrigger>
             <TabsTrigger value="orders" className="text-xs data-[state=active]:bg-red-50 data-[state=active]:text-red-900 rounded-md">
               Zlecenia
@@ -411,11 +348,6 @@ export default function InquiryDetailPage() {
             {/* ── Wyceny ──────────────────────────────────────────────────── */}
             <TabsContent value="quotes" className="m-0 p-4 md:p-6">
               <QuotesTab inquiryId={id} quotes={inquiry.quotes} onUpdate={() => qc.invalidateQueries({ queryKey: ["inquiry", id] })} />
-            </TabsContent>
-
-            {/* ── Analiza ─────────────────────────────────────────────────── */}
-            <TabsContent value="analysis" className="m-0 p-4 md:p-6">
-              <AnalysisTab inquiry={inquiry} />
             </TabsContent>
 
             {/* ── Zlecenia ────────────────────────────────────────────────── */}
@@ -533,6 +465,9 @@ function SummaryTab({ inquiry, onUpdate }: { inquiry: Inquiry; onUpdate: () => v
         </div>
       )}
 
+      {/* Analiza zapytania */}
+      <AnalysisCard inquiry={inquiry} onRefresh={onUpdate} />
+
       {/* Notatki wewnętrzne */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between">
@@ -593,6 +528,159 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
       <div className="flex-1 min-w-0">
         <span className="text-xs text-gray-500">{label}: </span>
         <span className="text-sm text-gray-900">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Analysis Card ─────────────────────────────────────────────────────────────
+
+const TAG_COLORS: Record<string, string> = {
+  "Budżetowy system":          "bg-gray-100 text-gray-700",
+  "Klient premium":            "bg-amber-100 text-amber-800",
+  "Wysoki potencjał":          "bg-green-100 text-green-800",
+  "Pilny termin":              "bg-red-100 text-red-700",
+  "Możliwa dopłata ekspresowa":"bg-orange-100 text-orange-800",
+  "Brakuje zdjęć":            "bg-yellow-100 text-yellow-800",
+  "Brakuje informacji":        "bg-yellow-100 text-yellow-800",
+  "Wymaga wizji lokalnej":     "bg-purple-100 text-purple-800",
+  "Nowa instalacja":           "bg-blue-100 text-blue-800",
+  "Modernizacja":              "bg-teal-100 text-teal-800",
+  "Awaria":                    "bg-red-100 text-red-800",
+};
+
+const CLIENT_TYPE_CONFIG = {
+  budget:   { label: "Klient budżetowy",  className: "bg-gray-100 text-gray-700" },
+  standard: { label: "Klient standardowy",className: "bg-blue-100 text-blue-800" },
+  premium:  { label: "Klient premium",    className: "bg-amber-100 text-amber-800" },
+};
+
+const SCORE_CONFIG = {
+  LOW:    { label: "Niski potencjał",   className: "text-gray-500" },
+  MEDIUM: { label: "Średni potencjał",  className: "text-blue-600" },
+  HIGH:   { label: "Wysoki potencjał",  className: "text-green-700" },
+};
+
+function AnalysisCard({ inquiry, onRefresh }: { inquiry: Inquiry; onRefresh: () => void }) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const analysis = (() => {
+    try { return JSON.parse(inquiry.autoAnalysis) as {
+      tags?: string[];
+      score?: "LOW" | "MEDIUM" | "HIGH";
+      suggestedOffer?: "MINIMUM" | "STANDARD" | "PRO";
+      clientType?: "budget" | "standard" | "premium";
+      justification?: string;
+      warnings?: string[];
+      expressUpcharge?: boolean;
+    }; } catch { return null; }
+  })();
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetch(`/api/inquiries/${inquiry.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      onRefresh();
+      toast.success("Analiza odświeżona");
+    } catch {
+      toast.error("Błąd odświeżania analizy");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const clientCfg = CLIENT_TYPE_CONFIG[analysis?.clientType ?? "standard"];
+  const scoreCfg  = SCORE_CONFIG[analysis?.score ?? "MEDIUM"];
+  const tags: string[] = (() => {
+    try { return JSON.parse(inquiry.tags) as string[]; } catch { return []; }
+  })();
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-4 h-4 text-gray-400" />
+          <h3 className="font-medium text-gray-900 text-sm">Analiza zapytania</h3>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 disabled:opacity-40"
+        >
+          <RefreshCw className={cn("w-3 h-3", refreshing && "animate-spin")} />
+          Odśwież
+        </button>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Typ klienta + potencjał */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge className={cn("text-xs", clientCfg.className)}>{clientCfg.label}</Badge>
+          <span className={cn("text-xs font-medium flex items-center gap-1", scoreCfg.className)}>
+            <TrendingUp className="w-3 h-3" />
+            {scoreCfg.label}
+          </span>
+          {analysis?.suggestedOffer && (
+            <span className="text-xs text-gray-500">
+              · Sugerowany wariant: <strong>{analysis.suggestedOffer}</strong>
+            </span>
+          )}
+        </div>
+
+        {/* Uzasadnienie */}
+        {analysis?.justification && (
+          <p className="text-sm text-gray-700 leading-snug">{analysis.justification}</p>
+        )}
+
+        {/* Tagi */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className={cn(
+                  "inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium",
+                  TAG_COLORS[tag] ?? "bg-gray-100 text-gray-600"
+                )}
+              >
+                {tag === "Pilny termin" && <Clock className="w-2.5 h-2.5 mr-1" />}
+                {tag === "Możliwa dopłata ekspresowa" && <Zap className="w-2.5 h-2.5 mr-1" />}
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Dopłata ekspresowa */}
+        {analysis?.expressUpcharge && (
+          <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+            <Zap className="w-3.5 h-3.5 text-orange-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-orange-800">
+              <strong>Sugestia:</strong> Możliwa dopłata za realizację priorytetową — klient oczekuje
+              szybkiego terminu. Rozważ dodanie pozycji „Realizacja priorytetowa" w wycenie.
+            </p>
+          </div>
+        )}
+
+        {/* Ostrzeżenia */}
+        {analysis?.warnings && analysis.warnings.length > 0 && (
+          <div className="space-y-1">
+            {analysis.warnings.map((w, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs text-yellow-800">
+                <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5 text-yellow-600" />
+                {w}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!analysis && (
+          <p className="text-xs text-gray-400 italic">Brak danych analizy — kliknij „Odśwież".</p>
+        )}
       </div>
     </div>
   );
@@ -1040,6 +1128,7 @@ function ContactTab({
 function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes: Quote[]; onUpdate: () => void }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [showTypeDialog, setShowTypeDialog] = useState(false);
 
   const QUOTE_STATUS_LABELS: Record<string, string> = {
     ROBOCZA: "Robocza",
@@ -1061,13 +1150,20 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
     WYGASLA: "bg-gray-100 text-gray-500",
   };
 
-  const createQuote = async () => {
+  const QUOTE_TYPE_LABELS: Record<string, string> = {
+    three_packages: "3 warianty",
+    two_packages:   "2 warianty",
+    single_variant: "1 wariant",
+  };
+
+  const createQuote = async (quoteType: string) => {
     setCreating(true);
+    setShowTypeDialog(false);
     try {
       const res = await fetch(`/api/inquiries/${inquiryId}/quotes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ quoteType }),
       });
       if (!res.ok) throw new Error();
       const quote = await res.json();
@@ -1079,6 +1175,27 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
     }
   };
 
+  const QUOTE_TYPE_OPTIONS = [
+    {
+      value: "three_packages",
+      label: "3 warianty",
+      desc: "Minimum / Standard / Pro — klasyczne porównanie trzech opcji",
+      icon: "▦",
+    },
+    {
+      value: "two_packages",
+      label: "2 warianty",
+      desc: "Ekonomiczny / Premium — uproszczone porównanie dwóch opcji",
+      icon: "▤",
+    },
+    {
+      value: "single_variant",
+      label: "1 wariant (uproszczona)",
+      desc: "Jedna konkretna propozycja — awarie, serwis, małe zlecenia",
+      icon: "▬",
+    },
+  ];
+
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
@@ -1088,7 +1205,7 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
         <Button
           size="sm"
           className="bg-red-800 hover:bg-red-900 text-white"
-          onClick={createQuote}
+          onClick={() => setShowTypeDialog(true)}
           disabled={creating}
         >
           <Plus className="w-4 h-4 mr-1" />
@@ -1096,11 +1213,37 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
         </Button>
       </div>
 
+      {/* Dialog wyboru trybu wyceny */}
+      <Dialog open={showTypeDialog} onOpenChange={setShowTypeDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Wybierz typ wyceny</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            {QUOTE_TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => createQuote(opt.value)}
+                className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl text-gray-400">{opt.icon}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                    <p className="text-xs text-gray-500">{opt.desc}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {quotes.length === 0 ? (
         <div className="text-center py-10 text-gray-400">
           <Receipt className="w-10 h-10 mx-auto mb-2 opacity-40" />
           <p className="text-sm">Brak wycen</p>
-          <p className="text-xs mt-1">Kliknij „Utwórz wycenę" aby przygotować ofertę z 3 pakietami</p>
+          <p className="text-xs mt-1">Kliknij „Utwórz wycenę" aby wybrać typ wyceny</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -1111,11 +1254,16 @@ function QuotesTab({ inquiryId, quotes, onUpdate }: { inquiryId: string; quotes:
               className="w-full text-left bg-white border border-gray-200 rounded-xl p-3 hover:border-red-200 hover:shadow-sm transition-all"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-sm font-bold">{q.quoteNumber}</span>
                   <Badge className={cn("text-xs", QUOTE_STATUS_COLORS[q.status] ?? "bg-gray-100")}>
                     {QUOTE_STATUS_LABELS[q.status] ?? q.status}
                   </Badge>
+                  {q.quoteType && q.quoteType !== "three_packages" && (
+                    <span className="text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
+                      {QUOTE_TYPE_LABELS[q.quoteType] ?? q.quoteType}
+                    </span>
+                  )}
                 </div>
                 <span className="text-xs text-gray-400">
                   {format(new Date(q.createdAt), "d MMM yyyy", { locale: pl })}
@@ -1289,159 +1437,5 @@ function ConvertToClientSection({
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-// ── Tab: Analiza ──────────────────────────────────────────────────────────────
-
-interface InquiryAnalysis {
-  tags: string[];
-  score: "LOW" | "MEDIUM" | "HIGH";
-  suggestedOffer: "MINIMUM" | "STANDARD" | "PRO";
-  warnings: string[];
-}
-
-function safeJsonParse<T>(str: string, fallback: T): T {
-  try { return JSON.parse(str); } catch { return fallback; }
-}
-
-const TAG_COLORS: Record<string, string> = {
-  "Budżetowy system":      "bg-gray-100 text-gray-600",
-  "Klient premium":        "bg-purple-100 text-purple-800",
-  "Pilny termin":          "bg-red-100 text-red-700",
-  "Brakuje zdjęć":         "bg-yellow-100 text-yellow-700",
-  "Brakuje informacji":    "bg-orange-100 text-orange-700",
-  "Wymaga wizji lokalnej": "bg-blue-100 text-blue-700",
-  "Nowa instalacja":       "bg-teal-100 text-teal-700",
-  "Modernizacja":          "bg-teal-100 text-teal-700",
-};
-
-const OFFER_COLORS: Record<string, string> = {
-  MINIMUM: "bg-gray-100 text-gray-700 border-gray-300",
-  STANDARD: "bg-blue-100 text-blue-800 border-blue-300",
-  PRO: "bg-amber-100 text-amber-800 border-amber-300",
-};
-
-function AnalysisTab({ inquiry }: { inquiry: Inquiry }) {
-  const analysis = safeJsonParse<InquiryAnalysis>(inquiry.autoAnalysis, {
-    tags: [], score: "MEDIUM", suggestedOffer: "STANDARD", warnings: [],
-  });
-  const tags = safeJsonParse<string[]>(inquiry.tags, []);
-  const priorities = safeJsonParse<string[]>(inquiry.priorities, []);
-
-  const SCORE_CONFIG = {
-    HIGH:   { label: "Wysoki potencjał",  color: "text-green-800",  bg: "bg-green-50 border-green-200",  Icon: TrendingUp },
-    MEDIUM: { label: "Średni potencjał",  color: "text-amber-800",  bg: "bg-amber-50 border-amber-200",  Icon: Minus },
-    LOW:    { label: "Niski potencjał",   color: "text-gray-600",   bg: "bg-gray-50 border-gray-200",    Icon: TrendingDown },
-  };
-  const sc = SCORE_CONFIG[analysis.score] ?? SCORE_CONFIG.MEDIUM;
-  const ScoreIcon = sc.Icon;
-
-  return (
-    <div className="max-w-2xl space-y-4">
-      {/* Ocena potencjału */}
-      <div className={`${sc.bg} border rounded-xl p-4`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${sc.bg}`}>
-              <ScoreIcon className={`w-5 h-5 ${sc.color}`} />
-            </div>
-            <div>
-              <p className={`font-semibold ${sc.color}`}>{sc.label}</p>
-              <p className="text-xs text-gray-500 mt-0.5">Sugerowana oferta</p>
-            </div>
-          </div>
-          <span className={cn("px-3 py-1.5 rounded-lg text-sm font-bold border", OFFER_COLORS[analysis.suggestedOffer] ?? OFFER_COLORS.STANDARD)}>
-            {analysis.suggestedOffer}
-          </span>
-        </div>
-      </div>
-
-      {/* Tagi */}
-      {tags.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-gray-400" />
-            <h3 className="font-medium text-sm text-gray-900">Wykryte tagi</h3>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <span key={tag} className={cn("text-xs px-3 py-1 rounded-full font-medium", TAG_COLORS[tag] ?? "bg-gray-100 text-gray-600")}>
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Ostrzeżenia */}
-      {analysis.warnings.length > 0 && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-orange-600" />
-            <h3 className="font-medium text-sm text-orange-900">Ostrzeżenia</h3>
-          </div>
-          <ul className="space-y-1">
-            {analysis.warnings.map((w, i) => (
-              <li key={i} className="text-sm text-orange-800">• {w}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Preferencje klienta */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-        <h3 className="font-medium text-sm text-gray-900">Preferencje klienta</h3>
-
-        {inquiry.aestheticsScale !== null && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 text-xs">Skala estetyki montażu</span>
-              <span className="font-semibold text-red-800 text-sm">{inquiry.aestheticsScale}/10</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className={cn("h-2 rounded-full", inquiry.aestheticsScale >= 8 ? "bg-purple-600" : inquiry.aestheticsScale <= 4 ? "bg-gray-500" : "bg-red-800")}
-                style={{ width: `${inquiry.aestheticsScale * 10}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] text-gray-400">
-              <span>Budżetowy</span><span>Kompromis</span><span>Premium</span>
-            </div>
-          </div>
-        )}
-
-        {priorities.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs text-gray-600">Priorytety</p>
-            <div className="flex flex-wrap gap-1.5">
-              {priorities.map((p) => (
-                <Badge key={p} variant="secondary" className="text-xs">
-                  {PRIORITY_LABELS[p] ?? p}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {inquiry.expectedDate && (
-          <div>
-            <p className="text-xs text-gray-500">Oczekiwany termin</p>
-            <p className="text-sm font-medium text-gray-800">{inquiry.expectedDate}</p>
-          </div>
-        )}
-
-        {inquiry.budgetRange && (
-          <div>
-            <p className="text-xs text-gray-500">Budżet orientacyjny</p>
-            <p className="text-sm font-medium text-gray-800">{inquiry.budgetRange}</p>
-          </div>
-        )}
-
-        {tags.length === 0 && priorities.length === 0 && inquiry.aestheticsScale === null && (
-          <p className="text-sm text-gray-400 italic">Brak danych do analizy</p>
-        )}
-      </div>
-    </div>
   );
 }

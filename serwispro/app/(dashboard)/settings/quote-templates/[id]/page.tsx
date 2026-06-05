@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,8 +28,8 @@ interface TemplateItem { id: string; name: string; itemType: string; quantity: n
 interface TemplatePkg { id: string; packageType: string; name: string; description: string | null; includes: string | null; excludes: string | null; items: TemplateItem[]; }
 interface Template { id: string; name: string; serviceType: string | null; conditions: string | null; packages: TemplatePkg[]; }
 
-export default function QuoteTemplateEditPage() {
-  const { id } = useParams<{ id: string }>();
+export default function QuoteTemplateEditPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();
 

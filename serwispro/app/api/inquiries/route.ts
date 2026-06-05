@@ -10,7 +10,6 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const filter = searchParams.get("filter"); // ACTIVE | ARCHIVED | DELETED | ALL
   const status = searchParams.get("status")?.split(",").filter(Boolean);
   const serviceType = searchParams.get("serviceType")?.split(",").filter(Boolean);
   const dateFrom = searchParams.get("dateFrom");
@@ -19,17 +18,7 @@ export async function GET(req: NextRequest) {
   const page = parseInt(searchParams.get("page") ?? "1");
   const limit = parseInt(searchParams.get("limit") ?? "20");
 
-  const archiveFilter =
-    filter === "ARCHIVED"
-      ? { archivedAt: { not: null as Date | null }, deletedAt: null as Date | null }
-      : filter === "DELETED"
-      ? { deletedAt: { not: null as Date | null } }
-      : filter === "ALL"
-      ? {}
-      : { deletedAt: null as Date | null, archivedAt: null as Date | null };
-
   const where = {
-    ...archiveFilter,
     ...(status?.length ? { status: { in: status } } : {}),
     ...(serviceType?.length ? { serviceType: { in: serviceType } } : {}),
     ...(dateFrom || dateTo
@@ -99,16 +88,22 @@ export async function POST(req: NextRequest) {
   const publicToken = randomBytes(32).toString("hex");
   const actorLabel = `${session.user.firstName} ${session.user.lastName}`;
 
+  const parsedFormAnswers = formAnswers ? JSON.stringify(formAnswers) : "{}";
+  const parsedPriorities = priorities ? JSON.stringify(priorities) : "[]";
+  const parsedScale = aestheticsScale ? parseInt(aestheticsScale) : null;
+
   const analysis = analyzeInquiry({
     serviceType,
-    aestheticsScale: aestheticsScale ? parseInt(aestheticsScale) : null,
-    priorities: priorities ? JSON.stringify(priorities) : "[]",
+    aestheticsScale: parsedScale,
+    priorities: parsedPriorities,
     expectedDate: expectedDate ?? null,
-    formAnswers: formAnswers ? JSON.stringify(formAnswers) : "{}",
+    formAnswers: parsedFormAnswers,
     contactPhone: contactPhone ?? null,
     contactEmail: contactEmail ?? null,
     investmentAddress: investmentAddress ?? null,
     investmentCity: investmentCity ?? null,
+    budgetRange: budgetRange ?? null,
+    internalNotes: internalNotes ?? null,
     _count: { photos: 0 },
   });
 
@@ -125,9 +120,9 @@ export async function POST(req: NextRequest) {
       investmentAddress,
       investmentCity,
       investmentPostal,
-      formAnswers: formAnswers ? JSON.stringify(formAnswers) : "{}",
-      aestheticsScale: aestheticsScale ? parseInt(aestheticsScale) : null,
-      priorities: priorities ? JSON.stringify(priorities) : "[]",
+      formAnswers: parsedFormAnswers,
+      aestheticsScale: parsedScale,
+      priorities: parsedPriorities,
       expectedDate,
       budgetRange,
       internalNotes,

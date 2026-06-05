@@ -1,7 +1,8 @@
 "use client";
 
+import { use } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import { ArrowLeft, Car } from "lucide-react";
@@ -29,8 +30,8 @@ interface Vehicle {
   serviceEntries: ServiceEntry[];
 }
 
-export default function VehicleDetailPage() {
-  const { id } = useParams<{ id: string }>();
+export default function VehicleDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
 
   const { data, isLoading } = useQuery({

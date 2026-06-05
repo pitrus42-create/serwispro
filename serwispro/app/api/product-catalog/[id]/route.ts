@@ -7,7 +7,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   const body = await req.json();
-  const { name, description, itemType, unit, defaultNetPrice, vatRate, modelName, isActive } = body;
+  const { name, description, itemType, unit, defaultNetPrice, vatRate, modelName, isActive, photoUrl, showPhotoInQuote } = body;
   const item = await prisma.productCatalogItem.update({
     where: { id },
     data: {
@@ -19,6 +19,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ...(vatRate !== undefined ? { vatRate: parseFloat(vatRate) } : {}),
       ...(modelName !== undefined ? { modelName } : {}),
       ...(isActive !== undefined ? { isActive } : {}),
+      ...(photoUrl !== undefined ? { photoUrl } : {}),
+      ...(showPhotoInQuote !== undefined ? { showPhotoInQuote: Boolean(showPhotoInQuote) } : {}),
     },
   });
   return NextResponse.json(item);

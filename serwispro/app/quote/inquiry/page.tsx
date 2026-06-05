@@ -382,6 +382,20 @@ function Step1({ form, set }: { form: FormData; set: (k: keyof FormData, v: unkn
           </button>
         ))}
       </div>
+
+      {/* Link do galerii realizacji */}
+      <div className="pt-1 text-center">
+        <a
+          href="/quote/gallery"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-800 transition-colors"
+        >
+          <span>🖼️</span>
+          <span>Zobacz nasze realizacje</span>
+          <span className="text-xs text-gray-400">→</span>
+        </a>
+      </div>
     </div>
   );
 }

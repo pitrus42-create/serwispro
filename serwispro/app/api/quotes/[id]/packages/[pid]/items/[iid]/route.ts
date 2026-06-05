@@ -21,7 +21,7 @@ export async function PUT(
 
   const { pid, iid } = await params;
   const body = await req.json();
-  const { name, description, itemType, quantity, unit, netPrice, vatRate, isVisibleToClient, modelName } = body;
+  const { name, description, itemType, quantity, unit, netPrice, vatRate, isVisibleToClient, modelName, photoUrl } = body;
 
   const np = netPrice !== undefined ? parseFloat(netPrice) : undefined;
   const vat = vatRate !== undefined ? parseFloat(vatRate) : undefined;
@@ -40,6 +40,7 @@ export async function PUT(
       ...(gp !== undefined ? { grossPrice: gp } : {}),
       ...(isVisibleToClient !== undefined ? { isVisibleToClient } : {}),
       ...(modelName !== undefined ? { modelName } : {}),
+      ...(photoUrl !== undefined ? { photoUrl } : {}),
     },
   });
 

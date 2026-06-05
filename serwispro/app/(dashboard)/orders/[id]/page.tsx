@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { use, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
@@ -396,8 +396,8 @@ function EditClientSearch({
   );
 }
 
-export default function OrderDetailPage() {
-  const { id } = useParams<{ id: string }>();
+export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: session } = useSession();

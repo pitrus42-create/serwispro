@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
@@ -458,8 +458,8 @@ function EditLocationDialog({
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 
-export default function ClientDetailPage() {
-  const { id } = useParams<{ id: string }>();
+export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const { data: session } = useSession();
   const queryClient = useQueryClient();

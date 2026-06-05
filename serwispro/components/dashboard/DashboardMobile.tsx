@@ -9,7 +9,6 @@ import {
   Calendar,
   Users,
   UserPlus,
-  FileSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/utils";
@@ -56,12 +55,11 @@ export function DashboardMobile({
   const d = data;
 
   const pills = [
-    { value: d.overdueOrders,                    label: "Zaległe",        color: "bg-amber-100 text-amber-800",   href: "/orders?overdue=true" },
-    { value: d.openAlerts,                        label: "Awarie",         color: "bg-orange-100 text-orange-800", href: "/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU" },
-    { value: d.pendingMaintenance,                label: "Konserwacje",    color: "bg-teal-100 text-teal-800",     href: "/orders?type=KONSERWACJA" },
-    { value: d.todayOrders.length,                label: "Dziś",           color: "bg-red-100 text-red-900",       href: "/calendar" },
-    { value: d.waitingOrders,                     label: "Oczekujące",     color: "bg-blue-100 text-blue-800",     href: "/orders?status=OCZEKUJACE" },
-    { value: d.inquiryStats?.new ?? 0,            label: "Nowe zapytania", color: "bg-indigo-100 text-indigo-800", href: "/inquiries?tab=AKTYWNE" },
+    { value: d.overdueOrders,        label: "Zaległe",     color: "bg-amber-100 text-amber-800",   href: "/orders?overdue=true" },
+    { value: d.openAlerts,           label: "Awarie",      color: "bg-orange-100 text-orange-800",  href: "/orders?type=AWARIA&status=OCZEKUJACE,PRZYJETE,W_TOKU" },
+    { value: d.pendingMaintenance,   label: "Konserwacje", color: "bg-teal-100 text-teal-800",      href: "/orders?type=KONSERWACJA" },
+    { value: d.todayOrders.length,   label: "Dziś",        color: "bg-red-100 text-red-900",        href: "/calendar" },
+    { value: d.waitingOrders,        label: "Oczekujące",  color: "bg-blue-100 text-blue-800",      href: "/orders?status=OCZEKUJACE" },
   ].filter((p) => p.value > 0);
 
   const allClear = pills.length === 0 && d.criticalAlerts === 0;
@@ -202,18 +200,6 @@ export function DashboardMobile({
           <Link href="/orders">
             <Wrench className="w-4 h-4 mr-1.5" />
             Wszystkie zlecenia
-          </Link>
-        </Button>
-        <Button asChild variant="ghost" size="sm" className="text-gray-600">
-          <Link href="/inquiries">
-            <FileSearch className="w-4 h-4 mr-1.5" />
-            Zapytania
-          </Link>
-        </Button>
-        <Button asChild variant="ghost" size="sm" className="text-gray-600">
-          <Link href="/inquiries/new">
-            <FileSearch className="w-4 h-4 mr-1.5" />
-            Nowe zapytanie
           </Link>
         </Button>
       </div>

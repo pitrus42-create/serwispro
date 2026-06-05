@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { name, description, itemType = "SPRZET", unit = "szt", defaultNetPrice = 0, vatRate = 23, modelName } = body;
+  const { name, description, itemType = "SPRZET", unit = "szt", defaultNetPrice = 0, vatRate = 23, modelName, photoUrl, showPhotoInQuote } = body;
 
   if (!name) return NextResponse.json({ error: "Nazwa jest wymagana" }, { status: 400 });
 
@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
       defaultNetPrice: parseFloat(defaultNetPrice),
       vatRate: parseFloat(vatRate),
       modelName: modelName ?? null,
+      photoUrl: photoUrl ?? null,
+      showPhotoInQuote: showPhotoInQuote !== undefined ? Boolean(showPhotoInQuote) : true,
       createdBy: session.user.id,
     },
   });
