@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@prisma/client": ["./serwispro/generated/prisma"],
+      "@prisma/client/*": ["./serwispro/node_modules/@prisma/client/*"]
     }
   },
   "include": [
@@ -30,5 +32,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "serwispro/node_modules", "serwispro/generated"]
 }
