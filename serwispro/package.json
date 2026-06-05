@@ -1,17 +1,16 @@
 {
   "name": "serwispro",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "prebuild": "prisma generate",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:push": "prisma db push",
-    "db:push:prod": "prisma db push",
     "db:studio": "prisma studio"
   },
   "dependencies": {
