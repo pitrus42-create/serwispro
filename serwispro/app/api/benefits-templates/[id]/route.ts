@@ -10,6 +10,7 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  await prisma.benefitsTemplate.delete({ where: { id } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (prisma as any).benefitsTemplate.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }

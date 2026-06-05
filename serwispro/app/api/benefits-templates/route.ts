@@ -6,7 +6,8 @@ export async function GET(req: NextRequest) {
   const session = await getAuth(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const templates = await prisma.benefitsTemplate.findMany({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const templates = await (prisma as any).benefitsTemplate.findMany({
     orderBy: { createdAt: "desc" },
   });
 
@@ -25,7 +26,8 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(points) || points.length === 0)
     return NextResponse.json({ error: "Punkty są wymagane" }, { status: 400 });
 
-  const template = await prisma.benefitsTemplate.create({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const template = await (prisma as any).benefitsTemplate.create({
     data: {
       name: name.trim(),
       title: title.trim(),
