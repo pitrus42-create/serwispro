@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { pl } from "date-fns/locale";
 import { toast } from "sonner";
@@ -21,6 +21,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -75,6 +79,52 @@ interface QuoteItem {
   grossPrice: number;
   isVisibleToClient: boolean;
   modelName: string | null;
+  photoUrl: string | null;
+}
+
+interface BenefitsData { title: string; points: string[] }
+interface BenefitsTemplateRecord { id: string; name: string; title: string; points: string; }
+
+const DEFAULT_BENEFITS: Record<string, BenefitsData> = {
+  MINIMUM: {
+    title: "Ekonomiczne rozwiązanie spełniające podstawowe założenia systemu.",
+    points: [
+      "Spełnia podstawowe założenia systemu zabezpieczeń.",
+      "Zapewnia realne poczucie bezpieczeństwa przy ograniczonym budżecie.",
+      "Obejmuje niezbędne elementy do prawidłowego działania systemu.",
+      "Jest dobrym wyborem, gdy najważniejsze jest uruchomienie systemu w możliwie ekonomicznej wersji.",
+      "Pozwala w przyszłości rozbudować instalację, jeżeli warunki techniczne na to pozwolą.",
+    ],
+  },
+  STANDARD: {
+    title: "Rekomendowany wariant — najlepszy balans ceny, jakości i niezawodności.",
+    points: [
+      "Oparty na sprzęcie o bardzo dobrym stosunku jakości do ceny.",
+      "Zapewnia stabilną i bezawaryjną pracę systemu w codziennym użytkowaniu.",
+      "Obejmuje pełniejszą konfigurację i lepsze dopasowanie do potrzeb klienta.",
+      "Daje większy komfort użytkowania niż wariant podstawowy.",
+      "Jest rekomendowany jako najbardziej opłacalny wybór dla większości realizacji.",
+      "Pozwala uzyskać profesjonalny efekt bez wchodzenia w najwyższy budżet.",
+    ],
+  },
+  PRO: {
+    title: "Rozwiązanie premium dla klientów oczekujących najwyższej jakości i indywidualnego podejścia.",
+    points: [
+      "Profesjonalny sprzęt dobrany pod wyższe wymagania użytkownika.",
+      "Konfiguracja systemu dostosowana do indywidualnych potrzeb klienta.",
+      "Instalacja wykonana z dużą dbałością o estetykę i najmniejsze szczegóły.",
+      "Większa możliwość rozbudowy systemu w przyszłości.",
+      "Dodatkowe konsultacje przy konfiguracji i użytkowaniu systemu.",
+      "Priorytetowe podejście do realizacji i ustalenia terminu montażu.",
+      "Roczna karta SIM do komunikacji systemu w cenie pakietu, jeżeli dana konfiguracja wymaga łączności GSM/LTE.",
+      "Najlepszy wybór dla osób, które oczekują maksymalnej niezawodności, wygody i profesjonalnego efektu końcowego.",
+    ],
+  },
+};
+
+function parseBenefits(raw: string | null | undefined, packageType: string): BenefitsData {
+  if (raw) { try { return JSON.parse(raw) as BenefitsData; } catch { /* fall through */ } }
+  return DEFAULT_BENEFITS[packageType] ?? DEFAULT_BENEFITS.MINIMUM;
 }
 
 interface QuotePackage {
@@ -89,6 +139,7 @@ interface QuotePackage {
   discount: number | null;
   includes: string | null;
   excludes: string | null;
+  benefits: string | null;
   items: QuoteItem[];
 }
 
@@ -96,6 +147,7 @@ interface Quote {
   id: string;
   quoteNumber: string;
   status: string;
+  quoteType: string;
   validUntil: string | null;
   internalNotes: string | null;
   summary: string | null;
@@ -123,8 +175,12 @@ interface Quote {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function QuoteEditorPage() {
-  const { id } = useParams<{ id: string }>();
+export default function QuoteEditorPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();
   const [acceptDialog, setAcceptDialog] = useState(false);
@@ -184,9 +240,18 @@ export default function QuoteEditorPage() {
   }
 
   const isAccepted = quote.status.startsWith("ZAAKCEPTOWANA");
-  const packagesOrdered = ["MINIMUM", "STANDARD", "PRO"]
+  const qt = quote.quoteType ?? "three_packages";
+  const pkgOrder =
+    qt === "two_packages"   ? ["MINIMUM", "PRO"] :
+    qt === "single_variant" ? ["STANDARD"] :
+    ["MINIMUM", "STANDARD", "PRO"];
+  const packagesOrdered = pkgOrder
     .map((t) => quote.packages.find((p) => p.packageType === t))
     .filter(Boolean) as QuotePackage[];
+  // single_variant: jeśli nie ma pakietu o typie STANDARD, weź pierwszy dostępny
+  const finalPackages = (qt === "single_variant" && packagesOrdered.length === 0)
+    ? quote.packages.slice(0, 1)
+    : packagesOrdered;
 
   return (
     <div className="flex flex-col h-full">
@@ -299,10 +364,15 @@ export default function QuoteEditorPage() {
           <GeneralSection quote={quote} onSave={(data) => updateQuote.mutate(data)} />
           <div>
             <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">
-              Pakiety wyceny
+              {qt === "single_variant" ? "Wariant wyceny" : "Pakiety wyceny"}
             </h2>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {packagesOrdered.map((pkg) => (
+            <div className={cn(
+              "grid gap-4 grid-cols-1",
+              qt === "three_packages" && "lg:grid-cols-3",
+              qt === "two_packages"   && "lg:grid-cols-2",
+              qt === "single_variant" && "max-w-xl",
+            )}>
+              {finalPackages.map((pkg) => (
                 <PackageCard
                   key={pkg.id}
                   pkg={pkg}
@@ -332,7 +402,7 @@ export default function QuoteEditorPage() {
       <AcceptanceDialog
         open={acceptDialog}
         onClose={() => setAcceptDialog(false)}
-        packages={packagesOrdered}
+        packages={finalPackages}
         quoteId={id}
         onAccepted={() => {
           setAcceptDialog(false);
@@ -705,6 +775,27 @@ function PackageCard({
           )}
         </div>
       )}
+
+      {/* Benefits section */}
+      {expanded && <PackageBenefitsView benefits={pkg.benefits} packageType={pkg.packageType} />}
+    </div>
+  );
+}
+
+function PackageBenefitsView({ benefits, packageType }: { benefits: string | null; packageType: string }) {
+  const data = parseBenefits(benefits, packageType);
+  return (
+    <div className="border-t border-gray-100 px-3 py-3 bg-white">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Korzyści pakietu</p>
+      <p className="text-xs font-semibold text-gray-700 mb-2 leading-snug">{data.title}</p>
+      <ul className="space-y-1">
+        {data.points.map((point, i) => (
+          <li key={i} className="flex items-start gap-1.5 text-xs text-gray-600">
+            <Check className="w-3 h-3 text-green-600 mt-0.5 shrink-0" />
+            <span>{point}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -718,13 +809,72 @@ function PackageEditForm({
   onSave: (d: Partial<QuotePackage>) => void;
   onCancel: () => void;
 }) {
+  const qc = useQueryClient();
+  const defaultBenefits = parseBenefits(pkg.benefits, pkg.packageType);
   const [form, setForm] = useState({
     name: pkg.name,
     description: pkg.description ?? "",
     includes: pkg.includes ?? "",
     excludes: pkg.excludes ?? "",
     discount: pkg.discount !== null ? String(pkg.discount) : "",
+    benefitsTitle: defaultBenefits.title,
+    benefitsPoints: defaultBenefits.points as string[],
   });
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  const { data: savedTemplates = [] } = useQuery<BenefitsTemplateRecord[]>({
+    queryKey: ["benefits-templates"],
+    queryFn: async () => {
+      const r = await fetch("/api/benefits-templates");
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+  });
+
+  const resetBenefits = () => {
+    const def = DEFAULT_BENEFITS[pkg.packageType] ?? DEFAULT_BENEFITS.MINIMUM;
+    setForm(p => ({ ...p, benefitsTitle: def.title, benefitsPoints: [...def.points] }));
+  };
+
+  const applyTemplate = (title: string, pointsRaw: string | string[]) => {
+    const pts: string[] = Array.isArray(pointsRaw) ? pointsRaw : JSON.parse(pointsRaw);
+    setForm(p => ({ ...p, benefitsTitle: title, benefitsPoints: pts }));
+  };
+
+  const saveAsTemplate = async () => {
+    if (!templateName.trim()) return;
+    setSavingTemplate(true);
+    try {
+      const res = await fetch("/api/benefits-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          title: form.benefitsTitle,
+          points: form.benefitsPoints.filter(s => s.trim()),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      qc.invalidateQueries({ queryKey: ["benefits-templates"] });
+      toast.success("Szablon zapisany");
+      setTemplateName("");
+      setShowSaveTemplate(false);
+    } catch {
+      toast.error("Nie udało się zapisać szablonu");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleSave = () => {
+    const benefits = JSON.stringify({
+      title: form.benefitsTitle,
+      points: form.benefitsPoints.filter(s => s.trim()),
+    });
+    onSave({ ...form, discount: form.discount ? parseFloat(form.discount) : null, benefits });
+  };
 
   return (
     <div className="px-3 pb-3 space-y-2 border-b border-gray-100 bg-white">
@@ -750,10 +900,111 @@ function PackageEditForm({
         <Label className="text-xs">Rabat (%)</Label>
         <Input type="number" value={form.discount} onChange={(e) => setForm(p => ({...p, discount: e.target.value}))} className="h-7 text-xs" min="0" max="100" placeholder="0" />
       </div>
-      <div className="flex gap-2">
-        <Button size="sm" className="h-6 text-xs bg-red-800 hover:bg-red-900 text-white px-2" onClick={() =>
-          onSave({ ...form, discount: form.discount ? parseFloat(form.discount) : null })
-        }>
+
+      {/* Korzyści */}
+      <div className="border-t border-gray-100 pt-2 space-y-1.5">
+        <div className="flex items-center justify-between gap-1 flex-wrap">
+          <Label className="text-xs font-semibold text-gray-600">Korzyści pakietu</Label>
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-blue-600 hover:text-blue-800">
+                  Wstaw z szablonu <ChevronDown className="w-2.5 h-2.5 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuLabel className="text-[10px] text-gray-500">Domyślne</DropdownMenuLabel>
+                {Object.entries(DEFAULT_BENEFITS).map(([key, def]) => (
+                  <DropdownMenuItem key={key} className="text-xs cursor-pointer" onClick={() => applyTemplate(def.title, def.points)}>
+                    {key.charAt(0) + key.slice(1).toLowerCase()}
+                  </DropdownMenuItem>
+                ))}
+                {savedTemplates.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[10px] text-gray-500">Zapisane szablony</DropdownMenuLabel>
+                    {savedTemplates.map((t) => (
+                      <DropdownMenuItem key={t.id} className="text-xs cursor-pointer" onClick={() => applyTemplate(t.title, t.points)}>
+                        {t.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button onClick={() => setShowSaveTemplate(p => !p)} className="text-[10px] text-gray-500 hover:text-gray-700">
+              Zapisz jako szablon
+            </button>
+            <button onClick={resetBenefits} className="text-[10px] text-blue-600 hover:text-blue-800">
+              Przywróć domyślne
+            </button>
+          </div>
+        </div>
+
+        {showSaveTemplate && (
+          <div className="flex items-center gap-1.5 p-2 bg-gray-50 rounded border border-gray-200">
+            <Input
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              placeholder="Nazwa szablonu..."
+              className="h-6 text-xs flex-1"
+              onKeyDown={(e) => { if (e.key === "Enter") saveAsTemplate(); }}
+            />
+            <Button
+              size="sm"
+              className="h-6 text-xs px-2 bg-red-800 hover:bg-red-900 text-white"
+              onClick={saveAsTemplate}
+              disabled={savingTemplate || !templateName.trim()}
+            >
+              {savingTemplate ? "..." : "Zapisz"}
+            </Button>
+            <button onClick={() => setShowSaveTemplate(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Tytuł sekcji</Label>
+          <Input value={form.benefitsTitle} onChange={(e) => setForm(p => ({...p, benefitsTitle: e.target.value}))} className="h-7 text-xs" placeholder="Opis korzyści pakietu..." />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Punkty</Label>
+          <div className="space-y-1">
+            {form.benefitsPoints.map((point, idx) => (
+              <div key={idx} className="flex items-center gap-1.5">
+                <Check className="w-3 h-3 text-green-600 flex-shrink-0" />
+                <Input
+                  value={point}
+                  onChange={(e) => {
+                    const pts = [...form.benefitsPoints];
+                    pts[idx] = e.target.value;
+                    setForm(p => ({ ...p, benefitsPoints: pts }));
+                  }}
+                  className="h-7 text-xs flex-1"
+                  placeholder="Punkt korzyści..."
+                />
+                <button
+                  onClick={() => setForm(p => ({ ...p, benefitsPoints: p.benefitsPoints.filter((_, i) => i !== idx) }))}
+                  className="text-gray-300 hover:text-red-500 flex-shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setForm(p => ({ ...p, benefitsPoints: [...p.benefitsPoints, ""] }))}
+            className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 mt-1"
+          >
+            <Plus className="w-2.5 h-2.5" /> Dodaj punkt
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" className="h-6 text-xs bg-red-800 hover:bg-red-900 text-white px-2" onClick={handleSave}>
           <Save className="w-3 h-3 mr-1" />Zapisz
         </Button>
         <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={onCancel}>Anuluj</Button>
@@ -796,6 +1047,15 @@ function ItemRow({
 
   return (
     <div className="flex items-start gap-2 group">
+      {/* Miniatura produktu */}
+      {item.photoUrl && (
+        <img
+          src={item.photoUrl}
+          alt=""
+          className="w-10 h-10 rounded-md object-cover border border-gray-200 shrink-0 mt-0.5"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 flex-wrap">
           <span className="text-sm font-medium text-gray-900">{item.name}</span>
@@ -839,11 +1099,12 @@ interface ItemFormData {
   vatRate: string;
   isVisibleToClient: boolean;
   modelName: string;
+  photoUrl: string;
 }
 
 const emptyItemForm: ItemFormData = {
   name: "", description: "", itemType: "SPRZET", quantity: "1", unit: "szt",
-  netPrice: "0", vatRate: "23", isVisibleToClient: true, modelName: "",
+  netPrice: "0", vatRate: "23", isVisibleToClient: true, modelName: "", photoUrl: "",
 };
 
 function AddItemForm({
@@ -864,7 +1125,7 @@ function AddItemForm({
     queryFn: async () => {
       if (!catalogQ) return [];
       const res = await fetch(`/api/product-catalog?q=${encodeURIComponent(catalogQ)}`);
-      return res.json() as Promise<{ id: string; name: string; modelName: string | null; itemType: string; unit: string; defaultNetPrice: number; vatRate: number }[]>;
+      return res.json() as Promise<{ id: string; name: string; modelName: string | null; itemType: string; unit: string; defaultNetPrice: number; vatRate: number; photoUrl?: string | null; showPhotoInQuote?: boolean }[]>;
     },
     enabled: catalogQ.length > 1,
   });
@@ -880,6 +1141,7 @@ function AddItemForm({
       vatRate: String(item.vatRate),
       isVisibleToClient: true,
       modelName: item.modelName ?? "",
+      photoUrl: (item.showPhotoInQuote !== false && item.photoUrl) ? item.photoUrl : "",
     });
     setShowCatalog(false);
     setCatalogQ("");
@@ -946,6 +1208,7 @@ function EditItemForm({
     vatRate: String(item.vatRate),
     isVisibleToClient: item.isVisibleToClient,
     modelName: item.modelName ?? "",
+    photoUrl: item.photoUrl ?? "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -1015,6 +1278,27 @@ function ItemFormFields({
             <Input type="number" min="0.01" step="0.01" value={form.quantity} onChange={(e) => setForm({...form, quantity: e.target.value})} className="h-7 text-xs w-16" />
             <Input value={form.unit} onChange={(e) => setForm({...form, unit: e.target.value})} className="h-7 text-xs" placeholder="szt" />
           </div>
+        </div>
+      </div>
+
+      {/* Zdjęcie produktu */}
+      <div className="space-y-1">
+        <Label className="text-xs">URL zdjęcia produktu (opcjonalnie)</Label>
+        <div className="flex gap-2 items-center">
+          <Input
+            value={form.photoUrl}
+            onChange={(e) => setForm({...form, photoUrl: e.target.value})}
+            className="h-7 text-xs flex-1"
+            placeholder="https://... lub /uploads/..."
+          />
+          {form.photoUrl && (
+            <img
+              src={form.photoUrl}
+              alt=""
+              className="w-8 h-8 rounded object-cover border border-gray-200 shrink-0"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
         </div>
       </div>
 
