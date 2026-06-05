@@ -850,10 +850,15 @@ model GalleryPhoto {
 }
 
 model BenefitsTemplate {
-  id        String   @id @default(uuid())
-  name      String
-  title     String
-  points    String
-  createdBy String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  name        String
+  title       String
+  points      String
+  serviceType String?
+  packageType String?
+  clientType  String?
+  isDefault   Boolean  @default(false)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

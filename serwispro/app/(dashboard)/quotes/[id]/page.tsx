@@ -26,6 +26,8 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { SERVICE_TYPES, PACKAGE_TYPES, CLIENT_TYPES } from "@/lib/benefits-constants";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -83,7 +85,11 @@ interface QuoteItem {
 }
 
 interface BenefitsData { title: string; points: string[] }
-interface BenefitsTemplateRecord { id: string; name: string; title: string; points: string; }
+interface BenefitsTemplateRecord {
+  id: string; name: string; title: string; points: string;
+  serviceType: string | null; packageType: string | null;
+  clientType: string | null; isDefault: boolean;
+}
 
 const DEFAULT_BENEFITS: Record<string, BenefitsData> = {
   MINIMUM: {
@@ -820,17 +826,32 @@ function PackageEditForm({
     benefitsTitle: defaultBenefits.title,
     benefitsPoints: defaultBenefits.points as string[],
   });
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-  const [templateName, setTemplateName] = useState("");
+
+  // Picker dialog state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSvc, setPickerSvc] = useState("");
+  const [pickerPkg, setPickerPkg] = useState(pkg.packageType ?? "");
+  const [pickerClient, setPickerClient] = useState("");
+
+  // Save-as-template dialog state
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveForm, setSaveForm] = useState({ name: "", serviceType: "", packageType: pkg.packageType ?? "", clientType: "", isDefault: false });
   const [savingTemplate, setSavingTemplate] = useState(false);
 
-  const { data: savedTemplates = [] } = useQuery<BenefitsTemplateRecord[]>({
+  const { data: allTemplates = [] } = useQuery<BenefitsTemplateRecord[]>({
     queryKey: ["benefits-templates"],
     queryFn: async () => {
       const r = await fetch("/api/benefits-templates");
       if (!r.ok) throw new Error();
       return r.json();
     },
+  });
+
+  const pickerFiltered = allTemplates.filter(t => {
+    if (pickerSvc && t.serviceType !== pickerSvc) return false;
+    if (pickerPkg && t.packageType !== pickerPkg) return false;
+    if (pickerClient && t.clientType !== pickerClient) return false;
+    return true;
   });
 
   const resetBenefits = () => {
@@ -841,26 +862,30 @@ function PackageEditForm({
   const applyTemplate = (title: string, pointsRaw: string | string[]) => {
     const pts: string[] = Array.isArray(pointsRaw) ? pointsRaw : JSON.parse(pointsRaw);
     setForm(p => ({ ...p, benefitsTitle: title, benefitsPoints: pts }));
+    setPickerOpen(false);
   };
 
   const saveAsTemplate = async () => {
-    if (!templateName.trim()) return;
+    if (!saveForm.name.trim()) { toast.error("Podaj nazwę szablonu"); return; }
     setSavingTemplate(true);
     try {
       const res = await fetch("/api/benefits-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: templateName.trim(),
+          name: saveForm.name.trim(),
           title: form.benefitsTitle,
           points: form.benefitsPoints.filter(s => s.trim()),
+          serviceType: saveForm.serviceType || null,
+          packageType: saveForm.packageType || null,
+          clientType: saveForm.clientType || null,
+          isDefault: saveForm.isDefault,
         }),
       });
       if (!res.ok) throw new Error();
       qc.invalidateQueries({ queryKey: ["benefits-templates"] });
       toast.success("Szablon zapisany");
-      setTemplateName("");
-      setShowSaveTemplate(false);
+      setSaveOpen(false);
     } catch {
       toast.error("Nie udało się zapisać szablonu");
     } finally {
@@ -906,33 +931,10 @@ function PackageEditForm({
         <div className="flex items-center justify-between gap-1 flex-wrap">
           <Label className="text-xs font-semibold text-gray-600">Korzyści pakietu</Label>
           <div className="flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-blue-600 hover:text-blue-800">
-                  Wstaw z szablonu <ChevronDown className="w-2.5 h-2.5 ml-0.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuLabel className="text-[10px] text-gray-500">Domyślne</DropdownMenuLabel>
-                {Object.entries(DEFAULT_BENEFITS).map(([key, def]) => (
-                  <DropdownMenuItem key={key} className="text-xs cursor-pointer" onClick={() => applyTemplate(def.title, def.points)}>
-                    {key.charAt(0) + key.slice(1).toLowerCase()}
-                  </DropdownMenuItem>
-                ))}
-                {savedTemplates.length > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[10px] text-gray-500">Zapisane szablony</DropdownMenuLabel>
-                    {savedTemplates.map((t) => (
-                      <DropdownMenuItem key={t.id} className="text-xs cursor-pointer" onClick={() => applyTemplate(t.title, t.points)}>
-                        {t.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <button onClick={() => setShowSaveTemplate(p => !p)} className="text-[10px] text-gray-500 hover:text-gray-700">
+            <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-blue-600 hover:text-blue-800" onClick={() => { setPickerPkg(pkg.packageType ?? ""); setPickerOpen(true); }}>
+              Wstaw z szablonu <ChevronDown className="w-2.5 h-2.5 ml-0.5" />
+            </Button>
+            <button onClick={() => { setSaveForm({ name: "", serviceType: "", packageType: pkg.packageType ?? "", clientType: "", isDefault: false }); setSaveOpen(true); }} className="text-[10px] text-gray-500 hover:text-gray-700">
               Zapisz jako szablon
             </button>
             <button onClick={resetBenefits} className="text-[10px] text-blue-600 hover:text-blue-800">
@@ -940,29 +942,6 @@ function PackageEditForm({
             </button>
           </div>
         </div>
-
-        {showSaveTemplate && (
-          <div className="flex items-center gap-1.5 p-2 bg-gray-50 rounded border border-gray-200">
-            <Input
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="Nazwa szablonu..."
-              className="h-6 text-xs flex-1"
-              onKeyDown={(e) => { if (e.key === "Enter") saveAsTemplate(); }}
-            />
-            <Button
-              size="sm"
-              className="h-6 text-xs px-2 bg-red-800 hover:bg-red-900 text-white"
-              onClick={saveAsTemplate}
-              disabled={savingTemplate || !templateName.trim()}
-            >
-              {savingTemplate ? "..." : "Zapisz"}
-            </Button>
-            <button onClick={() => setShowSaveTemplate(false)} className="text-gray-400 hover:text-gray-600">
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        )}
 
         <div className="space-y-1">
           <Label className="text-xs text-gray-500">Tytuł sekcji</Label>
@@ -1009,6 +988,122 @@ function PackageEditForm({
         </Button>
         <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={onCancel}>Anuluj</Button>
       </div>
+
+      {/* Dialog: Wstaw z szablonu */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base">Wstaw szablon korzyści</DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-2 flex-wrap">
+            <Select value={pickerSvc} onValueChange={setPickerSvc}>
+              <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Typ usługi" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="" className="text-xs">Wszystkie</SelectItem>
+                {SERVICE_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={pickerPkg} onValueChange={setPickerPkg}>
+              <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Typ pakietu" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="" className="text-xs">Wszystkie</SelectItem>
+                {PACKAGE_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={pickerClient} onValueChange={setPickerClient}>
+              <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Typ klienta" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="" className="text-xs">Wszyscy</SelectItem>
+                {CLIENT_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(pickerSvc || pickerClient) && (
+              <button onClick={() => { setPickerSvc(""); setPickerClient(""); }} className="text-[10px] text-gray-400 hover:text-gray-600">
+                Wyczyść
+              </button>
+            )}
+          </div>
+          <div className="overflow-y-auto flex-1 space-y-1.5 mt-1 pr-1">
+            {pickerFiltered.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-6">Brak szablonów pasujących do filtrów</p>
+            ) : pickerFiltered.map(t => {
+              let pts: string[] = [];
+              try { pts = JSON.parse(t.points); } catch { /* */ }
+              return (
+                <button key={t.id} onClick={() => applyTemplate(t.title, t.points)}
+                  className="w-full text-left p-2.5 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                    <span className="text-xs font-medium text-gray-900">{t.name}</span>
+                    {t.isDefault && <span className="text-[9px] bg-yellow-100 text-yellow-700 px-1 rounded">Domyślny</span>}
+                    {t.packageType && <span className="text-[9px] bg-blue-50 text-blue-600 px-1 rounded">{PACKAGE_TYPES.find(x => x.value === t.packageType)?.label ?? t.packageType}</span>}
+                    {t.clientType && <span className="text-[9px] bg-purple-50 text-purple-600 px-1 rounded">{CLIENT_TYPES.find(x => x.value === t.clientType)?.label ?? t.clientType}</span>}
+                  </div>
+                  <p className="text-[10px] text-gray-500 leading-snug">{t.title}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{pts.length} punktów</p>
+                </button>
+              );
+            })}
+          </div>
+          <div className="pt-2 border-t border-gray-100">
+            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setPickerOpen(false)}>Anuluj</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Zapisz jako szablon */}
+      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle className="text-base">Zapisz jako szablon</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1">
+              <Label className="text-xs">Nazwa szablonu *</Label>
+              <Input value={saveForm.name} onChange={e => setSaveForm(p => ({ ...p, name: e.target.value }))} placeholder="np. Standard CCTV — klient premium" className="h-8 text-sm" autoFocus />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Typ usługi</Label>
+                <Select value={saveForm.serviceType} onValueChange={v => setSaveForm(p => ({ ...p, serviceType: v }))}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Dowolny" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="" className="text-xs">Dowolny</SelectItem>
+                    {SERVICE_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Typ pakietu</Label>
+                <Select value={saveForm.packageType} onValueChange={v => setSaveForm(p => ({ ...p, packageType: v }))}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Dowolny" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="" className="text-xs">Dowolny</SelectItem>
+                    {PACKAGE_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Typ klienta</Label>
+                <Select value={saveForm.clientType} onValueChange={v => setSaveForm(p => ({ ...p, clientType: v }))}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Dowolny" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="" className="text-xs">Dowolny</SelectItem>
+                    {CLIENT_TYPES.map(t => <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="saveIsDefault" checked={saveForm.isDefault} onCheckedChange={v => setSaveForm(p => ({ ...p, isDefault: !!v }))} />
+              <Label htmlFor="saveIsDefault" className="text-xs cursor-pointer">Oznacz jako szablon domyślny</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSaveOpen(false)}>Anuluj</Button>
+            <Button size="sm" className="bg-red-800 hover:bg-red-900 text-white" onClick={saveAsTemplate} disabled={savingTemplate}>
+              {savingTemplate ? "Zapisywanie..." : "Zapisz szablon"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

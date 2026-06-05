@@ -40,12 +40,18 @@ const navItems = [
   { href: "/analytics", icon: BarChart3, label: "Analizy" },
   { href: "/settings/product-catalog", icon: BookOpen, label: "Katalog produktów", roles: ["SUPERADMIN", "ADMIN", "SZEF", "MENEDZER"] },
   { href: "/settings/quote-templates", icon: FileText, label: "Szablony wycen", roles: ["SUPERADMIN", "ADMIN", "SZEF", "MENEDZER"] },
+  { href: "/settings/benefits-templates", icon: BookOpen, label: "Szablony korzyści", roles: ["SUPERADMIN", "ADMIN", "SZEF", "MENEDZER"] },
   { href: "/settings/gallery", icon: Image, label: "Galeria realizacji", roles: ["SUPERADMIN", "ADMIN", "SZEF"] },
   { href: "/settings", icon: Settings, label: "Ustawienia", roles: ["SUPERADMIN", "ADMIN", "SZEF"] },
 ];
 
+const BUILD_MARKER = "quote-fix-2026-06-04-01";
+
 export function Sidebar() {
   const pathname = usePathname();
+  if (typeof window !== "undefined") {
+    console.log("APP BUILD:", BUILD_MARKER);
+  }
   const { data: session } = useSession();
 
   const userRoles = session?.user?.roles as string[] | undefined;
@@ -147,6 +153,7 @@ export function Sidebar() {
           <LogOut className="w-3 h-3 mr-2" />
           Wyloguj
         </Button>
+        <p className="text-[10px] text-gray-300 mt-1 text-center">Build: {BUILD_MARKER}</p>
       </div>
     </aside>
   );
